@@ -422,3 +422,92 @@ dead_code_exporters:
 #   - Bundle P (terrain_dem_import.py) — DEM import, broken (P0-014: only reads .npy)
 #   - Bundle Q (terrain_checkpoints_ext.py, terrain_golden_snapshots.py, terrain_telemetry_dashboard.py) — runtime data utilities
 #   - Bundle R (terrain_world_math.py) — world-space coordinate math
+
+# ===========================================================================
+# Analytical Erosion Config — per-biome ErosionConfig (Phase 50)
+# ===========================================================================
+# Each biome gets its own ErosionConfig. At biome boundaries, configs are
+# lerped (linear interpolation of all 12 fields) weighted by the biome
+# blend mask. This produces smooth transitions between erosion styles.
+#
+# Fields: strength, gully_weight, detail, rounding, onset, assumed_slope,
+#         normalization, fade_amplitude, exit_slope_threshold, cell_scale,
+#         octave_count, frequency
+#
+# exit_slope_threshold default: 0.0075 (erosion fades below this slope)
+erosion_configs:
+  temperate_forest:
+    strength: 0.5
+    gully_weight: 1.0
+    detail: 0.5
+    rounding: 0.1
+    onset: 0.0
+    assumed_slope: 0.0
+    normalization: 0.4
+    fade_amplitude: 0.6
+    exit_slope_threshold: 0.0075
+    cell_scale: 1.0
+    octave_count: 4
+    frequency: 1.0
+
+  alpine:
+    strength: 0.7
+    gully_weight: 1.5
+    detail: 0.6
+    rounding: 0.0
+    onset: 0.02
+    assumed_slope: 0.05
+    normalization: 0.4
+    fade_amplitude: 0.7
+    exit_slope_threshold: 0.005
+    cell_scale: 0.8
+    octave_count: 5
+    frequency: 1.2
+
+  arid_desert:
+    strength: 0.3
+    gully_weight: 0.5
+    detail: 0.3
+    rounding: 0.3
+    onset: 0.0
+    assumed_slope: 0.02
+    normalization: 0.4
+    fade_amplitude: 0.5
+    exit_slope_threshold: 0.01
+    cell_scale: 1.5
+    octave_count: 3
+    frequency: 0.8
+
+  dark_swamp:
+    strength: 0.4
+    gully_weight: 0.8
+    detail: 0.4
+    rounding: 0.2
+    onset: 0.0
+    assumed_slope: 0.01
+    normalization: 0.4
+    fade_amplitude: 0.4
+    exit_slope_threshold: 0.015
+    cell_scale: 1.2
+    octave_count: 3
+    frequency: 0.9
+
+  volcanic:
+    strength: 0.8
+    gully_weight: 2.0
+    detail: 0.7
+    rounding: 0.0
+    onset: 0.05
+    assumed_slope: 0.1
+    normalization: 0.4
+    fade_amplitude: 0.8
+    exit_slope_threshold: 0.003
+    cell_scale: 0.6
+    octave_count: 5
+    frequency: 1.5
+
+# Lerp behavior at biome boundaries:
+# For two adjacent biomes A and B with blend weight t (0=pure A, 1=pure B):
+#   config.field = A.field * (1-t) + B.field * t
+# This applies to ALL 12 float fields. octave_count is rounded to nearest int.
+# The blend mask comes from the biome splatmap channel on the terrain mask stack.
