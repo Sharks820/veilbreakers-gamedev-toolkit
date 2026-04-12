@@ -27,8 +27,6 @@ Exports:
     generate_anisotropic_hair_shader -- AAA: Kajiya-Kay anisotropic hair shading
     generate_terrain_blend_shader    -- AAA: height-based terrain material blending
     generate_ice_crystal_shader      -- AAA: stylized ice/crystal shader (SURGE/GRACE)
-
-    # RGAP rendering gap shaders are in shader_rgap_templates.py (33 generators)
 """
 
 from __future__ import annotations

@@ -39,17 +39,6 @@ from .procedural_materials import (
 )
 from ._terrain_noise import compute_slope_map
 
-# ---------------------------------------------------------------------------
-# V2 bridge — unified weight computation (kills the split-brain)
-# ---------------------------------------------------------------------------
-from .terrain_materials_v2 import (
-    MaterialChannel,
-    MaterialRuleSet,
-    compute_slope_material_weights,
-    default_dark_fantasy_rules,
-    _smoothstep_band,
-)
-
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -1084,11 +1073,6 @@ def _classify_face(
 ) -> str:
     """Classify a face into a terrain zone based on slope and height.
 
-    Uses smoothstep-based weight computation (via v2 engine) and returns
-    the dominant zone. The underlying weights are continuous, but this
-    function returns the zone with the highest weight for legacy callers
-    that need a single category.
-
     Args:
         normal: Face normal as (nx, ny, nz).
         face_center_z: Average Z height of the face's vertices.
@@ -1683,316 +1667,6 @@ def _create_height_blend_group(name: str = "HeightBlend") -> Any:
     return group
 
 
-def _create_triplanar_group(name: str = "TriplanarMapping") -> Any:
-    """Create a Blender node group for triplanar texture projection.
-
-    Triplanar mapping projects textures from three orthogonal axes (XY, XZ, YZ)
-    and blends them based on the surface normal direction. This eliminates
-    texture stretching on steep cliff faces where standard UV unwrapping fails.
-
-    Inputs:
-      - Vector (vector): Object-space position
-      - Normal (vector): Object-space normal
-      - Scale (float): Texture tiling scale
-      - Blend (float): Sharpness of axis transitions (higher = sharper)
-
-    Outputs:
-      - UV_X (vector): UV for X-axis projection (YZ plane)
-      - UV_Y (vector): UV for Y-axis projection (XZ plane)
-      - UV_Z (vector): UV for Z-axis projection (XY plane)
-      - Weights (vector): Per-axis blend weights (R=X, G=Y, B=Z)
-
-    The caller should sample the texture 3 times (once per UV output), then
-    blend the results using the Weights output.
-
-    Args:
-        name: Name for the node group.
-
-    Returns:
-        bpy.types.NodeGroup
-    """
-    if bpy is None:
-        raise RuntimeError("_create_triplanar_group requires bpy.")
-
-    existing = bpy.data.node_groups.get(name)
-    if existing is not None:
-        return existing
-
-    group = bpy.data.node_groups.new(name, "ShaderNodeTree")
-
-    # -- Group Inputs --
-    group_in = group.nodes.new("NodeGroupInput")
-    group_in.location = (-800, 0)
-
-    def _new_input(n: str, socket_type: str = "NodeSocketFloat", **kwargs):
-        if hasattr(group, "interface"):
-            item = group.interface.new_socket(
-                name=n, in_out="INPUT", socket_type=socket_type,
-            )
-            for k, v in kwargs.items():
-                if hasattr(item, k):
-                    setattr(item, k, v)
-            return item
-        else:
-            sock = group.inputs.new(socket_type, n)
-            for k, v in kwargs.items():
-                if hasattr(sock, k):
-                    setattr(sock, k, v)
-            return sock
-
-    _new_input("Vector", "NodeSocketVector")
-    _new_input("Normal", "NodeSocketVector")
-    _new_input("Scale", default_value=1.0)
-    _new_input("Blend", default_value=4.0)
-
-    # -- Group Outputs --
-    group_out = group.nodes.new("NodeGroupOutput")
-    group_out.location = (600, 0)
-
-    def _new_output(n: str, socket_type: str = "NodeSocketVector"):
-        if hasattr(group, "interface"):
-            group.interface.new_socket(
-                name=n, in_out="OUTPUT", socket_type=socket_type,
-            )
-        else:
-            group.outputs.new(socket_type, n)
-
-    _new_output("UV_X", "NodeSocketVector")
-    _new_output("UV_Y", "NodeSocketVector")
-    _new_output("UV_Z", "NodeSocketVector")
-    _new_output("Weights", "NodeSocketVector")
-
-    # -- Separate position XYZ --
-    sep_pos = group.nodes.new("ShaderNodeSeparateXYZ")
-    sep_pos.location = (-600, 200)
-    sep_pos.label = "Separate Position"
-    group.links.new(group_in.outputs["Vector"], sep_pos.inputs["Vector"])
-
-    # -- Separate normal XYZ --
-    sep_norm = group.nodes.new("ShaderNodeSeparateXYZ")
-    sep_norm.location = (-600, -100)
-    sep_norm.label = "Separate Normal"
-    group.links.new(group_in.outputs["Normal"], sep_norm.inputs["Vector"])
-
-    # -- Scale multiplier --
-    scale_x = group.nodes.new("ShaderNodeMath")
-    scale_x.operation = "MULTIPLY"
-    scale_x.location = (-400, 300)
-    group.links.new(sep_pos.outputs["X"], scale_x.inputs[0])
-    group.links.new(group_in.outputs["Scale"], scale_x.inputs[1])
-
-    scale_y = group.nodes.new("ShaderNodeMath")
-    scale_y.operation = "MULTIPLY"
-    scale_y.location = (-400, 150)
-    group.links.new(sep_pos.outputs["Y"], scale_y.inputs[0])
-    group.links.new(group_in.outputs["Scale"], scale_y.inputs[1])
-
-    scale_z = group.nodes.new("ShaderNodeMath")
-    scale_z.operation = "MULTIPLY"
-    scale_z.location = (-400, 0)
-    group.links.new(sep_pos.outputs["Z"], scale_z.inputs[0])
-    group.links.new(group_in.outputs["Scale"], scale_z.inputs[1])
-
-    # -- UV_X: YZ plane (for faces pointing along X) --
-    uv_x = group.nodes.new("ShaderNodeCombineXYZ")
-    uv_x.location = (-200, 300)
-    uv_x.label = "UV_X"
-    group.links.new(scale_y.outputs["Value"], uv_x.inputs["X"])
-    group.links.new(scale_z.outputs["Value"], uv_x.inputs["Y"])
-    group.links.new(group_out.inputs["UV_X"], uv_x.outputs["Vector"])
-
-    # -- UV_Y: XZ plane (for faces pointing along Y) --
-    uv_y = group.nodes.new("ShaderNodeCombineXYZ")
-    uv_y.location = (-200, 150)
-    uv_y.label = "UV_Y"
-    group.links.new(scale_x.outputs["Value"], uv_y.inputs["X"])
-    group.links.new(scale_z.outputs["Value"], uv_y.inputs["Y"])
-    group.links.new(group_out.inputs["UV_Y"], uv_y.outputs["Vector"])
-
-    # -- UV_Z: XY plane (for faces pointing along Z / flat ground) --
-    uv_z = group.nodes.new("ShaderNodeCombineXYZ")
-    uv_z.location = (-200, 0)
-    uv_z.label = "UV_Z"
-    group.links.new(scale_x.outputs["Value"], uv_z.inputs["X"])
-    group.links.new(scale_y.outputs["Value"], uv_z.inputs["Y"])
-    group.links.new(group_out.inputs["UV_Z"], uv_z.outputs["Vector"])
-
-    # -- Normal-based weights: abs(normal) ^ blend, normalized --
-    # |Nx|^blend, |Ny|^blend, |Nz|^blend
-    abs_nx = group.nodes.new("ShaderNodeMath")
-    abs_nx.operation = "ABSOLUTE"
-    abs_nx.location = (-400, -100)
-    group.links.new(sep_norm.outputs["X"], abs_nx.inputs[0])
-
-    abs_ny = group.nodes.new("ShaderNodeMath")
-    abs_ny.operation = "ABSOLUTE"
-    abs_ny.location = (-400, -200)
-    group.links.new(sep_norm.outputs["Y"], abs_ny.inputs[0])
-
-    abs_nz = group.nodes.new("ShaderNodeMath")
-    abs_nz.operation = "ABSOLUTE"
-    abs_nz.location = (-400, -300)
-    group.links.new(sep_norm.outputs["Z"], abs_nz.inputs[0])
-
-    pow_nx = group.nodes.new("ShaderNodeMath")
-    pow_nx.operation = "POWER"
-    pow_nx.location = (-200, -100)
-    group.links.new(abs_nx.outputs["Value"], pow_nx.inputs[0])
-    group.links.new(group_in.outputs["Blend"], pow_nx.inputs[1])
-
-    pow_ny = group.nodes.new("ShaderNodeMath")
-    pow_ny.operation = "POWER"
-    pow_ny.location = (-200, -200)
-    group.links.new(abs_ny.outputs["Value"], pow_ny.inputs[0])
-    group.links.new(group_in.outputs["Blend"], pow_ny.inputs[1])
-
-    pow_nz = group.nodes.new("ShaderNodeMath")
-    pow_nz.operation = "POWER"
-    pow_nz.location = (-200, -300)
-    group.links.new(abs_nz.outputs["Value"], pow_nz.inputs[0])
-    group.links.new(group_in.outputs["Blend"], pow_nz.inputs[1])
-
-    # Sum for normalization
-    sum_xy = group.nodes.new("ShaderNodeMath")
-    sum_xy.operation = "ADD"
-    sum_xy.location = (0, -150)
-    group.links.new(pow_nx.outputs["Value"], sum_xy.inputs[0])
-    group.links.new(pow_ny.outputs["Value"], sum_xy.inputs[1])
-
-    sum_xyz = group.nodes.new("ShaderNodeMath")
-    sum_xyz.operation = "ADD"
-    sum_xyz.location = (100, -200)
-    group.links.new(sum_xy.outputs["Value"], sum_xyz.inputs[0])
-    group.links.new(pow_nz.outputs["Value"], sum_xyz.inputs[1])
-
-    # Normalize: w = pow / sum
-    div_nx = group.nodes.new("ShaderNodeMath")
-    div_nx.operation = "DIVIDE"
-    div_nx.location = (200, -100)
-    group.links.new(pow_nx.outputs["Value"], div_nx.inputs[0])
-    group.links.new(sum_xyz.outputs["Value"], div_nx.inputs[1])
-
-    div_ny = group.nodes.new("ShaderNodeMath")
-    div_ny.operation = "DIVIDE"
-    div_ny.location = (200, -200)
-    group.links.new(pow_ny.outputs["Value"], div_ny.inputs[0])
-    group.links.new(sum_xyz.outputs["Value"], div_ny.inputs[1])
-
-    div_nz = group.nodes.new("ShaderNodeMath")
-    div_nz.operation = "DIVIDE"
-    div_nz.location = (200, -300)
-    group.links.new(pow_nz.outputs["Value"], div_nz.inputs[0])
-    group.links.new(sum_xyz.outputs["Value"], div_nz.inputs[1])
-
-    # Combine weights into vector output
-    weights_comb = group.nodes.new("ShaderNodeCombineXYZ")
-    weights_comb.location = (400, -200)
-    weights_comb.label = "Weights"
-    group.links.new(div_nx.outputs["Value"], weights_comb.inputs["X"])
-    group.links.new(div_ny.outputs["Value"], weights_comb.inputs["Y"])
-    group.links.new(div_nz.outputs["Value"], weights_comb.inputs["Z"])
-    group.links.new(weights_comb.outputs["Vector"], group_out.inputs["Weights"])
-
-    return group
-
-
-def _apply_triplanar_to_layer(
-    tree: Any,
-    links: Any,
-    bsdf: Any,
-    noise: Any,
-    tex_coord: Any,
-    layer_name: str,
-    y_offset: int,
-    detail_scale: float,
-) -> None:
-    """Apply triplanar projection to a terrain layer's noise texture.
-
-    Instead of using a single UV-mapped noise sample, this creates a
-    TriplanarMapping group that samples noise from 3 axes and blends
-    the results based on surface normal. This eliminates stretching
-    artifacts on steep cliff faces.
-
-    Args:
-        tree: Shader node tree.
-        links: Node tree links.
-        bsdf: The layer's Principled BSDF node.
-        noise: The layer's noise texture node (will be duplicated for 3 axes).
-        tex_coord: TexCoord node for this layer.
-        layer_name: Layer name for labeling.
-        y_offset: Y position offset for node layout.
-        detail_scale: Texture scale for triplanar mapping.
-    """
-    triplanar_group = _create_triplanar_group()
-    tp = tree.nodes.new(type="ShaderNodeGroup")
-    tp.node_tree = triplanar_group
-    tp.location = (-700, y_offset - 200)
-    tp.label = f"Triplanar {layer_name}"
-
-    # Connect position and normal
-    geom = _add_node(tree, "ShaderNodeNewGeometry", -900, y_offset - 200, f"Geom {layer_name}")
-    links.new(tex_coord.outputs["Object"], tp.inputs["Vector"])
-    links.new(geom.outputs["Normal"], tp.inputs["Normal"])
-    tp.inputs["Scale"].default_value = detail_scale
-    tp.inputs["Blend"].default_value = 4.0
-
-    # Create 3 noise samples — one per axis
-    noise_y = _add_node(tree, "ShaderNodeTexNoise", -500, y_offset - 300, f"Noise_Y {layer_name}")
-    noise_y.inputs["Scale"].default_value = noise.inputs["Scale"].default_value
-    noise_y.inputs["Detail"].default_value = noise.inputs["Detail"].default_value
-
-    noise_z = _add_node(tree, "ShaderNodeTexNoise", -500, y_offset - 450, f"Noise_Z {layer_name}")
-    noise_z.inputs["Scale"].default_value = noise.inputs["Scale"].default_value
-    noise_z.inputs["Detail"].default_value = noise.inputs["Detail"].default_value
-
-    # Wire triplanar UVs to noise inputs
-    links.new(tp.outputs["UV_X"], noise.inputs["Vector"])
-    links.new(tp.outputs["UV_Y"], noise_y.inputs["Vector"])
-    links.new(tp.outputs["UV_Z"], noise_z.inputs["Vector"])
-
-    # Blend 3 samples using triplanar weights
-    sep_weights = _add_node(tree, "ShaderNodeSeparateXYZ", -350, y_offset - 350, f"SepW {layer_name}")
-    links.new(tp.outputs["Weights"], sep_weights.inputs["Vector"])
-
-    # Weighted sum: result = noise_x * wx + noise_y * wy + noise_z * wz
-    mul_x = _add_node(tree, "ShaderNodeMath", -200, y_offset - 250, f"MulX {layer_name}")
-    mul_x.operation = "MULTIPLY"
-    links.new(noise.outputs["Fac"], mul_x.inputs[0])
-    links.new(sep_weights.outputs["X"], mul_x.inputs[1])
-
-    mul_y = _add_node(tree, "ShaderNodeMath", -200, y_offset - 350, f"MulY {layer_name}")
-    mul_y.operation = "MULTIPLY"
-    links.new(noise_y.outputs["Fac"], mul_y.inputs[0])
-    links.new(sep_weights.outputs["Y"], mul_y.inputs[1])
-
-    mul_z = _add_node(tree, "ShaderNodeMath", -200, y_offset - 450, f"MulZ {layer_name}")
-    mul_z.operation = "MULTIPLY"
-    links.new(noise_z.outputs["Fac"], mul_z.inputs[0])
-    links.new(sep_weights.outputs["Z"], mul_z.inputs[1])
-
-    add_xy = _add_node(tree, "ShaderNodeMath", -50, y_offset - 300, f"AddXY {layer_name}")
-    add_xy.operation = "ADD"
-    links.new(mul_x.outputs["Value"], add_xy.inputs[0])
-    links.new(mul_y.outputs["Value"], add_xy.inputs[1])
-
-    add_xyz = _add_node(tree, "ShaderNodeMath", 50, y_offset - 350, f"AddXYZ {layer_name}")
-    add_xyz.operation = "ADD"
-    links.new(add_xy.outputs["Value"], add_xyz.inputs[0])
-    links.new(mul_z.outputs["Value"], add_xyz.inputs[1])
-
-    # Reconnect bump to use triplanar-blended output instead of single noise
-    for link in list(tree.links):
-        if (link.from_node == noise and link.from_socket.name == "Fac"
-                and link.to_socket.name == "Height"):
-            links.remove(link)
-    # Find the bump node for this layer
-    bump_label = f"Bump {layer_name}"
-    for node in tree.nodes:
-        if node.label == bump_label:
-            links.new(add_xyz.outputs["Value"], node.inputs["Height"])
-            break
-
-
 # ---------------------------------------------------------------------------
 # Blender handler: handle_setup_terrain_biome
 # ---------------------------------------------------------------------------
@@ -2287,15 +1961,6 @@ def auto_assign_terrain_layers(
 ) -> list[tuple[float, float, float, float]]:
     """Compute per-vertex RGBA splatmap weights from slope, height, and moisture.
 
-    **V2 unified engine** — delegates to ``terrain_materials_v2.compute_slope_material_weights``
-    for smoothstep-based weight computation, then maps the 5-channel v2 output
-    back to 4-channel RGBA for backward compatibility:
-
-        R = ground weight
-        G = scree + cliff partial (slope proxy)
-        B = cliff weight
-        A = wet_rock + snow (special proxy) + height-extreme bands
-
     Pure-logic function -- no bpy dependency.
     R=ground, G=slope, B=cliff, A=special. Normalised to sum=1.
 
@@ -2324,18 +1989,18 @@ def auto_assign_terrain_layers(
     num_verts = len(vertices)
     if num_verts == 0:
         return []
-
-    # --- Build per-vertex slope (radians) via face-normal averaging ---
+    slope_flat_rad = math.radians(slope_flat_deg)
+    slope_cliff_rad = math.radians(slope_cliff_deg)
     vert_faces: list[list[int]] = [[] for _ in range(num_verts)]
     for fi, face in enumerate(faces):
         for vi in face:
             if 0 <= vi < num_verts:
                 vert_faces[vi].append(fi)
-
-    vert_slopes = np.zeros(num_verts, dtype=np.float64)
+    vert_slopes: list[float] = []
     for vi in range(num_verts):
         adj = vert_faces[vi]
         if not adj:
+            vert_slopes.append(0.0)
             continue
         nx, ny, nz = 0.0, 0.0, 0.0
         for fi in adj:
@@ -2346,96 +2011,93 @@ def auto_assign_terrain_layers(
         length = math.sqrt(nx * nx + ny * ny + nz * nz)
         nz_n = nz / length if length > 1e-9 else 1.0
         dot = max(-1.0, min(1.0, nz_n))
-        vert_slopes[vi] = math.acos(dot)
-
-    # --- Build height arrays ---
-    z_values = np.array([v[2] for v in vertices], dtype=np.float64)
-    z_min, z_max = float(z_values.min()), float(z_values.max())
+        vert_slopes.append(math.acos(dot))
+    z_values = [v[2] for v in vertices]
+    z_min, z_max = min(z_values), max(z_values)
     z_range = z_max - z_min
-    if z_range < 1e-9:
-        height_pcts = np.full(num_verts, 0.5, dtype=np.float64)
-    else:
-        height_pcts = (z_values - z_min) / z_range
+    height_pcts = (
+        [0.5] * num_verts if z_range < 1e-9
+        else [(z - z_min) / z_range for z in z_values]
+    )
 
-    # --- Use v2 smoothstep engine for slope-based weights ---
-    # Build a v2-compatible MaterialRuleSet that maps to RGBA:
-    #   channel 0 = ground (R), channel 1 = scree/slope (G),
-    #   channel 2 = cliff (B), channel 3 = special (A)
-    slope_flat_rad = math.radians(slope_flat_deg)
-    slope_cliff_rad = math.radians(slope_cliff_deg)
-    mid_rad = (slope_flat_rad + slope_cliff_rad) / 2.0
-    falloff_low = math.radians(8.0)
-    falloff_high = math.radians(10.0)
-
-    # Compute smoothstep weights per channel using v2 primitives
-    ground_w = _smoothstep_band(vert_slopes, 0.0, slope_flat_rad, falloff_low)
-    slope_w = _smoothstep_band(vert_slopes, slope_flat_rad, slope_cliff_rad, falloff_low)
-    cliff_w = _smoothstep_band(vert_slopes, slope_cliff_rad, math.pi / 2.0, falloff_high)
-
-    # Normalize slope weights
-    total_slope = ground_w + slope_w + cliff_w
-    total_slope = np.where(total_slope < 1e-9, 1.0, total_slope)
-    r = (ground_w / total_slope).astype(np.float64)
-    g = (slope_w / total_slope).astype(np.float64)
-    b = (cliff_w / total_slope).astype(np.float64)
-
-    # --- Moisture modulation (same logic, vectorized) ---
+    # Prepare moisture lookup if moisture_map is provided
     has_moisture = moisture_map is not None
-    a_moisture = np.zeros(num_verts, dtype=np.float64)
     if has_moisture:
-        mmap = np.asarray(moisture_map, dtype=np.float64)
+        import numpy as _np
+        mmap = _np.asarray(moisture_map, dtype=_np.float64)
         m_rows, m_cols = mmap.shape
-        x_vals = np.array([v[0] for v in vertices], dtype=np.float64)
-        y_vals = np.array([v[1] for v in vertices], dtype=np.float64)
-        x_min_t, x_max_t = float(x_vals.min()), float(x_vals.max())
-        y_min_t, y_max_t = float(y_vals.min()), float(y_vals.max())
+        # Compute terrain bounding box for vertex -> grid mapping
+        x_vals = [v[0] for v in vertices]
+        y_vals = [v[1] for v in vertices]
+        x_min_t, x_max_t = min(x_vals), max(x_vals)
+        y_min_t, y_max_t = min(y_vals), max(y_vals)
         x_range_t = x_max_t - x_min_t
         y_range_t = y_max_t - y_min_t
 
-        is_flat = vert_slopes < slope_flat_rad
-        if x_range_t > 1e-9 and y_range_t > 1e-9:
-            u = (x_vals - x_min_t) / x_range_t
-            v_coord = (y_vals - y_min_t) / y_range_t
-            mi = np.clip((v_coord * (m_rows - 1)).astype(int), 0, m_rows - 1)
-            mj = np.clip((u * (m_cols - 1)).astype(int), 0, m_cols - 1)
-            moisture = mmap[mi, mj]
+    result: list[tuple[float, float, float, float]] = []
+    for vi in range(num_verts):
+        angle = vert_slopes[vi]
+        h_pct = height_pcts[vi]
+
+        # Base slope/height assignment (unchanged logic)
+        if angle < slope_flat_rad:
+            t = angle / slope_flat_rad if slope_flat_rad > 0 else 0.0
+            r, g, b = 1.0 - t, t, 0.0
+        elif angle < slope_cliff_rad:
+            span = slope_cliff_rad - slope_flat_rad
+            t = (angle - slope_flat_rad) / span if span > 0 else 0.0
+            r, g, b = 0.0, 1.0 - t, t
         else:
-            moisture = np.full(num_verts, 0.5, dtype=np.float64)
+            r, g, b = 0.0, 0.0, 1.0
 
-        wet_mask = (moisture > 0.7) & is_flat
-        dry_mask = (moisture < 0.3) & is_flat
-        r = np.where(wet_mask, r * 1.2, r)
-        r = np.where(dry_mask, r * 0.7, r)
-        a_moisture = np.where(wet_mask, 0.15 * (moisture - 0.7) / 0.3, a_moisture)
-        a_moisture = np.where(dry_mask, 0.1 * (0.3 - moisture) / 0.3, a_moisture)
+        # Moisture modulation on flat/low-slope ground (R channel dominant)
+        if has_moisture and angle < slope_flat_rad:
+            vx, vy = vertices[vi][0], vertices[vi][1]
+            # Map vertex position to moisture grid cell
+            if x_range_t > 1e-9 and y_range_t > 1e-9:
+                u = (vx - x_min_t) / x_range_t
+                v_coord = (vy - y_min_t) / y_range_t
+                mi = int(max(0, min(m_rows - 1, v_coord * (m_rows - 1))))
+                mj = int(max(0, min(m_cols - 1, u * (m_cols - 1))))
+                moisture = float(mmap[mi, mj])
+            else:
+                moisture = 0.5
 
-    # --- Alpha channel: special at height extremes ---
-    a = np.zeros(num_verts, dtype=np.float64)
-    if special_low_pct > 1e-9:
-        low_mask = height_pcts < special_low_pct
-        a = np.where(low_mask, 1.0 - (height_pcts / max(special_low_pct, 1e-9)), a)
-    if special_high_pct < 1.0:
-        high_mask = height_pcts > special_high_pct
-        a = np.where(high_mask, (height_pcts - special_high_pct) / max(1.0 - special_high_pct, 1e-9), a)
-    a = np.clip(a + a_moisture, 0.0, 1.0)
+            if moisture > 0.7:
+                # High moisture: mud/wetland -- boost ground, slight special
+                r = r * 1.2
+                a_moisture = 0.15 * (moisture - 0.7) / 0.3
+            elif moisture < 0.3:
+                # Low moisture: dry earth -- reduce ground, boost special
+                r = r * 0.7
+                a_moisture = 0.1 * (0.3 - moisture) / 0.3
+            else:
+                a_moisture = 0.0
+        else:
+            a_moisture = 0.0
 
-    # --- Renormalize RGB to (1 - alpha) ---
-    rgb_sum = r + g + b
-    remaining = 1.0 - a
-    with np.errstate(divide="ignore", invalid="ignore"):
-        scale = np.where(rgb_sum > 0.0, remaining / rgb_sum, 0.0)
-    r_n = np.where(rgb_sum > 0.0, r * scale, 0.0)
-    g_n = np.where(rgb_sum > 0.0, g * scale, 0.0)
-    b_n = np.where(rgb_sum > 0.0, b * scale, remaining)
+        a = 0.0
+        if h_pct < special_low_pct and special_low_pct > 0:
+            a = 1.0 - (h_pct / special_low_pct)
+        elif h_pct > special_high_pct and special_high_pct < 1.0:
+            a = (h_pct - special_high_pct) / (1.0 - special_high_pct)
+        a = max(0.0, min(1.0, a + a_moisture))
 
-    r_n = np.clip(r_n, 0.0, 1.0)
-    g_n = np.clip(g_n, 0.0, 1.0)
-    b_n = np.clip(b_n, 0.0, 1.0)
-
-    return [
-        (float(r_n[i]), float(g_n[i]), float(b_n[i]), float(a[i]))
-        for i in range(num_verts)
-    ]
+        rgb_sum = r + g + b
+        if rgb_sum > 0:
+            remaining = 1.0 - a
+            r = r / rgb_sum * remaining
+            g = g / rgb_sum * remaining
+            b = b / rgb_sum * remaining
+        else:
+            b = 1.0 - a
+        result.append((
+            max(0.0, min(1.0, r)),
+            max(0.0, min(1.0, g)),
+            max(0.0, min(1.0, b)),
+            max(0.0, min(1.0, a)),
+        ))
+    return result
 
 
 def _resolve_biome_palette_name(
@@ -2507,38 +2169,43 @@ def compute_world_splatmap_weights(
     else:
         mmap = None
 
-    # --- V2 unified smoothstep engine (replaces hard-threshold linear ramps) ---
-    # Uses v2 _smoothstep_band primitives for smooth slope transitions instead
-    # of the previous hard if/else banding. Performance is identical (vectorized
-    # numpy), but transitions are now smooth Hermite ramps with configurable
-    # falloff widths instead of hard edges at flat_deg and cliff_deg.
+    # --- Vectorized splatmap computation (Bundle B §7.5 performance fix) ---
+    # Previously a Python double for-loop — ~2-5s on 512² tiles. This numpy
+    # implementation is O(HW) with no per-cell Python overhead and completes
+    # in under 200ms on the same grid. Output is identical for all well-formed
+    # inputs; edge cases (zero slope span, no moisture map) are preserved.
     slope = np.asarray(slope_map, dtype=np.float64)
     hp = np.asarray(height_pcts, dtype=np.float64)
 
     flat_deg = float(slope_flat_deg)
     cliff_deg = float(slope_cliff_deg)
-    falloff_low = 8.0   # degrees of smooth transition
-    falloff_high = 10.0  # degrees of smooth transition
+    span = max(cliff_deg - flat_deg, 1e-9)
 
-    # Smoothstep-based slope weights (ground / slope / cliff)
-    red = _smoothstep_band(slope, 0.0, flat_deg, falloff_low)
-    green = _smoothstep_band(slope, flat_deg, cliff_deg, falloff_low)
-    blue = _smoothstep_band(slope, cliff_deg, 90.0, falloff_high)
+    # Base RGB from slope angle:
+    #   angle < flat_deg       → red=1-t  green=t   blue=0   (t = angle/flat)
+    #   flat ≤ angle < cliff   → red=0    green=1-u blue=u   (u = (angle-flat)/span)
+    #   angle ≥ cliff          → red=0    green=0   blue=1
+    is_flat = slope < flat_deg
+    is_mid = (slope >= flat_deg) & (slope < cliff_deg)
+    is_cliff = slope >= cliff_deg
 
-    # Normalize slope weights so they sum to 1 per cell
-    slope_total = red + green + blue
-    slope_total = np.where(slope_total < 1e-9, 1.0, slope_total)
-    red = red / slope_total
-    green = green / slope_total
-    blue = blue / slope_total
+    t_flat = np.where(
+        flat_deg > 1e-9,
+        np.clip(slope / max(flat_deg, 1e-9), 0.0, 1.0),
+        0.0,
+    )
+    u_mid = np.clip((slope - flat_deg) / span, 0.0, 1.0)
 
-    # Moisture modulation — only applies on ground-dominant cells and only if
-    # a moisture map was provided.
-    is_ground_dominant = red > 0.5
+    red = np.where(is_flat, 1.0 - t_flat, 0.0)
+    green = np.where(is_flat, t_flat, np.where(is_mid, 1.0 - u_mid, 0.0))
+    blue = np.where(is_cliff, 1.0, np.where(is_mid, u_mid, 0.0))
+
+    # Moisture modulation — only applies on flat cells and only if a moisture
+    # map was provided. Builds an `a_moisture` correction that feeds alpha.
     if mmap is not None:
         moisture = mmap
-        wet_mask = (moisture > 0.7) & is_ground_dominant
-        dry_mask = (moisture < 0.3) & is_ground_dominant
+        wet_mask = (moisture > 0.7) & is_flat
+        dry_mask = (moisture < 0.3) & is_flat
         red = np.where(wet_mask, red * 1.2, red)
         red = np.where(dry_mask, red * 0.7, red)
         a_moisture = np.zeros_like(hp)
@@ -2588,208 +2255,14 @@ def compute_world_splatmap_weights(
     return result
 
 
-def _build_pbr_layer_nodes(
-    tree: Any,
-    links: Any,
-    layer_params: dict[str, Any],
-    layer_name: str,
-    y_offset: int,
-    *,
-    pbr_textures: dict[str, str] | None = None,
-    enable_triplanar: bool = False,
-) -> tuple[Any, Any]:
-    """Build a full PBR node chain for one terrain layer.
-
-    Creates:
-      - Principled BSDF with all palette params
-      - Noise texture for procedural detail/height
-      - Roughness variation overlay (noise modulates base roughness)
-      - Bump node for micro-detail normals
-      - Optional PBR image texture inputs (albedo, roughness, normal, height)
-        when ``pbr_textures`` provides paths
-      - Optional triplanar projection for cliff/steep layers (when
-        ``enable_triplanar=True``), which samples noise from 3 axes to
-        eliminate texture stretching on steep faces
-
-    Returns:
-        (bsdf_node, height_output_node) — the height output feeds HeightBlend.
-    """
-    lp = layer_params
-    x_base = -900
-
-    # -- Coordinate input for texture mapping --
-    tex_coord = _add_node(tree, "ShaderNodeTexCoord", x_base - 200, y_offset, f"TexCoord {layer_name}")
-
-    # -- Noise for procedural detail + height blend source --
-    noise = _add_node(tree, "ShaderNodeTexNoise", x_base, y_offset - 100, f"Noise {layer_name}")
-    noise.inputs["Scale"].default_value = lp["detail_scale"]
-    noise.inputs["Detail"].default_value = 10.0
-    noise.inputs["Roughness"].default_value = 0.6
-    noise.inputs["Distortion"].default_value = 0.2
-    links.new(tex_coord.outputs["Object"], noise.inputs["Vector"])
-
-    # -- Second noise octave for roughness variation --
-    rough_noise = _add_node(tree, "ShaderNodeTexNoise", x_base, y_offset - 250, f"RoughNoise {layer_name}")
-    rough_noise.inputs["Scale"].default_value = lp["detail_scale"] * 2.5
-    rough_noise.inputs["Detail"].default_value = 4.0
-    links.new(tex_coord.outputs["Object"], rough_noise.inputs["Vector"])
-
-    # -- Roughness = base_roughness +/- variation via noise --
-    rough_var = lp.get("roughness_variation", 0.1)
-    rough_remap = _add_node(tree, "ShaderNodeMapRange", x_base + 200, y_offset - 250, f"RoughRemap {layer_name}")
-    rough_remap.inputs["From Min"].default_value = 0.0
-    rough_remap.inputs["From Max"].default_value = 1.0
-    rough_remap.inputs["To Min"].default_value = max(0.0, lp["roughness"] - rough_var)
-    rough_remap.inputs["To Max"].default_value = min(1.0, lp["roughness"] + rough_var)
-    links.new(rough_noise.outputs["Fac"], rough_remap.inputs["Value"])
-
-    # -- Principled BSDF --
-    bsdf = _add_node(tree, "ShaderNodeBsdfPrincipled", x_base + 500, y_offset, f"Layer: {layer_name}")
-    bsdf.inputs["Base Color"].default_value = lp["base_color"]
-    bsdf.inputs["Metallic"].default_value = lp["metallic"]
-
-    # Connect roughness variation
-    links.new(rough_remap.outputs["Result"], bsdf.inputs["Roughness"])
-
-    # Emission
-    ec = lp.get("emission_color")
-    es = lp.get("emission_strength", 0.0)
-    if ec and es > 0:
-        ei = _get_bsdf_input(bsdf, "Emission Color")
-        if ei is not None:
-            ei.default_value = ec
-        esi = bsdf.inputs.get("Emission Strength")
-        if esi is not None:
-            esi.default_value = es
-
-    # Subsurface
-    sw = lp.get("subsurface_weight")
-    sc = lp.get("subsurface_color")
-    if sw and sw > 0:
-        si = _get_bsdf_input(bsdf, "Subsurface Weight")
-        if si is not None:
-            si.default_value = sw
-        if sc:
-            sci = bsdf.inputs.get("Subsurface Color")
-            if sci is not None:
-                sci.default_value = sc
-
-    # Alpha
-    alpha_val = lp.get("alpha")
-    if alpha_val is not None and alpha_val < 1.0:
-        ai = bsdf.inputs.get("Alpha")
-        if ai is not None:
-            ai.default_value = alpha_val
-
-    # -- Bump from noise height --
-    bump = _add_node(tree, "ShaderNodeBump", x_base + 350, y_offset - 100, f"Bump {layer_name}")
-    bump.inputs["Strength"].default_value = lp["normal_strength"]
-    bump.inputs["Distance"].default_value = 0.02
-    links.new(noise.outputs["Fac"], bump.inputs["Height"])
-    links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
-
-    # -- Triplanar projection for steep/cliff layers --
-    if enable_triplanar:
-        _apply_triplanar_to_layer(
-            tree, links, bsdf, noise, tex_coord,
-            layer_name, y_offset, lp["detail_scale"],
-        )
-
-    # -- PBR image texture overrides (when available) --
-    height_source = noise  # Default: noise Fac output for HeightBlend
-    if pbr_textures:
-        _wire_pbr_image(tree, links, bsdf, bump, tex_coord,
-                        pbr_textures, layer_name, y_offset, x_base)
-        # If a height texture was provided, use it as height source
-        ht_path = pbr_textures.get("height")
-        if ht_path:
-            ht_img = bpy.data.images.get(ht_path) or bpy.data.images.load(ht_path)
-            ht_node = _add_node(tree, "ShaderNodeTexImage", x_base + 100, y_offset - 400, f"HeightTex {layer_name}")
-            ht_node.image = ht_img
-            ht_node.projection = "FLAT"
-            links.new(tex_coord.outputs["UV"], ht_node.inputs["Vector"])
-            height_source = ht_node
-
-    return bsdf, height_source
-
-
-def _wire_pbr_image(
-    tree: Any,
-    links: Any,
-    bsdf: Any,
-    bump: Any,
-    tex_coord: Any,
-    pbr_textures: dict[str, str],
-    layer_name: str,
-    y_offset: int,
-    x_base: int,
-) -> None:
-    """Wire PBR image textures (albedo, roughness, normal) into an existing layer.
-
-    Only wires textures whose paths exist in ``pbr_textures``.
-    """
-    # Albedo
-    albedo_path = pbr_textures.get("albedo")
-    if albedo_path:
-        img = bpy.data.images.get(albedo_path) or bpy.data.images.load(albedo_path)
-        tex = _add_node(tree, "ShaderNodeTexImage", x_base - 100, y_offset + 100, f"Albedo {layer_name}")
-        tex.image = img
-        tex.projection = "FLAT"
-        links.new(tex_coord.outputs["UV"], tex.inputs["Vector"])
-        links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
-
-    # Roughness map
-    rough_path = pbr_textures.get("roughness")
-    if rough_path:
-        img = bpy.data.images.get(rough_path) or bpy.data.images.load(rough_path)
-        img.colorspace_settings.name = "Non-Color"
-        tex = _add_node(tree, "ShaderNodeTexImage", x_base - 100, y_offset - 150, f"RoughTex {layer_name}")
-        tex.image = img
-        tex.projection = "FLAT"
-        links.new(tex_coord.outputs["UV"], tex.inputs["Vector"])
-        links.new(tex.outputs["Color"], bsdf.inputs["Roughness"])
-
-    # Normal map
-    normal_path = pbr_textures.get("normal")
-    if normal_path:
-        img = bpy.data.images.get(normal_path) or bpy.data.images.load(normal_path)
-        img.colorspace_settings.name = "Non-Color"
-        tex = _add_node(tree, "ShaderNodeTexImage", x_base - 100, y_offset - 350, f"NormTex {layer_name}")
-        tex.image = img
-        tex.projection = "FLAT"
-        links.new(tex_coord.outputs["UV"], tex.inputs["Vector"])
-        nmap = _add_node(tree, "ShaderNodeNormalMap", x_base + 100, y_offset - 350, f"NormMap {layer_name}")
-        links.new(tex.outputs["Color"], nmap.inputs["Color"])
-        # Chain: normal map -> bump (bump uses normal map as base)
-        links.new(nmap.outputs["Normal"], bump.inputs["Normal"])
-
-
 def create_biome_terrain_material(
     biome_name: str,
     object_name: str | None = None,
     season: str | None = None,
-    *,
-    pbr_textures: dict[str, dict[str, str]] | None = None,
-    enable_displacement: bool = False,
 ) -> Any:
-    """Create a multi-layer PBR terrain material with splatmap blending.
+    """Create a multi-layer terrain material with vertex-color splatmap blending.
 
-    Uses BIOME_PALETTES_V2 for per-layer material definitions. Each layer
-    gets a full PBR node chain (Base Color, Roughness with variation overlay,
-    Normal/Bump, optional image textures). Layers are blended via HeightBlend
-    groups driven by the vertex-color splatmap.
-
-    Args:
-        biome_name: Biome palette key from BIOME_PALETTES_V2.
-        object_name: Optional Blender object to assign and paint splatmap on.
-        season: Optional season variant (e.g. "summer", "winter").
-        pbr_textures: Optional dict mapping layer name -> dict of texture paths:
-            {"ground": {"albedo": "path.png", "roughness": "path.png",
-                        "normal": "path.png", "height": "path.png"}, ...}
-        enable_displacement: If True, add a displacement output node.
-
-    Returns:
-        The created/updated bpy.types.Material.
+    Uses BIOME_PALETTES_V2 for per-layer material definitions.
     """
     if bpy is None:
         raise RuntimeError("create_biome_terrain_material() requires bpy")
@@ -2814,108 +2287,94 @@ def create_biome_terrain_material(
     nodes = tree.nodes
     links = tree.links
     nodes.clear()
-
-    output = _add_node(tree, "ShaderNodeOutputMaterial", 1400, 0, "Output")
-
-    # -- Splatmap vertex color input --
-    vcol_node = _add_node(tree, "ShaderNodeVertexColor", -1100, -600, "Splatmap")
+    output = _add_node(tree, "ShaderNodeOutputMaterial", 1200, 0, "Output")
+    vcol_node = _add_node(tree, "ShaderNodeVertexColor", -800, -600, "Splatmap")
     vcol_node.layer_name = "VB_TerrainSplatmap"
-    separate = _add_node(tree, "ShaderNodeSeparateColor", -900, -600, "Split")
+    separate = _add_node(tree, "ShaderNodeSeparateColor", -600, -600, "Split")
     separate.mode = "RGB"
     links.new(vcol_node.outputs["Color"], separate.inputs["Color"])
-
-    # -- Build PBR layer chains --
     layer_names = ["ground", "slope", "cliff", "special"]
     layer_bsdfs: list[Any] = []
-    height_sources: list[Any] = []
-
-    # Cliff and slope layers get triplanar projection to avoid stretching
-    triplanar_layers = {"cliff", "slope"}
-
+    noise_nodes: list[Any] = []
     for i, ln in enumerate(layer_names):
         lp = palette[ln]
-        y = 500 - i * 400
-        layer_pbr = (pbr_textures or {}).get(ln)
-        use_triplanar = ln in triplanar_layers
-        bsdf_node, height_node = _build_pbr_layer_nodes(
-            tree, links, lp, ln, y,
-            pbr_textures=layer_pbr,
-            enable_triplanar=use_triplanar,
-        )
-        layer_bsdfs.append(bsdf_node)
-        height_sources.append(height_node)
+        y = 400 - i * 300
+        bsdf = _add_node(tree, "ShaderNodeBsdfPrincipled", -200, y, f"Layer: {ln}")
+        bsdf.inputs["Base Color"].default_value = lp["base_color"]
+        bsdf.inputs["Roughness"].default_value = lp["roughness"]
+        bsdf.inputs["Metallic"].default_value = lp["metallic"]
+        ec = lp.get("emission_color")
+        es = lp.get("emission_strength", 0.0)
+        if ec and es > 0:
+            ei = _get_bsdf_input(bsdf, "Emission Color")
+            if ei is not None:
+                ei.default_value = ec
+            esi = bsdf.inputs.get("Emission Strength")
+            if esi is not None:
+                esi.default_value = es
+        sw = lp.get("subsurface_weight")
+        sc = lp.get("subsurface_color")
+        if sw and sw > 0:
+            si = _get_bsdf_input(bsdf, "Subsurface Weight")
+            if si is not None:
+                si.default_value = sw
+            if sc:
+                sci = bsdf.inputs.get("Subsurface Color")
+                if sci is not None:
+                    sci.default_value = sc
+        noise = _add_node(tree, "ShaderNodeTexNoise", -500, y - 100, f"Noise {ln}")
+        noise.inputs["Scale"].default_value = lp["detail_scale"]
+        noise.inputs["Detail"].default_value = 8.0
+        bump = _add_node(tree, "ShaderNodeBump", -350, y - 100, f"Bump {ln}")
+        bump.inputs["Strength"].default_value = lp["normal_strength"]
+        bump.inputs["Distance"].default_value = 0.02
+        links.new(noise.outputs["Fac"], bump.inputs["Height"])
+        links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+        layer_bsdfs.append(bsdf)
+        noise_nodes.append(noise)
 
     # -- HeightBlend: height-based texture transitions between layers --
     height_blend_group = _create_height_blend_group()
 
     # Ground/Slope blend via HeightBlend
-    mix_01 = _add_node(tree, "ShaderNodeMixShader", 400, 300, "Ground/Slope")
+    mix_01 = _add_node(tree, "ShaderNodeMixShader", 200, 300, "Ground/Slope")
     links.new(layer_bsdfs[0].outputs["BSDF"], mix_01.inputs[1])
     links.new(layer_bsdfs[1].outputs["BSDF"], mix_01.inputs[2])
 
-    hb_01 = _add_node(tree, "ShaderNodeGroup", 200, 300, "HB Ground/Slope")
+    hb_01 = _add_node(tree, "ShaderNodeGroup", 0, 300, "HB Ground/Slope")
     hb_01.node_tree = height_blend_group
-    links.new(height_sources[0].outputs["Fac"], hb_01.inputs["Height_A"])
-    links.new(height_sources[1].outputs["Fac"], hb_01.inputs["Height_B"])
+    links.new(noise_nodes[0].outputs["Fac"], hb_01.inputs["Height_A"])
+    links.new(noise_nodes[1].outputs["Fac"], hb_01.inputs["Height_B"])
     links.new(separate.outputs["Green"], hb_01.inputs["Mask"])
     hb_01.inputs["Blend_Contrast"].default_value = 0.6
     links.new(hb_01.outputs["Result"], mix_01.inputs["Fac"])
 
     # Ground-Slope / Cliff blend via HeightBlend
-    mix_02 = _add_node(tree, "ShaderNodeMixShader", 700, 200, "Add Cliff")
+    mix_02 = _add_node(tree, "ShaderNodeMixShader", 500, 200, "Add Cliff")
     links.new(mix_01.outputs["Shader"], mix_02.inputs[1])
     links.new(layer_bsdfs[2].outputs["BSDF"], mix_02.inputs[2])
 
-    hb_02 = _add_node(tree, "ShaderNodeGroup", 500, 200, "HB Mix/Cliff")
+    hb_02 = _add_node(tree, "ShaderNodeGroup", 300, 200, "HB Mix/Cliff")
     hb_02.node_tree = height_blend_group
-    links.new(height_sources[1].outputs["Fac"], hb_02.inputs["Height_A"])
-    links.new(height_sources[2].outputs["Fac"], hb_02.inputs["Height_B"])
+    links.new(noise_nodes[1].outputs["Fac"], hb_02.inputs["Height_A"])
+    links.new(noise_nodes[2].outputs["Fac"], hb_02.inputs["Height_B"])
     links.new(separate.outputs["Blue"], hb_02.inputs["Mask"])
     hb_02.inputs["Blend_Contrast"].default_value = 0.5
     links.new(hb_02.outputs["Result"], mix_02.inputs["Fac"])
 
     # Previous / Special blend via HeightBlend
-    mix_03 = _add_node(tree, "ShaderNodeMixShader", 1000, 100, "Add Special")
+    mix_03 = _add_node(tree, "ShaderNodeMixShader", 800, 100, "Add Special")
     links.new(mix_02.outputs["Shader"], mix_03.inputs[1])
     links.new(layer_bsdfs[3].outputs["BSDF"], mix_03.inputs[2])
 
-    hb_03 = _add_node(tree, "ShaderNodeGroup", 800, 100, "HB Mix/Special")
+    hb_03 = _add_node(tree, "ShaderNodeGroup", 600, 100, "HB Mix/Special")
     hb_03.node_tree = height_blend_group
-    links.new(height_sources[2].outputs["Fac"], hb_03.inputs["Height_A"])
-    links.new(height_sources[3].outputs["Fac"], hb_03.inputs["Height_B"])
+    links.new(noise_nodes[2].outputs["Fac"], hb_03.inputs["Height_A"])
+    links.new(noise_nodes[3].outputs["Fac"], hb_03.inputs["Height_B"])
     links.new(vcol_node.outputs["Alpha"], hb_03.inputs["Mask"])
     hb_03.inputs["Blend_Contrast"].default_value = 0.5
     links.new(hb_03.outputs["Result"], mix_03.inputs["Fac"])
-
-    # Connect final shader to output
     links.new(mix_03.outputs["Shader"], output.inputs["Surface"])
-
-    # -- Displacement output (optional) --
-    if enable_displacement:
-        mat.cycles.displacement_method = "BOTH"
-        disp_node = _add_node(tree, "ShaderNodeDisplacement", 1200, -200, "Displacement")
-        disp_node.inputs["Scale"].default_value = 0.1
-        disp_node.inputs["Midlevel"].default_value = 0.5
-        # Blend height sources using splatmap weights for displacement
-        disp_mix_01 = _add_node(tree, "ShaderNodeMixRGB", 900, -200, "DispMix01")
-        disp_mix_01.blend_type = "MIX"
-        links.new(separate.outputs["Green"], disp_mix_01.inputs["Fac"])
-        links.new(height_sources[0].outputs["Fac"], disp_mix_01.inputs["Color1"])
-        links.new(height_sources[1].outputs["Fac"], disp_mix_01.inputs["Color2"])
-        disp_mix_02 = _add_node(tree, "ShaderNodeMixRGB", 1000, -300, "DispMix02")
-        disp_mix_02.blend_type = "MIX"
-        links.new(separate.outputs["Blue"], disp_mix_02.inputs["Fac"])
-        links.new(disp_mix_01.outputs["Color"], disp_mix_02.inputs["Color1"])
-        links.new(height_sources[2].outputs["Fac"], disp_mix_02.inputs["Color2"])
-        disp_mix_03 = _add_node(tree, "ShaderNodeMixRGB", 1100, -400, "DispMix03")
-        disp_mix_03.blend_type = "MIX"
-        links.new(vcol_node.outputs["Alpha"], disp_mix_03.inputs["Fac"])
-        links.new(disp_mix_02.outputs["Color"], disp_mix_03.inputs["Color1"])
-        links.new(height_sources[3].outputs["Fac"], disp_mix_03.inputs["Color2"])
-        links.new(disp_mix_03.outputs["Color"], disp_node.inputs["Height"])
-        links.new(disp_node.outputs["Displacement"], output.inputs["Displacement"])
-
-    # -- Assign to object and paint splatmap --
     if object_name:
         obj = bpy.data.objects.get(object_name)
         if obj is not None and obj.type == "MESH":
