@@ -808,11 +808,21 @@ Plans:
 **Depends on:** Phase 53
 **Requirements:** TFIX-006
 **Goal:** Fix seam guards, add hero blend-weight, create node registry, cross-tile validation. Puzzle-piece tiling.
+**Plans:** 1 plan
+Plans:
+- [ ] 54-01-PLAN.md -- Seam guard zones, blend-weight, node registry, stitch fixes, fault lines, Poisson blending
 
 ### Phase 55: Scatter + Rivers + Water
 **Depends on:** Phase 54
 **Requirements:** TFIX-007
 **Goal:** Fix scatter Z=0/slope, wire river mesh, build waterfall mesh, implement slope-threshold instancing + path network.
+**Plans:** 5 plans (parallel sub-phases)
+Plans:
+- [ ] 55-01-PLAN.md -- Sub-phase 6A: Scatter core bugs + vegetation deep-dive
+- [ ] 55-02-PLAN.md -- Sub-phase 6B: Rivers, water, waterfalls (A* fix, volumetric, meander)
+- [ ] 55-03-PLAN.md -- Sub-phase 6C: Roads, cliffs, morphology (slope-weighted A*, rock types)
+- [ ] 55-04-PLAN.md -- Sub-phase 6D: Handler bugs, socket server, R15J wiring
+- [ ] 55-05-PLAN.md -- Sub-phase 6E: Cave deep-dive (Perlin worm, marching cubes, stalactites)
 
 ### Phase 56: Material Pipeline + Shaders
 **Depends on:** Phase 55
