@@ -185,8 +185,19 @@ def validate_rhythm(
     return issues
 
 
+def register_bundle_h_rhythm() -> None:
+    """No-op registrar — rhythm is a utility/validator module, not a pipeline pass.
+
+    Called by ``terrain_master_registrar`` to verify the module is importable
+    and its symbols are reachable at startup.
+    """
+    # Verify core symbols are reachable (import-time smoke test).
+    _ = analyze_feature_rhythm  # noqa: F841
+
+
 __all__ = [
     "analyze_feature_rhythm",
     "enforce_rhythm",
     "validate_rhythm",
+    "register_bundle_h_rhythm",
 ]

@@ -9,8 +9,8 @@ Pure numpy. No bpy. Z-up world meters.
 
 from __future__ import annotations
 
-import types
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import Any, Dict, List, Mapping, Tuple
 
 import numpy as np
@@ -29,9 +29,7 @@ class MorphologyTemplate:
     kind: str  # ridge_spur, canyon, mesa, pinnacle, spur, valley, plateau, ...
     scale_m: float  # characteristic XY extent in world meters
     aspect_ratio: float  # length/width ratio (>= 1 means elongated)
-    params: Mapping[str, Any] = field(
-        default_factory=lambda: types.MappingProxyType({})
-    )
+    params: Mapping[str, Any] = field(default_factory=lambda: MappingProxyType({}))
 
 
 # ---------------------------------------------------------------------------

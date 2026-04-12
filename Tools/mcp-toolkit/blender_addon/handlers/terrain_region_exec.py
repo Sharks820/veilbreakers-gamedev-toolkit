@@ -11,9 +11,12 @@ Pure Python + numpy. No bpy.
 
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass
 from typing import List, Optional, Sequence
+
+logger = logging.getLogger(__name__)
 
 from .terrain_pipeline import TerrainPassController
 from .terrain_semantics import BBox, PassDefinition, PassResult
@@ -83,6 +86,7 @@ def compute_minimum_padding(
             pdef = TerrainPassController.get_pass(name)
             pad = max(pad, _pass_pad_radius(pdef))
         except Exception:
+            logger.debug("Pass %s not registered; using default pad radius", name, exc_info=True)
             pad = max(pad, _DEFAULT_PAD_RADIUS_M)
 
     min_x = region.min_x - pad
@@ -166,6 +170,7 @@ def execute_region_with_rollback(
         ckpt = _save_ckpt(controller, pass_name="region_exec_pre", label=pre_label)
         pre_id = ckpt.checkpoint_id
     except Exception:
+        logger.debug("Pre-execution checkpoint save failed", exc_info=True)
         pre_id = None
 
     start = time.perf_counter()
@@ -182,6 +187,7 @@ def execute_region_with_rollback(
                 except Exception:
                     # Best-effort rollback; surface the failure via the
                     # report rather than swallowing it.
+                    logger.warning("Rollback to %s failed after pass failure", pre_label, exc_info=True)
                     rolled_back = False
             break
     wall = time.perf_counter() - start
