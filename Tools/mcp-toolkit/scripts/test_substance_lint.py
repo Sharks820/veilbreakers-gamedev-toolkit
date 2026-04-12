@@ -49,10 +49,6 @@ ASSERT_METHODS = {
     "assertSequenceEqual", "assertSetEqual", "assertTupleEqual",
     "assert_called", "assert_called_once", "assert_called_with",
     "assert_called_once_with", "assert_not_called",
-    # np.testing assertion functions (F842 fix)
-    "assert_array_equal", "assert_array_almost_equal", "assert_allclose",
-    "assert_array_less", "assert_equal", "assert_raises",
-    "assert_warns", "assert_string_equal",
 }
 RAISES_CONTEXT_METHODS = {"raises", "assertRaises", "assertRaisesRegex"}
 
@@ -89,13 +85,6 @@ def _is_tautological_assert(node: ast.AST) -> bool:
         if method == "assertEqual" and len(call.args) >= 2:
             a, b = call.args[0], call.args[1]
             if isinstance(a, ast.Constant) and isinstance(b, ast.Constant) and a.value == b.value:
-                return True
-        # Detect call-based assertions with identical arguments:
-        # e.g., np.testing.assert_array_equal(x, x) or assertEqual(x, x)
-        if method in ASSERT_METHODS and len(call.args) >= 2:
-            a, b = call.args[0], call.args[1]
-            if (isinstance(a, ast.Name) and isinstance(b, ast.Name)
-                    and a.id == b.id):
                 return True
 
     return False

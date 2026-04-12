@@ -184,7 +184,6 @@ from .environment import (
     handle_create_water,
     handle_export_heightmap,
     handle_generate_multi_biome_world,
-    compose_terrain_node,
 )
 from .worldbuilding import (
     handle_generate_building,
@@ -998,7 +997,6 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "env_generate_terrain": handle_generate_terrain,
     "env_generate_terrain_tile": handle_generate_terrain_tile,
     "env_generate_world_terrain": handle_generate_world_terrain,  # DEPRECATED: use env_generate_terrain_tile per-tile workflow instead
-    "env_compose_terrain_node": compose_terrain_node,
     "env_run_terrain_pass": handle_run_terrain_pass,
     "env_stitch_terrain_edges": handle_stitch_terrain_edges,
     "env_paint_terrain": handle_paint_terrain,
@@ -1144,7 +1142,6 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         seed=params.get("seed", 42),
     ),
     "env_generate_waterfall": handle_generate_waterfall,
-    # env_build_waterfall: removed (handler deleted in Phase 51)
     "env_generate_cliff_face": lambda params: generate_cliff_face(
         width=params.get("width", 20.0),
         height=params.get("height", 15.0),
@@ -1153,7 +1150,6 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         has_ledge_path=params.get("has_ledge_path", True),
         seed=params.get("seed", 42),
     ),
-    # env_build_cliff_face: removed (handler deleted in Phase 51)
     "env_generate_swamp_terrain": lambda params: generate_swamp_terrain(
         size=params.get("size", 50.0),
         water_level=params.get("water_level", 0.3),
@@ -1208,7 +1204,6 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         style=params.get("style", "natural"),
         seed=params.get("seed", 0),
     ),
-    # env_build_cave_entrance: removed (handler deleted in Phase 51)
     "env_generate_lava_flow": lambda params: generate_lava_flow(
         length=params.get("length", 30.0),
         width=params.get("width", 4.0),

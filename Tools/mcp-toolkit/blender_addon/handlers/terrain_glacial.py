@@ -220,8 +220,6 @@ def pass_glacial(
 
     # Optional U-valley carving from hints
     carved = False
-    H, W = stack.height.shape
-    total_delta = np.zeros((H, W), dtype=np.float64)
     glacier_paths = hints.get("glacier_paths", [])
     if glacier_paths:
         seed = derive_pass_seed(
@@ -237,20 +235,19 @@ def pass_glacial(
             depth = float(gp.get("depth_m", 30.0))
             if len(path) >= 2:
                 delta = carve_u_valley(stack, path, width, depth)
-                total_delta += delta
+                new_h = np.asarray(stack.height, dtype=np.float64) + delta
+                stack.set("height", new_h, "glacial")
                 carved = True
-
-    produced = ("snow_line_factor",)
-    if carved:
-        stack.set("glacial_delta", total_delta.astype(np.float32), "glacial")
-        produced = ("snow_line_factor", "glacial_delta")
+                # regenerate snow line after height change
+        if carved:
+            factor = compute_snow_line(stack, snow_alt)
 
     return PassResult(
         pass_name="glacial",
         status="ok",
         duration_seconds=time.perf_counter() - t0,
         consumed_channels=("height",),
-        produced_channels=produced,
+        produced_channels=("snow_line_factor",),
         metrics={
             "snow_line_altitude_m": snow_alt,
             "snow_coverage_fraction": float((factor > 0.5).mean()),

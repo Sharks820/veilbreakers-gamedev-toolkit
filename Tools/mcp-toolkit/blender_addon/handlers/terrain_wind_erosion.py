@@ -168,23 +168,24 @@ def pass_wind_erosion(
         region,
     )
 
+    h = np.asarray(stack.height, dtype=np.float64).copy()
     erosion_delta = apply_wind_erosion(stack, wind_dir, intensity)
+    h = h + erosion_delta
 
     dune_delta_sum = 0.0
-    total_delta = erosion_delta.copy()
     if dune_enabled:
         dunes = generate_dunes(stack, wind_dir, seed)
-        total_delta = total_delta + dunes
+        h = h + dunes
         dune_delta_sum = float(np.abs(dunes).mean())
 
-    stack.set("wind_erosion_delta", total_delta.astype(np.float32), "wind_erosion")
+    stack.set("height", h, "wind_erosion")
 
     return PassResult(
         pass_name="wind_erosion",
         status="ok",
         duration_seconds=time.perf_counter() - t0,
         consumed_channels=("height",),
-        produced_channels=("wind_erosion_delta",),
+        produced_channels=("height",),
         metrics={
             "wind_direction_rad": wind_dir,
             "intensity": intensity,

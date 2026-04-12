@@ -2954,18 +2954,19 @@ async def asset_pipeline(
             except Exception as e:
                 steps_failed.append({"step": "scene_clear", "error": str(e)})
 
-        # --- Step 2: Generate terrain via full pass DAG (Phase 53 unification) ---
+        # --- Step 2: Generate terrain ---
         terrain_name = f"{map_name}_Terrain"
         if "terrain_generated" not in steps_completed:
             try:
-                await blender.send_command("env_compose_terrain_node", {
+                await blender.send_command("env_generate_terrain", {
                     "name": terrain_name,
-                    "tile_size": terrain_resolution,
-                    "cell_size": float(terrain_cfg.get("cell_size", terrain_size / terrain_resolution)),
+                    "terrain_type": terrain_cfg.get("preset", "hills"),
+                    "resolution": terrain_resolution,
                     "height_scale": terrain_cfg.get("height_scale", 20.0),
                     "scale": terrain_size,
                     "seed": map_seed,
-                    "terrain_type": terrain_cfg.get("preset", "hills"),
+                    "erosion": "hydraulic" if terrain_cfg.get("erosion", True) else "none",
+                    "erosion_iterations": terrain_cfg.get("erosion_iterations", 5000),
                 })
                 steps_completed.append("terrain_generated")
                 created_objects.append(terrain_name)
@@ -3364,15 +3365,14 @@ async def asset_pipeline(
             except Exception as e:
                 steps_failed.append({"step": "texture_bake", "error": str(e)})
 
-        # --- Step 13: Generate LOD chains (EXPORT-03, R7 P0 fix) ---
-        # Use pipeline_generate_lods directly instead of asset_pipeline wrapper
+        # --- Step 13: Generate LOD chains (EXPORT-03) ---
         if _non_terrain and "lods_generated" not in steps_completed:
             try:
                 for _obj_name in _non_terrain:
                     try:
-                        await blender.send_command("pipeline_generate_lods", {
+                        await blender.send_command("asset_pipeline", {
+                            "action": "generate_lods",
                             "object_name": _obj_name,
-                            "ratios": [0.6, 0.3, 0.12],
                         })
                     except Exception:
                         pass  # LOD failures are non-fatal

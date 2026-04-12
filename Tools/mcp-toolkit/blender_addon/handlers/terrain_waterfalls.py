@@ -788,7 +788,6 @@ def register_bundle_c_passes() -> None:
             requires_channels=("height",),
             produces_channels=(
                 "waterfall_lip_candidate",
-                "waterfall_pool_delta",
                 "foam",
                 "mist",
                 "wet_rock",

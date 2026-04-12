@@ -1,2 +1,0 @@
-All requested scan outputs reviewed.
-No confirmed REAL_BUG entries from these matches.

@@ -94,7 +94,6 @@ def register_all_terrain_passes(*, strict: bool = False) -> List[str]:
         ("L", "blender_addon.handlers.terrain_bundle_l", "register_bundle_l_passes"),
         ("N", "blender_addon.handlers.terrain_bundle_n", "register_bundle_n_passes"),
         ("O", "blender_addon.handlers.terrain_bundle_o", "register_bundle_o_passes"),
-        ("P-integrator", "blender_addon.handlers.terrain_delta_integrator", "register_integrator_pass"),
     ]
 
     for label, module_path, attr in registrars:

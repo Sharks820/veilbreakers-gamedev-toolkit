@@ -192,14 +192,13 @@ def pass_karst(
 
     features: List[KarstFeature] = []
     delta_mean = 0.0
-    produced: tuple = ()
     if enabled and stack.rock_hardness is not None:
         features = detect_karst_candidates(stack, hardness_threshold)
         if features:
             delta = carve_karst_features(stack, features)
-            stack.set("karst_delta", delta.astype(np.float32), "karst")
+            h_new = np.asarray(stack.height, dtype=np.float64) + delta
+            stack.set("height", h_new, "karst")
             delta_mean = float(np.abs(delta).mean())
-            produced = ("karst_delta",)
 
     # derive_pass_seed for determinism (not used here, but required by contract)
     _ = derive_pass_seed(
@@ -211,7 +210,7 @@ def pass_karst(
         status="ok",
         duration_seconds=time.perf_counter() - t0,
         consumed_channels=("height",),
-        produced_channels=produced,
+        produced_channels=("height",),
         metrics={
             "feature_count": len(features),
             "mean_delta_m": delta_mean,

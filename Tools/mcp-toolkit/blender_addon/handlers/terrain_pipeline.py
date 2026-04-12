@@ -27,8 +27,6 @@ import uuid
 from pathlib import Path
 from typing import Dict, List, Optional
 
-import numpy as np
-
 from .terrain_semantics import (
     BBox,
     PassContractError,
@@ -387,84 +385,6 @@ class TerrainPassController:
         if not self.state.checkpoints:
             raise RuntimeError("No checkpoints available to roll back to.")
         self.rollback_to(self.state.checkpoints[-1].checkpoint_id)
-
-    # -- BakedTerrain extraction --------------------------------------------
-
-    # Material-related channels extracted into BakedTerrain.material_masks.
-    _MATERIAL_CHANNELS = (
-        "slope",
-        "curvature",
-        "erosion_amount",
-        "deposition_amount",
-        "wetness",
-        "talus",
-        "biome_id",
-        "material_weights",
-        "roughness_variation",
-        "macro_color",
-        "splatmap_weights_layer",
-        "cliff_candidate",
-        "cave_candidate",
-    )
-
-    def get_baked_terrain(self) -> "BakedTerrain":
-        """Extract a BakedTerrain from the completed mask stack.
-
-        This is the single exit point from the pass DAG. All downstream
-        consumers (compose_terrain_node, compose_map, exporters) receive
-        a BakedTerrain instead of reading the mask stack directly.
-
-        Requires at least the 'height' channel to be populated.
-        Gradient is computed from height if not already on the stack.
-        Ridge defaults to zero if not populated.
-        """
-        from .terrain_baked import BakedTerrain
-
-        stack = self.state.mask_stack
-        height = stack.get("height")
-        if height is None:
-            raise PassContractError(
-                "Cannot produce BakedTerrain: 'height' channel not populated"
-            )
-
-        # Ridge: use stack's ridge channel or zero
-        ridge = stack.get("ridge")
-        if ridge is None:
-            ridge = np.zeros_like(height, dtype=np.float32)
-
-        # Gradients: compute from height if not on stack
-        gradient_z, gradient_x = np.gradient(height.astype(np.float32))
-
-        # Material masks: collect all populated material-relevant channels
-        material_masks: Dict[str, "np.ndarray"] = {}
-        for ch in self._MATERIAL_CHANNELS:
-            arr = stack.get(ch)
-            if arr is not None:
-                material_masks[ch] = arr
-
-        # Metadata from state
-        metadata = {
-            "seed": int(self.state.intent.seed),
-            "tile_x": int(self.state.tile_x),
-            "tile_y": int(self.state.tile_y),
-            "world_origin_x": float(stack.world_origin_x),
-            "world_origin_z": float(stack.world_origin_y),
-            "cell_size": float(stack.cell_size),
-            "tile_size": int(stack.tile_size),
-            "height_min_m": float(stack.height_min_m or 0.0),
-            "height_max_m": float(stack.height_max_m or 0.0),
-            "coordinate_system": stack.coordinate_system,
-            "pass_count": len(self.state.pass_history),
-        }
-
-        return BakedTerrain(
-            height_grid=height.astype(np.float32),
-            ridge_map=ridge.astype(np.float32),
-            gradient_x=gradient_x.astype(np.float32),
-            gradient_z=gradient_z.astype(np.float32),
-            material_masks=material_masks,
-            metadata=metadata,
-        )
 
 
 # ---------------------------------------------------------------------------

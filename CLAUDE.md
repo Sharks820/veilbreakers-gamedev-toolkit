@@ -86,12 +86,6 @@ The project has a 7-layer defense-in-depth system for terrain code quality:
 - **L5**: Test substance lint (`scripts/test_substance_lint.py`) — classifies tests as REAL/SHALLOW/TAUTOLOGICAL
 - **L6**: Integration gate (`tests/integration/test_full_terrain_pipeline.py`) — end-to-end pipeline
 
-### Agent Execution Quality Protocol (MANDATORY for terrain code)
-
-**Full protocol:** `.planning/AGENT_QUALITY_PROTOCOL.md` — covers pre-edit, post-edit, visual verification, rollback, and escalation procedures. Every agent touching terrain code MUST follow this protocol.
-
-**Pass-writing rules:** `Tools/mcp-toolkit/blender_addon/handlers/TERRAIN_AGENT_PROTOCOL.md` — covers pass anatomy, channel contracts, anti-patterns, and the eleven rules.
-
 ### Before Committing Terrain Code
 ```bash
 cd Tools/mcp-toolkit

@@ -292,55 +292,6 @@ def pass_stratigraphy(
     )
 
 
-def pass_differential_erosion(
-    state: TerrainPipelineState,
-    region: Optional[BBox],
-) -> PassResult:
-    """Apply differential erosion based on rock hardness.
-
-    Consumes: height, rock_hardness
-    Produces: strat_erosion_delta
-    Runs AFTER stratigraphy (which populates rock_hardness) but BEFORE
-    the delta integrator.
-    """
-    t0 = time.perf_counter()
-    stack = state.mask_stack
-    issues: List[ValidationIssue] = []
-
-    delta = apply_differential_erosion(stack)
-
-    # Region scope: zero outside region
-    if region is not None:
-        r_slice, c_slice = region.to_cell_slice(
-            world_origin_x=stack.world_origin_x,
-            world_origin_y=stack.world_origin_y,
-            cell_size=stack.cell_size,
-            grid_shape=stack.height.shape,
-        )
-        scoped = np.zeros_like(delta)
-        scoped[r_slice, c_slice] = delta[r_slice, c_slice]
-        delta = scoped
-
-    stack.set("strat_erosion_delta", delta.astype(np.float32), "differential_erosion")
-
-    metrics = {
-        "mean_delta_m": float(delta.mean()),
-        "min_delta_m": float(delta.min()),
-        "max_delta_m": float(delta.max()),
-        "cells_eroded": int(np.count_nonzero(delta < -0.001)),
-    }
-
-    return PassResult(
-        pass_name="differential_erosion",
-        status="ok",
-        duration_seconds=time.perf_counter() - t0,
-        consumed_channels=("height", "rock_hardness"),
-        produced_channels=("strat_erosion_delta",),
-        metrics=metrics,
-        issues=issues,
-    )
-
-
 __all__ = [
     "StratigraphyLayer",
     "StratigraphyStack",
@@ -348,5 +299,4 @@ __all__ = [
     "compute_rock_hardness",
     "apply_differential_erosion",
     "pass_stratigraphy",
-    "pass_differential_erosion",
 ]

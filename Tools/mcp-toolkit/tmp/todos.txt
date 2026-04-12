@@ -1,1 +1,0 @@
-blender_addon/handlers\execute.py:19:    (e.g., ``math.sin = lambda x: 'HACKED'``) only affect the current

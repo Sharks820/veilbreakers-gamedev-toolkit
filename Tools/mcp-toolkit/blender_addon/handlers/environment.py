@@ -63,6 +63,21 @@ _VALID_EROSION_MODES = frozenset({"none", "hydraulic", "thermal", "both"})
 _MAX_RESOLUTION = 4096  # 8192 can OOM Blender; 4096 is practical AAA limit
 
 
+def _parse_bool(value: Any) -> bool:
+    """Parse a boolean value correctly, handling string 'false'/'true'.
+
+    F152: bool("false") == True in Python -- this helper fixes that.
+    Accepts bool, int, and common string representations.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        return value.strip().lower() in ("true", "1", "yes")
+    return bool(value)
+
+
 def _detect_grid_dims(bm) -> tuple[int, int]:
     """WORLD-004: Detect actual (rows, cols) of a terrain grid mesh.
 
@@ -790,16 +805,10 @@ def _create_terrain_mesh_from_heightmap(
     seed: int,
     terrain_type: str,
     object_location: tuple[float, float, float] = (0.0, 0.0, 0.0),
-    cliff_overlays_enabled: bool = False,
+    cliff_overlays_enabled: bool = True,
     cliff_threshold_deg: float = 60.0,
 ) -> dict[str, Any]:
-    """Create a terrain mesh object from a heightmap.
-
-    Legacy cliff overlay code has been removed (Phase 53 F145).
-    All cliff geometry is now produced by the pass_cliffs pipeline pass.
-    The cliff_overlays_enabled parameter is retained for signature
-    compatibility but is always ignored.
-    """
+    """Create a terrain mesh object from a heightmap and optional cliff overlays."""
     rows, cols = heightmap.shape
 
     mesh = bpy.data.meshes.new(name)
@@ -855,11 +864,69 @@ def _create_terrain_mesh_from_heightmap(
     obj.location = object_location
     bpy.context.collection.objects.link(obj)
 
+    cliff_placements: list[dict[str, Any]] = []
+    if cliff_overlays_enabled:
+        from ._terrain_depth import detect_cliff_edges, generate_cliff_face_mesh
+
+        cliff_placements = detect_cliff_edges(
+            heightmap,
+            slope_threshold_deg=cliff_threshold_deg,
+            min_cluster_size=4,
+            terrain_size=terrain_size,
+            height_scale=height_scale,
+        )
+        for i, cp in enumerate(cliff_placements):
+            cliff_mesh_spec = generate_cliff_face_mesh(
+                width=cp["width"],
+                height=cp["height"],
+                seed=seed + i + 1000,
+            )
+            cliff_mesh = bpy.data.meshes.new(f"{name}_Cliff_{i}")
+            cliff_bm = bmesh.new()
+            for vert_data in cliff_mesh_spec["vertices"]:
+                cliff_bm.verts.new(vert_data)
+            cliff_bm.verts.ensure_lookup_table()
+            for face_data in cliff_mesh_spec["faces"]:
+                try:
+                    cliff_bm.faces.new([cliff_bm.verts[vi] for vi in face_data])
+                except (ValueError, IndexError):
+                    pass
+            cliff_bm.to_mesh(cliff_mesh)
+            cliff_bm.free()
+
+            cliff_obj = bpy.data.objects.new(f"{name}_Cliff_{i}", cliff_mesh)
+            bpy.context.collection.objects.link(cliff_obj)
+            # --- Parent first, THEN set transform ---
+            # The legacy order (location → parent) silently offset cliffs
+            # on non-origin tiles: Blender's Python parent assignment
+            # does not auto-adjust matrix_parent_inverse, so a world-space
+            # location set before parenting was reinterpreted as local
+            # after parenting and the visual world position drifted by
+            # whatever the parent's world offset was. The fix is to
+            # establish the parent relationship first with
+            # ``matrix_parent_inverse`` forced to identity, then write the
+            # transform — which is now unambiguously terrain-local. The
+            # positions returned by ``detect_cliff_edges`` are already
+            # in terrain-local coordinates (grid-center mapped to
+            # [-tw/2, +tw/2]) and Z is already multiplied by
+            # ``height_scale`` inside ``detect_cliff_edges`` — no further
+            # scaling here.
+            cliff_obj.parent = obj
+            mpi = getattr(cliff_obj, "matrix_parent_inverse", None)
+            if mpi is not None and hasattr(mpi, "identity"):
+                mpi.identity()
+            cliff_obj.location = (
+                cp["position"][0],
+                cp["position"][1],
+                cp["position"][2],
+            )
+            cliff_obj.rotation_euler = tuple(cp["rotation"])
+
     return {
         "object": obj,
         "name": obj.name,
         "vertex_count": vertex_count,
-        "cliff_overlays": 0,
+        "cliff_overlays": len(cliff_placements),
         "terrain_size": terrain_size,
         "object_location": tuple(obj.location),
         "terrain_type": terrain_type,
@@ -1245,204 +1312,6 @@ def handle_generate_world_terrain(params: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# BakedTerrain mesh builder (Phase 53 — single path unification)
-# ---------------------------------------------------------------------------
-
-
-def _build_mesh_from_baked(
-    baked: "BakedTerrain",
-    *,
-    name: str,
-    terrain_size: float,
-    height_scale: float,
-    object_location: tuple[float, float, float] = (0.0, 0.0, 0.0),
-) -> dict[str, Any]:
-    """Create a Blender mesh object from a BakedTerrain artifact.
-
-    This replaces _create_terrain_mesh_from_heightmap for all DAG-based paths.
-    No cliff overlays — cliffs are handled by the pass_cliffs pipeline pass.
-    """
-    from .terrain_baked import BakedTerrain  # noqa: F811
-
-    heightmap = baked.height_grid
-    rows, cols = heightmap.shape
-
-    mesh = bpy.data.meshes.new(name)
-    bm = bmesh.new()
-    uv_layer = bm.loops.layers.uv.new("UVMap")
-
-    bmesh.ops.create_grid(
-        bm,
-        x_segments=cols - 1,
-        y_segments=rows - 1,
-        size=terrain_size / 2.0,
-        calc_uvs=True,
-    )
-
-    bm.verts.ensure_lookup_table()
-
-    for vert in bm.verts:
-        u = (vert.co.x + terrain_size / 2.0) / terrain_size
-        v = (vert.co.y + terrain_size / 2.0) / terrain_size
-        col_f = u * (cols - 1)
-        row_f = v * (rows - 1)
-        c0 = max(0, min(int(col_f), cols - 2))
-        r0 = max(0, min(int(row_f), rows - 2))
-        c1 = c0 + 1
-        r1 = r0 + 1
-        cf = col_f - c0
-        rf = row_f - r0
-        h00 = float(heightmap[r0, c0])
-        h10 = float(heightmap[r0, c1])
-        h01 = float(heightmap[r1, c0])
-        h11 = float(heightmap[r1, c1])
-        h = (
-            h00 * (1 - cf) * (1 - rf)
-            + h10 * cf * (1 - rf)
-            + h01 * (1 - cf) * rf
-            + h11 * cf * rf
-        )
-        vert.co.z = h * height_scale
-
-    bm.to_mesh(mesh)
-    vertex_count = len(bm.verts)
-    bm.free()
-
-    if hasattr(mesh, "polygons"):
-        for poly in mesh.polygons:
-            poly.use_smooth = True
-
-    obj = bpy.data.objects.new(name, mesh)
-    obj.location = object_location
-    bpy.context.collection.objects.link(obj)
-
-    return {
-        "object": obj,
-        "name": obj.name,
-        "vertex_count": vertex_count,
-        "terrain_size": terrain_size,
-        "object_location": tuple(obj.location),
-        "source": "baked_terrain",
-    }
-
-
-def compose_terrain_node(params: dict) -> dict:
-    """Build a terrain mesh via the full pass DAG + BakedTerrain contract.
-
-    This is the single unified path for authored hero terrain nodes
-    (cliffs, caves, waterfalls, mountain passes). No erosion="none" bypass.
-
-    Required params:
-        name (str): Object name
-        tile_size (int): Cells per tile edge
-        cell_size (float): World units per cell
-        seed (int): Deterministic seed
-
-    Optional:
-        terrain_type (str, default "mountains")
-        height_scale (float, default 20.0)
-        scale (float, default 100.0)
-        tile_x, tile_y (int, default 0)
-        pass_sequence (list[str]): Override default pipeline sequence
-        object_location (tuple): World position
-
-    Returns dict with mesh info + baked_terrain reference.
-    """
-    from .terrain_pipeline import TerrainPassController, register_default_passes
-    from .terrain_semantics import (
-        BBox,
-        TerrainIntentState,
-        TerrainMaskStack,
-        TerrainPipelineState,
-        TerrainSceneRead,
-    )
-
-    name = str(params.get("name", "TerrainNode"))
-    tile_size = int(params.get("tile_size", 256))
-    cell_size = float(params.get("cell_size", 1.0))
-    seed = int(params.get("seed", 0))
-    tile_x = int(params.get("tile_x", 0))
-    tile_y = int(params.get("tile_y", 0))
-    height_scale = float(params.get("height_scale", 20.0))
-    terrain_size = float(params.get("scale", tile_size * cell_size))
-    object_location = tuple(params.get("object_location", (0.0, 0.0, 0.0)))
-    pass_sequence = params.get("pass_sequence", None)
-
-    world_origin_x = tile_x * tile_size * cell_size
-    world_origin_y = tile_y * tile_size * cell_size
-    grid_size = tile_size + 1
-
-    # Initialize mask stack with flat height (macro_world pass will overwrite)
-    height_init = np.zeros((grid_size, grid_size), dtype=np.float32)
-    stack = TerrainMaskStack(
-        tile_size=tile_size,
-        cell_size=cell_size,
-        world_origin_x=world_origin_x,
-        world_origin_y=world_origin_y,
-        tile_x=tile_x,
-        tile_y=tile_y,
-        height=height_init,
-    )
-
-    bounds = BBox(
-        min_x=world_origin_x,
-        min_y=world_origin_y,
-        max_x=world_origin_x + tile_size * cell_size,
-        max_y=world_origin_y + tile_size * cell_size,
-    )
-    intent = TerrainIntentState(
-        seed=seed,
-        region_bounds=bounds,
-        tile_size=tile_size,
-        cell_size=cell_size,
-    )
-
-    # Attach a scene_read so erosion pass can run (requires_scene_read=True)
-    scene_read = TerrainSceneRead(
-        terrain_objects=[],
-        bounding_box=bounds,
-        scene_hash="compose_terrain_node",
-    )
-    intent = intent.with_scene_read(scene_read)
-
-    state = TerrainPipelineState(intent=intent, mask_stack=stack)
-
-    # Register passes and run pipeline
-    register_default_passes()
-    controller = TerrainPassController(state)
-    results = controller.run_pipeline(pass_sequence=pass_sequence)
-
-    failed = [r for r in results if r.status == "failed"]
-    if failed:
-        return {
-            "error": f"Pipeline failed at pass '{failed[0].pass_name}'",
-            "pass_results": [
-                {"pass": r.pass_name, "status": r.status} for r in results
-            ],
-        }
-
-    # Extract BakedTerrain and build mesh
-    baked = controller.get_baked_terrain()
-    mesh_result = _build_mesh_from_baked(
-        baked,
-        name=name,
-        terrain_size=terrain_size,
-        height_scale=height_scale,
-        object_location=object_location,
-    )
-
-    return {
-        **mesh_result,
-        "pass_results": [
-            {"pass": r.pass_name, "status": r.status, "duration": r.duration_seconds}
-            for r in results
-        ],
-        "baked_terrain_shape": list(baked.height_grid.shape),
-        "material_mask_channels": list(baked.material_masks.keys()),
-    }
-
-
-# ---------------------------------------------------------------------------
 # Bundle A handler: run_terrain_pass
 # ---------------------------------------------------------------------------
 
@@ -1681,20 +1550,42 @@ def handle_run_terrain_pass(params: dict) -> dict:
             insert_at = pipeline.index("validation_full")
             pipeline.insert(insert_at, "prepare_heightmap_raw_u16")
 
-    if pipeline is not None:
-        results = controller.run_pipeline(
-            pass_sequence=pipeline,
-            region=region,
-            checkpoint=bool(params.get("checkpoint", False)),
-        )
-    else:
-        results = [
-            controller.run_pass(
-                str(pass_name),
+    # F150: try/finally ensures cleanup of leaked bpy meshes/objects on exception
+    _leaked_meshes = []
+    _leaked_objects = []
+    try:
+        # Snapshot meshes/objects before pass execution for cleanup tracking
+        try:
+            _pre_meshes = set(bpy.data.meshes[:])
+            _pre_objects = set(bpy.data.objects[:])
+        except Exception:
+            _pre_meshes = set()
+            _pre_objects = set()
+
+        if pipeline is not None:
+            results = controller.run_pipeline(
+                pass_sequence=pipeline,
                 region=region,
-                checkpoint=bool(params.get("checkpoint", False)),
+                checkpoint=_parse_bool(params.get("checkpoint", False)),
             )
-        ]
+        else:
+            results = [
+                controller.run_pass(
+                    str(pass_name),
+                    region=region,
+                    checkpoint=_parse_bool(params.get("checkpoint", False)),
+                )
+            ]
+    except Exception:
+        # Clean up any meshes/objects created during the failed pass
+        try:
+            for obj in set(bpy.data.objects[:]) - _pre_objects:
+                bpy.data.objects.remove(obj, do_unlink=True)
+            for mesh in set(bpy.data.meshes[:]) - _pre_meshes:
+                bpy.data.meshes.remove(mesh)
+        except Exception:
+            pass  # best-effort cleanup in exception handler
+        raise
 
     def _serialize(pr) -> dict:
         return {
