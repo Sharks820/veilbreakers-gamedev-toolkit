@@ -398,9 +398,6 @@ def register_default_passes() -> None:
     Importing this module does NOT auto-register — call this function
     (or import ``_terrain_world`` which calls it) to activate them.
     This lets unit tests start from an empty registry.
-
-    Safe to call multiple times (hot-reload friendly): overwrites any
-    stale pass definitions with fresh ones from the current module load.
     """
     # Lazy import to avoid circular dependency at module load time.
     from . import _terrain_world as _tw

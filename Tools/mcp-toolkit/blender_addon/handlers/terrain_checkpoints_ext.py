@@ -11,12 +11,9 @@ Per Addendum 1.B.4. No bpy imports.
 
 from __future__ import annotations
 
-import logging
 import os
 import re
 from pathlib import Path
-
-logger = logging.getLogger(__name__)
 from typing import Any, Callable, List, Optional, Set
 
 from .terrain_quality_profiles import TerrainQualityProfile
@@ -91,7 +88,7 @@ def save_every_n_operations(
                     save_fn(pass_name)
                 except Exception:
                     # Autosave must never bring down the pipeline.
-                    logger.debug("Periodic autosave failed for pass %s", pass_name, exc_info=True)
+                    pass
         return result
 
     controller.run_pass = wrapped  # type: ignore[assignment]

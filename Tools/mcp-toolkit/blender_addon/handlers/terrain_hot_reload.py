@@ -9,15 +9,12 @@ Pure Python. No bpy.
 from __future__ import annotations
 
 import importlib
-import logging
 import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
 from typing import Dict, List, Optional
-
-logger = logging.getLogger(__name__)
 
 
 # Modules we will attempt to reload. Missing modules are silently skipped.
@@ -45,13 +42,11 @@ def _safe_reload(name: str) -> bool:
             importlib.import_module(name)
             return True
         except Exception:
-            logger.debug("Failed to import module %s during hot-reload", name, exc_info=True)
             return False
     try:
         importlib.reload(mod)
         return True
     except Exception:
-        logger.debug("Failed to reload module %s", name, exc_info=True)
         return False
 
 
