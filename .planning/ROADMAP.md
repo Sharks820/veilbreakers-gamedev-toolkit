@@ -818,18 +818,35 @@ Plans:
 **Depends on:** Phase 55
 **Requirements:** TFIX-008
 **Goal:** Wire V2 materials to Blender, upgrade Unity shader (wetness, POM, macro variation, terrain holes, wind).
+**Plans:** 2 plans
+Plans:
+- [ ] 56-01-PLAN.md -- Blender materials: kill split-brain, PBR textures, splatmap, triplanar, displacement
+- [ ] 56-02-PLAN.md -- Shaders + rendering gaps: stochastic tiling, fog, snow SSS, water intersection, minimap
 
 ### Phase 57: Unity Integration
 **Depends on:** Phase 56
 **Requirements:** TFIX-009
 **Goal:** Add AdvancedTerrainErosion UPM, fix size/resolution bridging, add terrain LOD/holes/trees/collision.
+**Plans:** 3 plans
+Plans:
+- [ ] 57-01-PLAN.md -- Export fundamentals: axis swap, endianness, resolution, splatmap layers, Unity erosion
+- [ ] 57-02-PLAN.md -- C# consumers: heightmap reader, manifest consumption, production template fixes
+- [ ] 57-03-PLAN.md -- Runtime features: deformation, decals, minimap, FBX/LOD export, vegetation manifest
 
 ### Phase 58: Cleanup — Silent Swallows + Stubs
 **Depends on:** Phase 57
 **Requirements:** TFIX-010
 **Goal:** Replace all bare except:pass, fix registrar, delete dead modules, vectorize flow_map, fix all remaining P2s.
+**Plans:** 3 plans
+Plans:
+- [ ] 58-01-PLAN.md -- Silent swallows, workflow presets, stubs, Bundle H, dead passes
+- [ ] 58-02-PLAN.md -- Addon lifecycle, TCP protocol, frozen-mutable, dead code, MCP bugs, blender_server
+- [ ] 58-03-PLAN.md -- Non-terrain generators, remaining terrain bugs, R7, geology gaps, AAA parity
 
 ### Phase 59: Final Verification
 **Depends on:** Phase 58
 **Requirements:** TFIX-011
 **Goal:** All tests green, all lints clean, code reviewer 0 P0/P1, FINDINGS.md shows resolution status for every finding.
+**Plans:** 1 plan
+Plans:
+- [ ] 59-01-PLAN.md -- Full verification: advanced tests, all quality gates, FINDINGS resolution, VERIFICATION_REPORT
