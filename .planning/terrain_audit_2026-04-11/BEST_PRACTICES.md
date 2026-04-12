@@ -621,7 +621,107 @@ All mapped to Phase 10 tasks 10.9-10.34 in EXECUTION_PLAN.md. Key additions:
 - [pytest-blender](https://github.com/mondeja/pytest-blender) — headless Blender testing
 - [Hypothesis](https://hypothesis.readthedocs.io/) — property-based testing
 
-## 14. Sources (continued)
+## 14. AAA Caves & Cliffs Deep Dive (2026-04-12)
+
+### 14.1 Cave Generation Techniques
+- **Skyrim:** Modular kit system — 200+ cave uses, 7 sub-kits of hand-crafted snap-together pieces
+- **Deep Rock Galactic:** 119 hand-crafted rooms, procedurally warped/tweaked/overlapped, noise passes crumple smooth spheres into rock surfaces, debris passes sprinkle assets. Generates ~150K new caves daily on Steam
+- **Elden Ring:** Authored spaces with seamless streaming transitions (portal-based visibility, no loading screens)
+- **Algorithm stack for VeilBreakers:** Perlin worms for path skeleton → cellular automata to expand chambers → marching cubes for mesh → Laplacian smoothing for organic walls → speleothem generation (stalactites/stalagmites) → water pool insertion at floor minima
+
+### 14.2 What Makes Caves Real vs "Terrain Dents"
+1. Volumetric chambers (ceiling, walls, floor as independent surfaces — heightmaps can't do this)
+2. Stalactites/stalagmites (L-system or iterative drip-line growth — Cui & Chow paper)
+3. Light shafts through ceiling cracks (volumetric god rays via ray marching)
+4. Water pools at low points (flat reflective surfaces with caustics)
+5. Rubble/debris at entrances (size-sorted like talus)
+6. Wet/dry zone material variation
+
+### 14.3 Cliff Mesh Generation Techniques
+- **Technique A (Extrusion):** Lip polyline → vertical extrusion → strata cuts → noise displacement. Simple, uses existing data
+- **Technique B (Marching Cubes):** Voxel density field → marching cubes for overhangs and undercuts. Complex but enables arbitrary overhang geometry
+- **Technique C (Modular Kit):** Pre-authored cliff pieces tiled along lip. Highest quality per piece but limited variation
+- **Recommended:** Start with Technique A, upgrade hero cliffs to Technique B
+
+### 14.4 What Makes Cliffs Real
+1. Strata layers (horizontal bands at different heights with ledges between)
+2. Overhangs (upper portions extending past lower — impossible with heightmaps)
+3. Fracture patterns (vertical Voronoi cracks splitting strata)
+4. Talus at base (size-sorted rock debris)
+5. Vegetation in cracks (grass/ferns on ledges, moss in damp areas)
+6. Rock type variation: columnar basalt (hex columns), sandstone (rounded strata), granite (large irregular blocks)
+
+### 14.5 Cliff-Terrain Transition
+- Shader blending: cliff mesh samples terrain texture at contact zone, blends via depth mask (MicroSplat approach)
+- Skirt mesh: curved transition geometry from cliff base to terrain surface
+- Triplanar mapping: world-space texture projection avoiding UV stretching on steep faces
+- Extend cliff bottom 1-2m into terrain to ensure overlap, not gap
+
+### 14.6 Sources
+- [Joel Burgess GDC 2013: Skyrim Modular Level Design](http://blog.joelburgess.com/2013/04/skyrims-modular-level-design-gdc-2013.html)
+- [Ghost Ship: Deep Rock Galactic Cave Generation](https://store.steampowered.com/news/app/548430/view/4593196713081471258)
+- [Cui & Chow: Procedural 3D cave models with stalactites](https://www.semanticscholar.org/paper/8365da9)
+- [libnoise: Perlin Worms](https://libnoise.sourceforge.net/examples/worms/)
+- [GitHub: Caveworm — Simplex noise caves](https://github.com/Maxopoly/Caveworm)
+- [NVIDIA GPU Gems 3: Procedural Terrains](https://developer.nvidia.com/gpugems/gpugems3/part-i-geometry/chapter-1-generating-complex-procedural-terrains-using-gpu)
+- [BorisTheBrave: Dual Contouring Tutorial](https://www.boristhebrave.com/2018/04/15/dual-contouring-tutorial/)
+- [80.lv: Procedural Nature of Horizon Zero Dawn](https://80.lv/articles/the-procedural-nature-of-the-horizon-zero-dawn)
+- [80.lv: Scaleable Cliff Generator Houdini + UE4](https://80.lv/articles/making-a-scaleable-cliff-generator-in-houdini-ue4)
+- [Halisavakis: Cliff Terrain Shader](https://halisavakis.com/my-take-on-shaders-cliff-terrain-shader/)
+- [Toxigon: Houdini + UE5 PCG Cliff Generator](https://toxigon.com/how-to-use-houdini-and-unreal-engine-5s-pcg-to-set-up-procedural-cliff-generator)
+
+## 15. AAA Vegetation Scatter & Biome Separation Deep Dive (2026-04-12)
+
+### 15.1 AAA Scatter Placement Systems
+- **Horizon Zero Dawn:** GPU compute shader evaluates artist-authored placement rules per-tile around camera at runtime. Blue noise/hex packing with jitter. Not pre-baked — generates world on the fly. Only 3 artists made ALL nature assets.
+- **Ghost of Tsushima:** Per-blade GPU grass via compute shaders. Voronoi-based clumping for natural look. Frustum+distance culling per tile. Zero vertex streams — all data from index+instanceID.
+- **Witcher 3:** Procedural vegetation simulator (water accumulation + sunlight) for base layer. All trees hand-placed on top. SpeedTree for tree modeling.
+
+### 15.2 Slope-Threshold Instancing (4-Bucket Rule)
+- 0-15°: Dense grass, wildflowers, all tree types (meadow)
+- 15-35°: Sparse grass, shrubs, small trees, scattered rocks (hillside)
+- 35-55°: No trees, grass tufts, exposed rock, hardy plants (steep)
+- 55-90°: Bare rock, hanging moss/lichen, cliff plants (sheer)
+
+### 15.3 Altitudinal Zonation
+- 0.0-0.15: Valley floor (reeds, willows, mushrooms, ferns)
+- 0.15-0.40: Lowland (dense mixed forest, thick undergrowth)
+- 0.40-0.65: Montane (conifers, sparser undergrowth, more rocks)
+- 0.65-0.80: Subalpine (stunted trees, krummholz, dwarf shrubs)
+- 0.80-0.90: Alpine (no trees, alpine grasses, cushion plants)
+- 0.90-1.0: Nival (bare rock, snow, occasional lichen)
+
+### 15.4 Forest Structure Layers
+- Canopy (15-30m): density 0.15-0.25, crown 8-15m, dense canopy suppresses understory by 60%
+- Understory (5-15m): shade-tolerant only, density inverse to canopy, spikes 3-4x in gaps
+- Shrub (1-5m): highest at forest edges (edge effect), berry bushes, young trees
+- Ground cover (0-1m): ferns, moss, grass, near-water=lush, dry-ridges=sparse
+
+### 15.5 Anti-Procedural Pattern Techniques
+1. Poisson disk sampling (already have)
+2. Multi-frequency noise jitter (2-3 octaves post-sampling)
+3. Voronoi clustering (Ghost of Tsushima — clump membership influences height/lean/color/density)
+4. Per-instance variation (rotation 0-360, scale 0.7-1.3x, hue ±10°, brightness ±15%)
+5. Species mixing (never single species — always 3-5 per biome)
+6. Asymmetric thinning (large Perlin noise on density map, wavelength 50-200m)
+7. Fractal biome boundaries (simplex noise on borders, not straight lines)
+
+### 15.6 Dark Fantasy Vegetation (VeilBreakers-specific)
+- Corruption zones: 4 rings from epicenter (bare twisted rock → dead+mushrooms → blighted → normal with occasional blight)
+- Bioluminescent mushrooms: emission_color (0.1, 0.4, 0.3), emission_strength 0.8
+- Twisted trees: sine-wave trunk displacement, 2-4 cycles, 10-20% amplitude
+- Species compatibility matrix prevents ecologically nonsensical combinations at biome boundaries
+
+### 15.7 Sources
+- [Horizon Zero Dawn GPU Placement (GDC 2017)](https://www.gdcvault.com/play/1024700/)
+- [Ghost of Tsushima Procedural Grass (GDC 2021)](https://gdcvault.com/play/1027033/)
+- [Witcher 3 World Building (GDC 2015)](https://www.neogaf.com/threads/790583/)
+- [Biome Painter — Narkowicz](https://knarkowicz.wordpress.com/2019/08/11/biome-painter-populating-massive-worlds/)
+- [AutoBiomes Paper (2020)](https://link.springer.com/article/10.1007/s00371-020-01920-7)
+- [Bridson Poisson Disk (SIGGRAPH 2007)](https://www.cs.ubc.ca/~rbridson/docs/bridson-siggraph07-poissondisk.pdf)
+- [GPU Gems 3: Vegetation Animation in Crysis](https://developer.nvidia.com/gpugems/gpugems3/part-iii-rendering/chapter-16)
+
+## 16. Sources (continued)
 
 - runevision, [Fast and Gorgeous Erosion Filter](https://blog.runevision.com/2026/03/fast-and-gorgeous-erosion-filter.html) — the video/article this synthesis is built on.
 - runevision, [LayerProcGen](https://runevision.github.io/LayerProcGen/) — chunk-parallel generation library, companion to the filter.
