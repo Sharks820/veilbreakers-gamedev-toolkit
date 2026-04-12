@@ -281,6 +281,12 @@ class TerrainMaskStack:
     sediment_height: Optional[np.ndarray] = None
     bedrock_height: Optional[np.ndarray] = None
 
+    # Bundle I delta channels (Phase 52 — delta conversion)
+    coastline_delta: Optional[np.ndarray] = None
+    karst_delta: Optional[np.ndarray] = None
+    wind_erosion_delta: Optional[np.ndarray] = None
+    glacial_delta: Optional[np.ndarray] = None
+
     # -- Unity integratable channels (AAA round-trip contract) --
     # Per-layer splatmap weights (Unity Terrain Layer alphamaps). Shape (H, W, L).
     splatmap_weights_layer: Optional[np.ndarray] = None
@@ -370,6 +376,11 @@ class TerrainMaskStack:
             "strat_erosion_delta",
             "sediment_height",
             "bedrock_height",
+            # Bundle I delta channels (Phase 52)
+            "coastline_delta",
+            "karst_delta",
+            "wind_erosion_delta",
+            "glacial_delta",
             # Unity-ready channels
             "splatmap_weights_layer",
             "heightmap_raw_u16",
