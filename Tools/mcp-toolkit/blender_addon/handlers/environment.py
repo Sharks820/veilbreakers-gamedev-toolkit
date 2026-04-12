@@ -1297,6 +1297,204 @@ def handle_generate_world_terrain(params: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# BakedTerrain mesh builder (Phase 53 — single path unification)
+# ---------------------------------------------------------------------------
+
+
+def _build_mesh_from_baked(
+    baked: "BakedTerrain",
+    *,
+    name: str,
+    terrain_size: float,
+    height_scale: float,
+    object_location: tuple[float, float, float] = (0.0, 0.0, 0.0),
+) -> dict[str, Any]:
+    """Create a Blender mesh object from a BakedTerrain artifact.
+
+    This replaces _create_terrain_mesh_from_heightmap for all DAG-based paths.
+    No cliff overlays — cliffs are handled by the pass_cliffs pipeline pass.
+    """
+    from .terrain_baked import BakedTerrain  # noqa: F811
+
+    heightmap = baked.height_grid
+    rows, cols = heightmap.shape
+
+    mesh = bpy.data.meshes.new(name)
+    bm = bmesh.new()
+    uv_layer = bm.loops.layers.uv.new("UVMap")
+
+    bmesh.ops.create_grid(
+        bm,
+        x_segments=cols - 1,
+        y_segments=rows - 1,
+        size=terrain_size / 2.0,
+        calc_uvs=True,
+    )
+
+    bm.verts.ensure_lookup_table()
+
+    for vert in bm.verts:
+        u = (vert.co.x + terrain_size / 2.0) / terrain_size
+        v = (vert.co.y + terrain_size / 2.0) / terrain_size
+        col_f = u * (cols - 1)
+        row_f = v * (rows - 1)
+        c0 = max(0, min(int(col_f), cols - 2))
+        r0 = max(0, min(int(row_f), rows - 2))
+        c1 = c0 + 1
+        r1 = r0 + 1
+        cf = col_f - c0
+        rf = row_f - r0
+        h00 = float(heightmap[r0, c0])
+        h10 = float(heightmap[r0, c1])
+        h01 = float(heightmap[r1, c0])
+        h11 = float(heightmap[r1, c1])
+        h = (
+            h00 * (1 - cf) * (1 - rf)
+            + h10 * cf * (1 - rf)
+            + h01 * (1 - cf) * rf
+            + h11 * cf * rf
+        )
+        vert.co.z = h * height_scale
+
+    bm.to_mesh(mesh)
+    vertex_count = len(bm.verts)
+    bm.free()
+
+    if hasattr(mesh, "polygons"):
+        for poly in mesh.polygons:
+            poly.use_smooth = True
+
+    obj = bpy.data.objects.new(name, mesh)
+    obj.location = object_location
+    bpy.context.collection.objects.link(obj)
+
+    return {
+        "object": obj,
+        "name": obj.name,
+        "vertex_count": vertex_count,
+        "terrain_size": terrain_size,
+        "object_location": tuple(obj.location),
+        "source": "baked_terrain",
+    }
+
+
+def compose_terrain_node(params: dict) -> dict:
+    """Build a terrain mesh via the full pass DAG + BakedTerrain contract.
+
+    This is the single unified path for authored hero terrain nodes
+    (cliffs, caves, waterfalls, mountain passes). No erosion="none" bypass.
+
+    Required params:
+        name (str): Object name
+        tile_size (int): Cells per tile edge
+        cell_size (float): World units per cell
+        seed (int): Deterministic seed
+
+    Optional:
+        terrain_type (str, default "mountains")
+        height_scale (float, default 20.0)
+        scale (float, default 100.0)
+        tile_x, tile_y (int, default 0)
+        pass_sequence (list[str]): Override default pipeline sequence
+        object_location (tuple): World position
+
+    Returns dict with mesh info + baked_terrain reference.
+    """
+    from .terrain_pipeline import TerrainPassController, register_default_passes
+    from .terrain_semantics import (
+        BBox,
+        TerrainIntentState,
+        TerrainMaskStack,
+        TerrainPipelineState,
+        TerrainSceneRead,
+    )
+
+    name = str(params.get("name", "TerrainNode"))
+    tile_size = int(params.get("tile_size", 256))
+    cell_size = float(params.get("cell_size", 1.0))
+    seed = int(params.get("seed", 0))
+    tile_x = int(params.get("tile_x", 0))
+    tile_y = int(params.get("tile_y", 0))
+    height_scale = float(params.get("height_scale", 20.0))
+    terrain_size = float(params.get("scale", tile_size * cell_size))
+    object_location = tuple(params.get("object_location", (0.0, 0.0, 0.0)))
+    pass_sequence = params.get("pass_sequence", None)
+
+    world_origin_x = tile_x * tile_size * cell_size
+    world_origin_y = tile_y * tile_size * cell_size
+    grid_size = tile_size + 1
+
+    # Initialize mask stack with flat height (macro_world pass will overwrite)
+    height_init = np.zeros((grid_size, grid_size), dtype=np.float32)
+    stack = TerrainMaskStack(
+        tile_size=tile_size,
+        cell_size=cell_size,
+        world_origin_x=world_origin_x,
+        world_origin_y=world_origin_y,
+        tile_x=tile_x,
+        tile_y=tile_y,
+        height=height_init,
+    )
+
+    bounds = BBox(
+        min_x=world_origin_x,
+        min_y=world_origin_y,
+        max_x=world_origin_x + tile_size * cell_size,
+        max_y=world_origin_y + tile_size * cell_size,
+    )
+    intent = TerrainIntentState(
+        seed=seed,
+        region_bounds=bounds,
+        tile_size=tile_size,
+        cell_size=cell_size,
+    )
+
+    # Attach a scene_read so erosion pass can run (requires_scene_read=True)
+    scene_read = TerrainSceneRead(
+        terrain_objects=[],
+        bounding_box=bounds,
+        scene_hash="compose_terrain_node",
+    )
+    intent = intent.with_scene_read(scene_read)
+
+    state = TerrainPipelineState(intent=intent, mask_stack=stack)
+
+    # Register passes and run pipeline
+    register_default_passes()
+    controller = TerrainPassController(state)
+    results = controller.run_pipeline(pass_sequence=pass_sequence)
+
+    failed = [r for r in results if r.status == "failed"]
+    if failed:
+        return {
+            "error": f"Pipeline failed at pass '{failed[0].pass_name}'",
+            "pass_results": [
+                {"pass": r.pass_name, "status": r.status} for r in results
+            ],
+        }
+
+    # Extract BakedTerrain and build mesh
+    baked = controller.get_baked_terrain()
+    mesh_result = _build_mesh_from_baked(
+        baked,
+        name=name,
+        terrain_size=terrain_size,
+        height_scale=height_scale,
+        object_location=object_location,
+    )
+
+    return {
+        **mesh_result,
+        "pass_results": [
+            {"pass": r.pass_name, "status": r.status, "duration": r.duration_seconds}
+            for r in results
+        ],
+        "baked_terrain_shape": list(baked.height_grid.shape),
+        "material_mask_channels": list(baked.material_masks.keys()),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Bundle A handler: run_terrain_pass
 # ---------------------------------------------------------------------------
 
