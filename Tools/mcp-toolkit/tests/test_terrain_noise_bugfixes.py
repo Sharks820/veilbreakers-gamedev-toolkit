@@ -20,7 +20,7 @@ class TestGravitySignBugF277:
 
     def test_downhill_particle_speeds_up(self):
         """A particle on a steep downhill slope should erode MORE than on flat terrain."""
-        from blender_addon.handlers._terrain_noise import hydraulic_erosion
+        from blender_addon.handlers._terrain_erosion import apply_hydraulic_erosion as hydraulic_erosion
 
         # Create a tilted plane: high on left, low on right (steep gradient)
         rows, cols = 64, 64
@@ -59,7 +59,7 @@ class TestGravitySignBugF277:
         (note the MINUS, because delta_h is negative when going downhill,
         and -(-x) = +x, so speed increases)
         """
-        from blender_addon.handlers._terrain_noise import hydraulic_erosion
+        from blender_addon.handlers._terrain_erosion import apply_hydraulic_erosion as hydraulic_erosion
 
         # Create a V-shaped valley — particles converge at center
         rows, cols = 64, 64

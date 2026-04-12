@@ -244,8 +244,9 @@ def apply_hydraulic_erosion_masks(
                         cols,
                     )
 
+            # F277 fix: negate h_diff so going downhill (h_diff < 0) increases speed
             normalized_h_diff = h_diff / max(input_range, 1e-12)
-            speed = math.sqrt(max(speed * speed + normalized_h_diff, 0.01))
+            speed = math.sqrt(max(speed * speed - normalized_h_diff, 0.01))
             water *= (1 - evaporation)
 
             px = new_px
