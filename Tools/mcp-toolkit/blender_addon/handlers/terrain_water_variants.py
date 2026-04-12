@@ -89,6 +89,8 @@ class Wetland:
     bounds: BBox
     depth_m: float
     vegetation_density: float
+    radius_m: float = 50.0
+    world_pos: Tuple[float, float, float] = (0.0, 0.0, 0.0)
 
 
 class SeasonalState(enum.Enum):
@@ -734,7 +736,7 @@ def get_swamp_specs(
             size=wl.radius_m * 2.0,
             water_level=rng.uniform(0.2, 0.5),
             hummock_count=int(rng.integers(6, 18)),
-            has_mangroves=bool(rng.random() > 0.5),
+            island_count=int(rng.integers(2, 6)),
             seed=int(rng.integers(0, 2**31)),
         )
         results.append({"mesh_spec": spec, "world_pos": wl.world_pos})

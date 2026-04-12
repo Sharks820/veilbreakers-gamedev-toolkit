@@ -18,8 +18,11 @@ Rules honored (see TERRAIN_AGENT_PROTOCOL.md):
 
 from __future__ import annotations
 
+import logging
 import math
 import time
+
+logger = logging.getLogger(__name__)
 from dataclasses import dataclass, field
 from typing import Any, List, Optional, Tuple
 
@@ -696,7 +699,8 @@ def pass_waterfalls(
     for lc in lips[:16]:
         try:
             chain = solve_waterfall_from_river(stack, lc, river_network=None)
-        except Exception:  # pragma: no cover — solver is defensive
+        except Exception as exc:
+            logger.debug("Waterfall solver failed for lip %s: %s", lc, exc)
             continue
         chains.append(chain)
 
