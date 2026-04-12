@@ -193,3 +193,55 @@ class TestDeltaIntegratorStratErosionDelta:
             stack.height, h_before - 0.5,
             err_msg="Stratigraphic erosion delta was not applied"
         )
+
+
+class TestDeltaIntegratorRegistration:
+    """Integrator must be registered and discoverable."""
+
+    def test_register_integrator_pass(self):
+        from blender_addon.handlers.terrain_pipeline import TerrainPassController
+        from blender_addon.handlers.terrain_delta_integrator import register_integrator_pass
+
+        TerrainPassController.clear_registry()
+        register_integrator_pass()
+        defn = TerrainPassController.get_pass("integrate_deltas")
+        assert defn.name == "integrate_deltas"
+        assert "height" in defn.requires_channels
+        assert "height" in defn.produces_channels
+        TerrainPassController.clear_registry()
+
+    def test_integrator_in_master_registrar(self):
+        from blender_addon.handlers.terrain_master_registrar import register_all_terrain_passes
+        from blender_addon.handlers.terrain_pipeline import TerrainPassController
+
+        TerrainPassController.clear_registry()
+        loaded = register_all_terrain_passes()
+        assert "P-integrator" in loaded
+        defn = TerrainPassController.get_pass("integrate_deltas")
+        assert defn is not None
+        TerrainPassController.clear_registry()
+
+
+class TestDeltaIntegratorFailsOnStub:
+    """Verify tests would FAIL if integrator was a no-op stub."""
+
+    def test_waterfall_delta_fails_if_not_applied(self):
+        """This test structure proves the test is REAL: if pass_integrate_deltas
+        were a stub that returned ok without modifying height, the assertion
+        on line 'assert stack.height[8, 8] < h_before[8, 8]' would FAIL.
+        """
+        from blender_addon.handlers.terrain_delta_integrator import pass_integrate_deltas
+
+        stack = _make_stack()
+        h_before = stack.height.copy()
+        delta = np.zeros_like(stack.height)
+        delta[8, 8] = -5.0
+        stack.set("waterfall_pool_delta", delta.astype(np.float32), "waterfalls")
+
+        state = _make_state(stack)
+        result = pass_integrate_deltas(state, None)
+
+        # This MUST fail if deltas are not applied
+        assert stack.height[8, 8] == pytest.approx(h_before[8, 8] - 5.0)
+        # And the non-delta cells should stay the same
+        assert stack.height[0, 0] == pytest.approx(h_before[0, 0])
