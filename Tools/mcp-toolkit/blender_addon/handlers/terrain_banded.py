@@ -647,6 +647,24 @@ def pass_banded_macro(state, region):  # type: ignore[no-untyped-def]
     )
 
 
+def get_banded_cache(state: Any) -> Optional[Dict[str, "BandedHeightmap"]]:
+    """Retrieve the banded-cache stashed by ``pass_banded_macro``.
+
+    Returns ``None`` if the cache was never written (pass not yet run, or
+    state was frozen). Downstream passes (e.g. erosion, vegetation scatter)
+    can use this to access individual frequency bands without re-generating
+    them.
+
+    Usage::
+
+        cache = get_banded_cache(state)
+        if cache:
+            for token, bands in cache.items():
+                print(bands.macro_band.shape, bands.meso_band.shape)
+    """
+    return getattr(state, "banded_cache", None) or None
+
+
 def register_bundle_g_passes() -> None:
     """Register the banded-noise pass on the TerrainPassController.
 
@@ -680,6 +698,7 @@ __all__ = [
     "generate_banded_heightmap",
     "compose_banded_heightmap",
     "pass_banded_macro",
+    "get_banded_cache",
     "register_bundle_g_passes",
     # Re-export so legacy callers can still reach the old backend via
     # ``from blender_addon.handlers.terrain_banded import generate_heightmap``.
