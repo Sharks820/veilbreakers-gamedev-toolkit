@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import math
 import random
-from typing import Any
+from typing import Any, Callable, Optional
 
 # ---------------------------------------------------------------------------
 # Type aliases
@@ -24,6 +24,17 @@ from typing import Any
 
 Vec2 = tuple[float, float]
 Vec3 = tuple[float, float, float]
+
+# Callback type: given (x, y) world-space, return Z height at that point.
+# When None, Z defaults to 0.0 (flat ground plane).
+HeightFn = Optional[Callable[[float, float], float]]
+
+
+def _z_at(x: float, y: float, height_fn: HeightFn) -> float:
+    """Return terrain Z height at (x, y), or 0.0 if no height function."""
+    if height_fn is None:
+        return 0.0
+    return float(height_fn(x, y))
 
 # ---------------------------------------------------------------------------
 # Concentric ring district constants (D-03)
@@ -255,6 +266,7 @@ def generate_road_network_organic(
     seed: int,
     road_style: str = "medieval",
     waypoint_count: int = 8,
+    height_fn: HeightFn = None,
 ) -> list[dict[str, Any]]:
     """Generate organic road segments radiating from center (L-system style).
 
@@ -273,6 +285,9 @@ def generate_road_network_organic(
         "medieval" (default) — winding organic layout.
     waypoint_count : int
         Number of radial road endpoints around the perimeter.
+    height_fn : callable, optional
+        ``(x, y) -> z`` terrain height sampler.  When *None*, Z defaults
+        to 0.0 (flat ground).  Blender is Z-up.
 
     Returns
     -------
@@ -293,7 +308,7 @@ def generate_road_network_organic(
         r = radius * rng.uniform(0.7, 0.95)
         wx = cx + math.cos(angle) * r
         wy = cy + math.sin(angle) * r
-        waypoints.append((wx, wy, 0.0))
+        waypoints.append((wx, wy, _z_at(wx, wy, height_fn)))
 
     # Add a few intermediate waypoints for alley cross-connects
     mid_waypoints: list[Vec3] = []
@@ -302,9 +317,9 @@ def generate_road_network_organic(
         r = radius * rng.uniform(0.3, 0.6)
         mx = cx + math.cos(angle) * r
         my = cy + math.sin(angle) * r
-        mid_waypoints.append((mx, my, 0.0))
+        mid_waypoints.append((mx, my, _z_at(mx, my, height_fn)))
 
-    center_3d: Vec3 = (cx, cy, 0.0)
+    center_3d: Vec3 = (cx, cy, _z_at(cx, cy, height_fn))
 
     # Main roads: center to each perimeter waypoint
     for i, wp in enumerate(waypoints):
@@ -590,6 +605,7 @@ def generate_prop_manifest(
     seed: int,
     center: Vec2 = (0.0, 0.0),
     radius: float = 50.0,
+    height_fn: HeightFn = None,
 ) -> list[dict[str, Any]]:
     """Generate a corruption-scaled list of prop placement specs.
 
@@ -608,6 +624,9 @@ def generate_prop_manifest(
         Settlement center for district ring calculation.
     radius : float
         Settlement radius.
+    height_fn : callable, optional
+        ``(x, y) -> z`` terrain height sampler.  When *None*, Z defaults
+        to 0.0 (flat ground).  Blender is Z-up.
 
     Returns
     -------
@@ -662,7 +681,7 @@ def generate_prop_manifest(
         while t < seg_len:
             px = start[0] + dx * (t / seg_len)
             py = start[1] + dy * (t / seg_len)
-            pz = 0.0
+            pz = _z_at(px, py, height_fn)
 
             # Determine district from position
             district = ring_for_position((px, py), center, radius)
