@@ -275,3 +275,453 @@ def _generate_corruption_map(
     noise = noise / total_amp  # normalize to ~[-1, 1]
     noise = (noise + 1.0) / 2.0  # remap to [0, 1]
     return np.clip(noise * scale, 0.0, 1.0)
+
+
+# ===========================================================================
+# Geology Feature Generators  (Clusters L-P gap fills)
+#
+# Each function is pure numpy — accepts a (H, W) heightmap + params,
+# returns a modified heightmap or a feature mask. Deterministic given seed.
+# ===========================================================================
+
+
+def apply_periglacial_patterns(
+    heightmap: np.ndarray,
+    seed: int = 0,
+    intensity: float = 0.5,
+    frost_heave_scale: float = 0.02,
+) -> np.ndarray:
+    """Apply periglacial patterned-ground features to a heightmap.
+
+    Simulates frost heave polygon patterns (sorted circles / stone stripes)
+    using a Voronoi-cell displacement field.  Higher-elevation cells get
+    stronger displacement, mimicking permafrost processes.
+
+    Args:
+        heightmap: (H, W) float64 terrain heights.
+        seed: Deterministic RNG seed.
+        intensity: Feature strength multiplier [0, 1].
+        frost_heave_scale: Amplitude of frost-heave bumps (metres).
+
+    Returns:
+        Modified (H, W) heightmap with periglacial micro-relief.
+    """
+    if intensity <= 0.0:
+        return heightmap.copy()
+    h, w = heightmap.shape
+    rng = np.random.RandomState(seed)
+
+    # Voronoi cell centers — frost polygon seeds
+    n_centers = max(4, int(h * w * 0.0004))
+    cy = rng.randint(0, h, size=n_centers)
+    cx = rng.randint(0, w, size=n_centers)
+
+    # Distance-to-nearest-center field (cheap Voronoi)
+    ys = np.arange(h, dtype=np.float64).reshape(-1, 1)
+    xs = np.arange(w, dtype=np.float64).reshape(1, -1)
+    min_dist = np.full((h, w), 1e9, dtype=np.float64)
+    for i in range(n_centers):
+        d = np.sqrt((ys - cy[i]) ** 2 + (xs - cx[i]) ** 2)
+        np.minimum(min_dist, d, out=min_dist)
+
+    # Normalize and invert — ridges at polygon boundaries
+    max_d = min_dist.max()
+    if max_d > 0:
+        min_dist /= max_d
+    heave = min_dist * frost_heave_scale * intensity
+
+    # Scale by elevation — stronger at high points (permafrost zone)
+    elev_mask = (heightmap - heightmap.min()) / max(heightmap.ptp(), 1e-6)
+    elev_mask = np.clip(elev_mask * 2.0, 0.0, 1.0)  # top half gets full effect
+
+    return heightmap + heave * elev_mask
+
+
+def apply_desert_pavement(
+    heightmap: np.ndarray,
+    seed: int = 0,
+    intensity: float = 0.5,
+    smoothing_radius: int = 3,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Generate desert pavement (reg) surface on low-slope areas.
+
+    Returns the smoothed heightmap and a pavement_mask (H, W) float [0,1]
+    indicating pavement coverage (1 = fully paved, 0 = no pavement).
+
+    Low-slope, low-elevation areas are flattened slightly and marked as
+    pavement.  The mask can drive a material shader downstream.
+
+    Args:
+        heightmap: (H, W) float64 terrain heights.
+        seed: Deterministic RNG seed.
+        intensity: Strength of flattening and mask coverage [0, 1].
+        smoothing_radius: Kernel radius for slope-based smoothing.
+
+    Returns:
+        Tuple of (modified heightmap, pavement_mask).
+    """
+    h, w = heightmap.shape
+    if intensity <= 0.0:
+        return heightmap.copy(), np.zeros((h, w), dtype=np.float64)
+
+    # Compute slope via gradient magnitude
+    gy, gx = np.gradient(heightmap)
+    slope = np.sqrt(gx ** 2 + gy ** 2)
+
+    # Pavement forms on flat, low areas
+    flat_mask = 1.0 - np.clip(slope / max(slope.max(), 1e-6) * 4.0, 0.0, 1.0)
+    elev_norm = (heightmap - heightmap.min()) / max(heightmap.ptp(), 1e-6)
+    low_mask = 1.0 - np.clip(elev_norm * 2.0, 0.0, 1.0)
+    pavement_mask = np.clip(flat_mask * low_mask * intensity, 0.0, 1.0)
+
+    # Smooth heightmap in pavement zones (wind-deflation flattening)
+    from scipy.ndimage import uniform_filter
+    smoothed = uniform_filter(heightmap.astype(np.float64), size=smoothing_radius * 2 + 1)
+    result = heightmap * (1.0 - pavement_mask) + smoothed * pavement_mask
+
+    return result, pavement_mask
+
+
+def compute_spring_line_mask(
+    heightmap: np.ndarray,
+    geology_layers: int = 3,
+    seed: int = 0,
+) -> np.ndarray:
+    """Identify spring line positions where water emerges at geological layer boundaries.
+
+    Returns a (H, W) float mask [0, 1] where 1 marks likely spring locations.
+    Spring lines form where an impermeable layer meets a permeable layer at
+    the surface, approximated here by elevation contour bands.
+
+    Args:
+        heightmap: (H, W) float64 terrain heights.
+        geology_layers: Number of geological strata to simulate.
+        seed: Deterministic RNG seed (for layer offset noise).
+
+    Returns:
+        Spring-line mask (H, W) float64 in [0, 1].
+    """
+    h, w = heightmap.shape
+    rng = np.random.RandomState(seed)
+
+    elev_norm = (heightmap - heightmap.min()) / max(heightmap.ptp(), 1e-6)
+
+    # Compute slope — springs emerge on slopes, not flats or cliffs
+    gy, gx = np.gradient(heightmap)
+    slope = np.sqrt(gx ** 2 + gy ** 2)
+    slope_norm = slope / max(slope.max(), 1e-6)
+    # Mid-range slope is ideal for springs
+    slope_band = np.exp(-((slope_norm - 0.3) ** 2) / 0.02)
+
+    # Layer boundaries: quantize elevation into strata, mark transitions
+    layer_thickness = 1.0 / max(geology_layers, 1)
+    offsets = rng.uniform(-0.02, 0.02, size=geology_layers)
+    spring_mask = np.zeros((h, w), dtype=np.float64)
+    for i in range(geology_layers):
+        boundary = layer_thickness * (i + 1) + offsets[i]
+        dist_to_boundary = np.abs(elev_norm - boundary)
+        # Narrow band around each boundary
+        spring_mask += np.exp(-(dist_to_boundary ** 2) / 0.001)
+
+    spring_mask = np.clip(spring_mask, 0.0, 1.0) * slope_band
+    return np.clip(spring_mask, 0.0, 1.0)
+
+
+def apply_landslide_scars(
+    heightmap: np.ndarray,
+    seed: int = 0,
+    num_slides: int = 3,
+    scar_depth: float = 0.05,
+    runout_factor: float = 2.5,
+) -> np.ndarray:
+    """Carve landslide scars and deposit runout fans into a heightmap.
+
+    Each landslide originates from a steep slope, carves a concave scar
+    uphill and deposits a convex fan at the toe.
+
+    Args:
+        heightmap: (H, W) float64 terrain heights.
+        seed: Deterministic RNG seed.
+        num_slides: Number of landslide features to generate.
+        scar_depth: Maximum depth of the scar (metres, relative).
+        runout_factor: Length of deposit fan relative to scar radius.
+
+    Returns:
+        Modified (H, W) heightmap with landslide features.
+    """
+    h, w = heightmap.shape
+    result = heightmap.copy()
+    rng = np.random.RandomState(seed)
+
+    # Find steep areas as candidate origins
+    gy, gx = np.gradient(heightmap)
+    slope = np.sqrt(gx ** 2 + gy ** 2)
+
+    ys = np.arange(h, dtype=np.float64).reshape(-1, 1)
+    xs = np.arange(w, dtype=np.float64).reshape(1, -1)
+
+    for _ in range(num_slides):
+        # Sample origin weighted by slope steepness
+        flat_slope = slope.ravel()
+        prob = flat_slope / max(flat_slope.sum(), 1e-12)
+        idx = rng.choice(len(prob), p=prob)
+        oy, ox = divmod(idx, w)
+
+        # Scar radius
+        scar_r = rng.uniform(max(3, h * 0.03), max(5, h * 0.08))
+        dist = np.sqrt((ys - oy) ** 2 + (xs - ox) ** 2)
+
+        # Downhill direction from gradient
+        dy_dir = -gy[oy, ox]
+        dx_dir = -gx[oy, ox]
+        norm = math.sqrt(dx_dir ** 2 + dy_dir ** 2) or 1.0
+        dx_dir /= norm
+        dy_dir /= norm
+
+        # Scar: concave excavation around origin
+        scar_mask = np.clip(1.0 - dist / scar_r, 0.0, 1.0) ** 2
+        result -= scar_mask * scar_depth
+
+        # Deposit fan: offset downhill, wider, shallower
+        fan_cx = oy + dy_dir * scar_r * runout_factor
+        fan_cy = ox + dx_dir * scar_r * runout_factor
+        fan_r = scar_r * 1.5
+        fan_dist = np.sqrt((ys - fan_cx) ** 2 + (xs - fan_cy) ** 2)
+        fan_mask = np.clip(1.0 - fan_dist / fan_r, 0.0, 1.0)
+        # Deposit is ~60% of excavated volume
+        result += fan_mask * scar_depth * 0.6
+
+    return result
+
+
+def apply_hot_spring_features(
+    heightmap: np.ndarray,
+    seed: int = 0,
+    num_springs: int = 2,
+    pool_radius: float = 5.0,
+    pool_depth: float = 0.03,
+    terrace_rings: int = 4,
+) -> tuple[np.ndarray, list[dict]]:
+    """Create hot spring pools with travertine terraces.
+
+    Returns the modified heightmap and a list of spring location dicts
+    for downstream VFX placement (steam, mineral coloring).
+
+    Args:
+        heightmap: (H, W) float64 terrain heights.
+        seed: Deterministic RNG seed.
+        num_springs: Number of hot spring pools to place.
+        pool_radius: Radius of the main pool (in grid cells).
+        pool_depth: Depth of pool depression (metres, relative).
+        terrace_rings: Number of travertine terrace steps.
+
+    Returns:
+        Tuple of (modified heightmap, list of spring info dicts).
+    """
+    h, w = heightmap.shape
+    result = heightmap.copy()
+    rng = np.random.RandomState(seed)
+    springs: list[dict] = []
+
+    ys = np.arange(h, dtype=np.float64).reshape(-1, 1)
+    xs = np.arange(w, dtype=np.float64).reshape(1, -1)
+
+    for _ in range(num_springs):
+        # Place springs in mid-elevation zones
+        elev_norm = (heightmap - heightmap.min()) / max(heightmap.ptp(), 1e-6)
+        mid_mask = np.exp(-((elev_norm - 0.4) ** 2) / 0.05)
+        flat_mask = mid_mask.ravel()
+        prob = flat_mask / max(flat_mask.sum(), 1e-12)
+        idx = rng.choice(len(prob), p=prob)
+        sy, sx = divmod(idx, w)
+
+        dist = np.sqrt((ys - sy) ** 2 + (xs - sx) ** 2)
+
+        # Main pool depression
+        pool_mask = np.clip(1.0 - dist / pool_radius, 0.0, 1.0) ** 2
+        result -= pool_mask * pool_depth
+
+        # Travertine terraces: concentric stepped rings
+        for ring in range(1, terrace_rings + 1):
+            ring_r = pool_radius + ring * pool_radius * 0.4
+            ring_width = pool_radius * 0.15
+            ring_dist = np.abs(dist - ring_r)
+            terrace_mask = np.clip(1.0 - ring_dist / ring_width, 0.0, 1.0)
+            step_h = pool_depth * 0.15 * (1.0 - ring / (terrace_rings + 1))
+            result += terrace_mask * step_h
+
+        springs.append({
+            "grid_y": int(sy),
+            "grid_x": int(sx),
+            "pool_radius": float(pool_radius),
+            "elevation": float(heightmap[sy, sx]),
+        })
+
+    return result, springs
+
+
+def apply_reef_platform(
+    heightmap: np.ndarray,
+    sea_level: float = 0.0,
+    seed: int = 0,
+    reef_width: float = 8.0,
+    reef_height: float = 0.01,
+) -> np.ndarray:
+    """Build fringing reef platforms at the coastline.
+
+    Reefs form a raised platform just below sea level along the coast.
+    The reef crest sits at sea_level and the platform extends seaward.
+
+    Args:
+        heightmap: (H, W) float64 terrain heights.
+        sea_level: Water surface elevation.
+        seed: Deterministic RNG seed for roughness noise.
+        reef_width: Width of reef platform in grid cells.
+        reef_height: Height of reef crest above surrounding seabed.
+
+    Returns:
+        Modified (H, W) heightmap with reef features.
+    """
+    h, w = heightmap.shape
+    result = heightmap.copy()
+    rng = np.random.RandomState(seed)
+
+    # Coast mask: cells just below sea level
+    underwater = heightmap < sea_level
+    above = ~underwater
+
+    if not underwater.any() or not above.any():
+        return result  # no coastline
+
+    # Distance from shore (for underwater cells only)
+    from scipy.ndimage import distance_transform_edt
+    shore_dist = distance_transform_edt(underwater)
+
+    # Reef band: narrow strip near coast
+    reef_mask = np.clip(1.0 - np.abs(shore_dist - reef_width * 0.5) / (reef_width * 0.5), 0.0, 1.0)
+    reef_mask *= underwater.astype(np.float64)
+
+    # Add reef height with some roughness
+    roughness = rng.uniform(0.7, 1.3, size=(h, w))
+    result += reef_mask * reef_height * roughness
+
+    # Clamp reef crest to not exceed sea level
+    np.minimum(result, sea_level, out=result, where=underwater)
+
+    return result
+
+
+def apply_tafoni_weathering(
+    heightmap: np.ndarray,
+    seed: int = 0,
+    intensity: float = 0.5,
+    cavity_scale: float = 0.01,
+    num_cavities: int = 50,
+) -> np.ndarray:
+    """Apply tafoni (honeycomb weathering) erosion pits to rock surfaces.
+
+    Creates small concave cavities on steep rock faces, simulating
+    salt-crystal or differential weathering.
+
+    Args:
+        heightmap: (H, W) float64 terrain heights.
+        seed: Deterministic RNG seed.
+        intensity: Weathering strength [0, 1].
+        cavity_scale: Depth of individual cavities (metres, relative).
+        num_cavities: Number of tafoni cavities to generate.
+
+    Returns:
+        Modified (H, W) heightmap with tafoni pits.
+    """
+    h, w = heightmap.shape
+    if intensity <= 0.0:
+        return heightmap.copy()
+    result = heightmap.copy()
+    rng = np.random.RandomState(seed)
+
+    # Tafoni form on steep, exposed rock
+    gy, gx = np.gradient(heightmap)
+    slope = np.sqrt(gx ** 2 + gy ** 2)
+    steep_mask = np.clip(slope / max(slope.max(), 1e-6) * 3.0, 0.0, 1.0)
+
+    ys = np.arange(h, dtype=np.float64).reshape(-1, 1)
+    xs = np.arange(w, dtype=np.float64).reshape(1, -1)
+
+    for _ in range(num_cavities):
+        # Place cavity weighted by steepness
+        prob = steep_mask.ravel()
+        prob_sum = prob.sum()
+        if prob_sum < 1e-12:
+            break
+        prob = prob / prob_sum
+        idx = rng.choice(len(prob), p=prob)
+        cy, cx = divmod(idx, w)
+
+        # Small elliptical cavity
+        rx = rng.uniform(1.5, 4.0)
+        ry = rng.uniform(1.5, 4.0)
+        dist = np.sqrt(((ys - cy) / ry) ** 2 + ((xs - cx) / rx) ** 2)
+        cavity = np.clip(1.0 - dist, 0.0, 1.0) ** 2
+        result -= cavity * cavity_scale * intensity
+
+    return result
+
+
+def apply_geological_folds(
+    heightmap: np.ndarray,
+    seed: int = 0,
+    num_folds: int = 3,
+    amplitude: float = 0.05,
+    wavelength_cells: float = 30.0,
+    fold_type: str = "syncline",
+) -> np.ndarray:
+    """Apply geological fold deformation (anticline/syncline) to terrain.
+
+    Simulates tectonic folding by adding sinusoidal undulations along a
+    random strike direction. ``fold_type`` controls the fold geometry:
+    - "anticline": upward arch (positive center displacement)
+    - "syncline": downward trough (negative center displacement)
+    - "chevron": angular V-shaped folds
+
+    Args:
+        heightmap: (H, W) float64 terrain heights.
+        seed: Deterministic RNG seed.
+        num_folds: Number of fold axes.
+        amplitude: Peak fold displacement (metres, relative).
+        wavelength_cells: Wavelength of fold in grid cells.
+        fold_type: "anticline", "syncline", or "chevron".
+
+    Returns:
+        Modified (H, W) heightmap with fold deformation.
+    """
+    h, w = heightmap.shape
+    result = heightmap.copy()
+    rng = np.random.RandomState(seed)
+
+    ys = np.arange(h, dtype=np.float64).reshape(-1, 1)
+    xs = np.arange(w, dtype=np.float64).reshape(1, -1)
+
+    sign = -1.0 if fold_type == "syncline" else 1.0
+
+    for _ in range(num_folds):
+        # Random strike direction
+        angle = rng.uniform(0, math.pi)
+        dx = math.cos(angle)
+        dy = math.sin(angle)
+
+        # Project coordinates onto perpendicular direction
+        proj = xs * (-dy) + ys * dx
+
+        # Phase offset
+        phase = rng.uniform(0, 2 * math.pi)
+
+        if fold_type == "chevron":
+            # Triangular wave for angular folds
+            t = (proj / wavelength_cells + phase / (2 * math.pi)) % 1.0
+            wave = 2.0 * np.abs(2.0 * (t - np.floor(t + 0.5))) - 1.0
+        else:
+            wave = np.sin(2.0 * math.pi * proj / wavelength_cells + phase)
+
+        result += wave * amplitude * sign
+
+    return result
