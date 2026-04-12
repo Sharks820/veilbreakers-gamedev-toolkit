@@ -1041,25 +1041,27 @@ def handle_generate_terrain(params: dict) -> dict:
         heightmap = erosion_result["heightmap"]
         erosion_applied = True
 
-    # Apply flatten zones for building foundations (MESH-05)
+    # F143: Compute moisture map BEFORE flatten_zones so drainage signal is
+    # derived from the natural terrain, not from flattened building pads.
+    # F144: Compute moisture unconditionally (not only when erosion_applied)
+    # so splatmap painting always has drainage data.
+    moisture_map = None
+    from .terrain_advanced import compute_flow_map
+    flow_result = compute_flow_map(heightmap)
+    flow_acc = np.asarray(flow_result["flow_accumulation"], dtype=np.float64)
+    # Normalize flow accumulation to [0, 1] using log scale
+    log_flow = np.log1p(flow_acc)
+    fa_max = float(log_flow.max())
+    if fa_max > 0:
+        moisture_map = log_flow / fa_max
+    else:
+        moisture_map = np.zeros_like(heightmap)
+
+    # Apply flatten zones for building foundations AFTER moisture (MESH-05, F143)
     flatten_zones = params.get("flatten_zones", None)
     if flatten_zones:
         from .terrain_advanced import flatten_multiple_zones
         heightmap = flatten_multiple_zones(heightmap, flatten_zones)
-
-    # Compute moisture map from flow accumulation (for splatmap painting)
-    moisture_map = None
-    if erosion_applied:
-        from .terrain_advanced import compute_flow_map
-        flow_result = compute_flow_map(heightmap)
-        flow_acc = np.asarray(flow_result["flow_accumulation"], dtype=np.float64)
-        # Normalize flow accumulation to [0, 1] using log scale
-        log_flow = np.log1p(flow_acc)
-        fa_max = log_flow.max()
-        if fa_max > 0:
-            moisture_map = log_flow / fa_max
-        else:
-            moisture_map = np.zeros_like(heightmap)
 
     terrain_size = scale
     terrain_result = _create_terrain_mesh_from_heightmap(
