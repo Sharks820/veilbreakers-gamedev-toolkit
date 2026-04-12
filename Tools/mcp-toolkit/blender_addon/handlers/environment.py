@@ -1000,9 +1000,15 @@ def handle_generate_terrain(params: dict) -> dict:
     erosion = validated["erosion"]
     erosion_iters = validated["erosion_iterations"]
 
-    # Auto-scale erosion: minimum 150K droplets for AAA-quality river channels
-    # and natural-looking drainage (Skyrim/Valhalla uses 150K+ for visible features)
-    if erosion in ("hydraulic", "both") and erosion_iters < 150000:
+    # F140: Auto-scale erosion only when caller did NOT explicitly set iterations.
+    # When caller supplies erosion_iterations, respect their value even if < 150K.
+    # This prevents uncontrolled escalation (e.g. 5000 -> 150000+) on large grids.
+    _caller_set_erosion_iters = "erosion_iterations" in params
+    if (
+        erosion in ("hydraulic", "both")
+        and erosion_iters < 150000
+        and not _caller_set_erosion_iters
+    ):
         erosion_iters = max(150000, resolution * resolution // 2)
 
     # Domain warp params (organic terrain features)
