@@ -3,7 +3,7 @@
 **Created:** 2026-04-12
 **Orchestration:** GSD (context isolation + atomic commits) + Superpowers (TDD + systematic debugging + verification)
 **Total scope:** ~780 findings + 84 AAA gaps + 18 plan conflicts + 36 research techniques + 6 Codex R16 research rounds
-**Task count:** 534 tasks across 11 phases (0-10), ALL research-aligned, ALL findings mapped, quality testing infrastructure included
+**Task count:** 554 tasks across 11 phases (0-10), ALL research-aligned, ALL findings mapped, quality testing infrastructure included
 **Quality layers:** L0-L6 (existing) + L7 Geometry Gate + L8 Visual Regression + L9 Statistical Shape + L10 Agent Protocol
 
 ---
@@ -68,7 +68,7 @@ VERIFICATION GATE:
 | 52 | 4 parallel | A: pass_coastline. B: pass_karst. C: pass_wind_erosion. D: pass_glacial | Each owns exactly one pass file. AST lint rule is sequential after |
 | 53 | 2 waves | Wave 1: BakedTerrain dataclass + DAG output. Wave 2 (3 parallel): compose_terrain_node, compose_map, legacy removal | Wave 2 consumes Wave 1's contract |
 | 54 | 3 parallel | A: seam_guard fix + blend_weight (blender_server.py seam section). B: TerrainNodeRegistry (new file). C: cross-tile validator + edge tests | A owns blender_server seam lines, B owns new file, C owns test files |
-| 55 | **4 sub-phases in parallel** | **6A** (Scatter): 6.1-6.2, 6.5-6.7, 6.20-6.27, 6.49-6.58. **6B** (Rivers/Water): 6.3, 6.8-6.9, 6.59-6.76. **6C** (Roads/Cliffs/Morphology): 6.77-6.88, 6.107-6.116. **6D** (Handler bugs+Socket+Wiring): 6.28-6.48, 6.90-6.106 | Each sub-phase owns distinct files; 6D is independent of terrain pipeline |
+| 55 | **5 sub-phases in parallel** | **6A** (Scatter): 6.1-6.2, 6.5-6.7, 6.20-6.27, 6.49-6.58, 6.127-6.137. **6B** (Rivers/Water): 6.3, 6.8-6.9, 6.59-6.76. **6C** (Roads/Cliffs/Morphology): 6.77-6.88, 6.107-6.118, 6.125-6.126. **6D** (Handler bugs+Socket+Wiring): 6.28-6.48, 6.90-6.106. **6E** (Caves deep-dive): 6.119-6.124 | Each sub-phase owns distinct files; 6D is independent of terrain pipeline |
 | 56 | 2 parallel | A: Blender material pipeline (terrain_materials*.py). B: Unity shader (shader_templates.py + scene_templates.py) | **Unity shader (Agent B) can START after Phase 4** — does not depend on Phases 5-6 |
 | 57 | 3 parallel | A: AdvancedTerrainErosion UPM + erosion tool. B: terrain LOD+holes+collision. C: trees+NavMesh+mask export | **Tasks 8.1-8.4 can START after Phase 4** — basic Unity integration independent of Blender pipeline |
 | 58 | 5 parallel | Each agent gets ~5 independent fixes with non-overlapping files + generator upgrade tasks split into groups of 5 templates | Maximum parallelism, minimal risk |
@@ -428,6 +428,18 @@ R15J wiring gaps (32 functions with zero production callers)
 - 6.117: Compute Strahler stream order from ridge map skeleton — skeletonize ridge map, count pixel neighbors at junctions to assign stream order. Feed to river width/depth computation (F121)
 - 6.118: Implement fractal coastline subdivision — replace noise-based coastline shape with fractal midpoint displacement for natural cove/peninsula/headland geometry (BEST_PRACTICES section 8.4)
 
+### Tasks — Cave deep-dive (BEST_PRACTICES Section 14):
+- 6.119: Implement Perlin worm cave path generation + marching cubes mesh — use 3D Perlin worm (simplex noise gradient following) to carve cave skeleton, then expand chambers with cellular automata, generate mesh via marching cubes for volumetric cave geometry with ceiling/walls/floor as independent surfaces (BEST_PRACTICES #14.1)
+- 6.120: Implement stalactite/stalagmite L-system generation — iterative drip-line growth following Cui & Chow paper. Stalactites hang from ceiling at water ingress points, stalagmites grow from floor below drip lines. Variable thickness, clustering, occasional column merges (BEST_PRACTICES #14.2 item 2)
+- 6.121: Implement cave water pool insertion at floor minima — detect local minima in cave floor mesh, insert flat reflective water surface with caustics material. Pool depth proportional to chamber volume. Wet-zone material transition around pool edges (BEST_PRACTICES #14.2 item 4)
+- 6.122: Implement cave lighting metadata export — detect ceiling crack positions for god-ray light shafts, mark bioluminescent zones (mushroom/lichen clusters on damp walls), export as metadata channels for Unity volumetric lighting setup (BEST_PRACTICES #14.2 item 3)
+- 6.123: Implement portal-based streaming at cave entrances — define portal geometry at cave mouth, export portal bounds + connected interior cell IDs for Unity additive scene loading. Interior geometry in separate scene, loaded when player approaches portal (BEST_PRACTICES #14.1, Elden Ring reference)
+- 6.124: Implement cave entrance asymmetry — cave mouths must NOT be perfect arches. Add irregular lip geometry: one side higher, rubble pile partially blocking, vegetation overhang, erosion-worn edges. Randomize entrance profile per seed (BEST_PRACTICES #14.2)
+
+### Tasks — Cliff deep-dive (BEST_PRACTICES Section 14):
+- 6.125: Add rock type classification to cliff mesh builder — BASALT (hexagonal columnar joints), SANDSTONE (rounded strata, wind-worn curves), GRANITE (large irregular angular blocks). Rock type influences fracture pattern, strata thickness, weathering profile, and talus debris shape. Selectable per-biome or per-cliff-instance (BEST_PRACTICES #14.4 item 6)
+- 6.126: Implement cliff-terrain transition geometry — skirt mesh (curved transition from cliff base to terrain surface) + shader blending (cliff mesh samples terrain texture at contact zone via depth mask, MicroSplat approach). Extend cliff bottom 1-2m into terrain to ensure overlap, not gap (BEST_PRACTICES #14.5)
+
 ### Tasks — Scatter feature tasks:
 - 6.49: Implement slope-threshold instancing (4-bucket: sheer_rock/stairs/small_rock/grass)
 - 6.50: Fix scatter 2D->3D positions — `_scatter_pass` stores (wx,wy) with no Z, causing Z=0 placement (Opus scatter scan P0)
@@ -439,6 +451,19 @@ R15J wiring gaps (32 functions with zero production callers)
 - 6.56: Wire Tripo environmental prop pipeline — manifest -> scatter (F127, NEW-R8-07)
 - 6.57: Add per-instance color variation to scatter (GAP-024)
 - 6.58: Add vegetation interaction system — trampling, bending on collision (GAP-023)
+
+### Tasks — Vegetation scatter deep-dive (BEST_PRACTICES Section 15):
+- 6.127: Implement Voronoi clumping for vegetation scatter — assign scatter points to Voronoi cells, points within same cell share clump properties (lean direction, density multiplier, species bias). Produces natural tree groves and shrub clusters instead of uniform distribution (BEST_PRACTICES #15.5 item 3, Ghost of Tsushima reference)
+- 6.128: Implement variable-density Poisson disk sampling — density map (from moisture, slope, altitude, biome) modulates min_distance parameter. Dense forest = small min_distance, sparse alpine = large min_distance. Replaces fixed-radius Poisson disk (BEST_PRACTICES #15.5)
+- 6.129: Implement flow accumulation moisture map feeding into scatter — derive moisture from ridge_map flow accumulation (high accumulation = wet valley, low = dry ridge). Moisture drives species selection, density, and ground cover type. Wire to scatter pass as input channel (BEST_PRACTICES #15.1, Witcher 3 reference)
+- 6.130: Implement species compatibility matrix at biome transitions — prevent ecologically nonsensical combinations (e.g., cactus next to fern). Matrix defines allowed co-occurrence per biome pair. At biome boundary, only species valid in BOTH biomes may spawn in transition zone (BEST_PRACTICES #15.6)
+- 6.131: Implement dark fantasy corruption zone rings — 4 concentric zones from corruption epicenter: (1) bare twisted rock + corruption tendrils, (2) dead trees + bioluminescent mushrooms, (3) blighted vegetation (desaturated, wilted), (4) normal with occasional blight patches. Zone radii configurable per corruption source. Wire to scatter pass as corruption_mask input (BEST_PRACTICES #15.6)
+- 6.132: Implement bioluminescent mushroom scatter species — emission_color (0.1, 0.4, 0.3), emission_strength 0.8. Cluster on damp walls, cave floors, corruption zone ring 2. Export emission data for Unity point light or emissive material (BEST_PRACTICES #15.6)
+- 6.133: Implement twisted tree trunk sine-wave displacement — 2-4 sine cycles along trunk height, 10-20% amplitude relative to trunk radius. Apply as mesh deformation during tree generation. Corruption intensity modulates cycle count and amplitude (BEST_PRACTICES #15.6)
+- 6.134: Implement altitudinal zonation for vegetation — 6 altitude bands (valley floor/lowland/montane/subalpine/alpine/nival) with species lists, density curves, and undergrowth rules per band. Normalize altitude relative to terrain height range, not absolute meters (BEST_PRACTICES #15.3)
+- 6.135: Implement forest structure layers — canopy (15-30m, density 0.15-0.25), understory (5-15m, shade-tolerant, inverse canopy density), shrub (1-5m, edge effect boost), ground cover (0-1m, moisture-driven). Dense canopy suppresses understory by 60%. Multi-pass scatter with layer interaction (BEST_PRACTICES #15.4)
+- 6.136: Implement multi-pass exclusion zones for scatter — buildings, roads, cliff faces, water bodies each define exclusion polygons. Scatter skips points inside any exclusion zone. Edge softening: density ramps from 0 to full over 2-5m from exclusion boundary (BEST_PRACTICES #15.5)
+- 6.137: Implement per-instance color variation for vegetation — hue shift +/-10 degrees, brightness +/-15%, scale 0.7-1.3x, rotation 0-360. Variation seeded by instance position hash for determinism. Prevents "clone army" appearance (BEST_PRACTICES #15.5 item 4)
 
 ### Tasks — River + water fixes:
 - 6.59: FIX A* cost function — remove abs(height_diff) at _terrain_noise.py:764 so downhill is cheap, uphill expensive (NEW-R8-10, ROOT CAUSE of straight-line rivers)
@@ -521,6 +546,25 @@ R15J wiring gaps (32 functions with zero production callers)
 - [ ] D8 angle direction correct for waterfall placement (NEW-R8-16)
 - [ ] Moisture map not silently discarded (NEW-R8-12)
 - [ ] Morphology templates include discontinuities, not just smooth Gaussians (NEW-R8-17)
+- [ ] Caves use Perlin worm paths + marching cubes mesh, not random heading + sine (6.119)
+- [ ] Stalactites/stalagmites generated via L-system in caves (6.120)
+- [ ] Cave water pools at floor minima with reflective surface (6.121)
+- [ ] Cave lighting metadata exported (crack positions, bioluminescent zones) (6.122)
+- [ ] Portal-based streaming defined at cave entrances (6.123)
+- [ ] Cave entrances are asymmetric, not perfect arches (6.124)
+- [ ] Cliff rock type classification (basalt/sandstone/granite) drives geometry (6.125)
+- [ ] Cliff-terrain transition has skirt mesh or shader blending (6.126)
+- [ ] Voronoi clumping produces natural tree groves (6.127)
+- [ ] Variable-density Poisson disk modulated by moisture/slope/altitude (6.128)
+- [ ] Flow accumulation moisture map feeds scatter species selection (6.129)
+- [ ] Species compatibility matrix prevents nonsensical biome-boundary combos (6.130)
+- [ ] Dark fantasy corruption zones produce 4 concentric rings (6.131)
+- [ ] Bioluminescent mushrooms emit light in caves and corruption zones (6.132)
+- [ ] Twisted trees have sine-wave trunk displacement (6.133)
+- [ ] Altitudinal zonation produces 6 distinct vegetation bands (6.134)
+- [ ] Forest structure has canopy/understory/shrub/ground layers (6.135)
+- [ ] Multi-pass exclusion zones prevent scatter in buildings/roads/cliffs/water (6.136)
+- [ ] Per-instance color/scale/rotation variation eliminates clone appearance (6.137)
 
 ---
 
@@ -1042,6 +1086,7 @@ R7 findings, GAP-018 through GAP-024, GAP-026
 - 10.37: Add pre-commit hook: quality_lint + test_substance_lint on changed terrain files
 - 10.38: Add PTRM realism scoring — geomorphon classification (10 landform types), score >0.6 acceptable, >0.8 good
 - 10.39: Add property-based testing with Hypothesis — terrain invariants as properties ("for any seed, no holes", "slope < X at walkable areas")
+- 10.40: Add automated daily world validation scan (AC Origins pattern) — scheduled script runs full terrain pipeline on 10 canonical seeds, compares against golden references, generates visual report with regressions flagged. Integrates with CI or GSD scheduled task. Catches regressions automatically without manual QA (BEST_PRACTICES #13.1)
 
 ### Acceptance:
 - [ ] All tests pass, all lints clean, code reviewer 0 P0/P1
@@ -1058,3 +1103,4 @@ R7 findings, GAP-018 through GAP-024, GAP-026
 - [ ] Pre-commit hook blocks quality regressions (10.37)
 - [ ] PTRM realism score >0.6 for all terrain types (10.38)
 - [ ] Hypothesis finds zero invariant violations across 100 random seeds (10.39)
+- [ ] Daily automated validation scan configured and producing reports (10.40)
