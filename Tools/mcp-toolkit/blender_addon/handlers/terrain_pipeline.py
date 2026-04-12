@@ -446,6 +446,7 @@ def register_default_passes() -> None:
                 "drainage",
                 "bank_instability",
                 "talus",
+                "ridge_map",
             ),
             seed_namespace="erosion",
             requires_scene_read=True,

@@ -242,6 +242,7 @@ class TerrainMaskStack:
     talus: Optional[np.ndarray] = None
     drainage: Optional[np.ndarray] = None
     bank_instability: Optional[np.ndarray] = None
+    ridge_map: Optional[np.ndarray] = None  # analytical erosion: -1 creases, +1 ridges
 
     # Water masks (Pass 5)
     flow_direction: Optional[np.ndarray] = None
@@ -339,6 +340,7 @@ class TerrainMaskStack:
             "talus",
             "drainage",
             "bank_instability",
+            "ridge_map",
             "flow_direction",
             "flow_accumulation",
             "water_surface",
