@@ -41,23 +41,8 @@ class BlenderMCPServer:
             try:
                 self._server_socket.close()
             except OSError:
-                pass  # Expected when socket already closed during shutdown
+                pass
             self._server_socket = None
-        # Drain pending commands so waiting threads don't hang forever
-        drained = 0
-        while True:
-            try:
-                _cmd, event, container = self.command_queue.get_nowait()
-                container["response"] = {
-                    "status": "error",
-                    "message": "Server shutting down",
-                }
-                event.set()
-                drained += 1
-            except queue.Empty:
-                break
-        if drained:
-            logger.info("Drained %d pending commands during shutdown", drained)
         if bpy.app.timers.is_registered(self._process_commands):
             bpy.app.timers.unregister(self._process_commands)
         if self.server_thread is not None:
@@ -90,7 +75,7 @@ class BlenderMCPServer:
             try:
                 srv.close()
             except OSError:
-                pass  # Socket already closed by stop() — expected during shutdown
+                pass
 
     def _handle_client(self, client_sock: socket.socket):
         """Background thread - NO bpy calls here.
@@ -110,21 +95,16 @@ class BlenderMCPServer:
             while self.running:
                 try:
                     length_bytes = self._receive_exactly(client_sock, 4)
-                except (ConnectionError, OSError, socket.timeout):
-                    # Client disconnected, connection lost, or idle timeout
+                except (ConnectionError, OSError):
+                    # Client disconnected cleanly or connection lost
                     break
                 length = struct.unpack(">I", length_bytes)[0]
-                if length == 0:
-                    raise ValueError("Zero-length message received")
                 if length > MAX_MESSAGE_SIZE:
                     raise ValueError(
                         f"Message too large: {length} bytes (max {MAX_MESSAGE_SIZE})"
                     )
                 json_bytes = self._receive_exactly(client_sock, length)
-                try:
-                    command = json.loads(json_bytes)
-                except (json.JSONDecodeError, UnicodeDecodeError) as json_err:
-                    raise ValueError(f"Invalid JSON in command: {json_err}") from json_err
+                command = json.loads(json_bytes)
 
                 result_event = threading.Event()
                 result_container: dict = {}

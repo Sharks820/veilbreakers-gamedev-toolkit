@@ -12,13 +12,10 @@ from __future__ import annotations
 
 import hashlib
 import json
-import logging
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-
-logger = logging.getLogger(__name__)
 
 import numpy as np
 
@@ -236,7 +233,6 @@ def seed_golden_library(
             replay_ctrl.run_pipeline(checkpoint=False)
         except Exception:
             # Skip tiles that fail to generate — seed library is best-effort.
-            logger.debug("Seed %d failed during golden snapshot generation", new_seed, exc_info=True)
             continue
         snap_id = f"golden_{i:04d}_seed{state.intent.seed}"
         snap = save_golden_snapshot(

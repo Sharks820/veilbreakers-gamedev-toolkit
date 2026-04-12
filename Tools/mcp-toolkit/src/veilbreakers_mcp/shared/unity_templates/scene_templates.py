@@ -79,7 +79,6 @@ def generate_terrain_setup_script(
     resolution: int = 513,
     splatmap_layers: list[dict] | None = None,
     alphamap_path: str | None = None,
-    byte_order: str = "little",
 ) -> str:
     """Generate C# editor script that creates terrain from a RAW heightmap.
 
@@ -88,33 +87,17 @@ def generate_terrain_setup_script(
     creates a Terrain GameObject. If ``alphamap_path`` is provided, the
     generated script will load a Blender-exported RAW RGBA alphamap.
 
-    The generated C# script validates file sizes before parsing and writes
-    a JSON manifest recording loaded assets and parameters.
-
     Args:
         heightmap_path: Path to the RAW heightmap file (relative to Unity project).
         size: Terrain size as (width, height, length).
         resolution: Heightmap resolution (e.g. 513, 1025).
         splatmap_layers: Optional list of dicts with "texture_path" and "tiling".
         alphamap_path: Optional RAW RGBA splatmap path relative to the Unity project.
-        byte_order: Endianness of the RAW heightmap -- ``"little"`` (Windows default)
-            or ``"big"`` (Mac default).
 
     Returns:
         Complete C# source string.
-
-    Raises:
-        ValueError: If byte_order is not ``"little"`` or ``"big"``.
     """
-    if byte_order not in ("little", "big"):
-        raise ValueError(f"byte_order must be 'little' or 'big', got {byte_order!r}")
     safe_heightmap_path = sanitize_cs_string(heightmap_path)
-
-    # Build the C# expression for 16-bit sample decoding based on endianness.
-    if byte_order == "little":
-        decode_expr = "(ushort)(rawBytes[byteIndex] | (rawBytes[byteIndex + 1] << 8))"
-    else:
-        decode_expr = "(ushort)((rawBytes[byteIndex] << 8) | rawBytes[byteIndex + 1])"
 
     splatmap_code = ""
     if splatmap_layers:
@@ -144,46 +127,42 @@ def generate_terrain_setup_script(
             string alphamapPath = Path.Combine(Application.dataPath, "{safe_alphamap_path}".Replace("Assets/", ""));
             if (File.Exists(alphamapPath))
             {{
-                byte[] alphaRawBytes = File.ReadAllBytes(alphamapPath);
+                byte[] rawBytes = File.ReadAllBytes(alphamapPath);
                 int alphaW = terrainData.alphamapWidth;
                 int alphaH = terrainData.alphamapHeight;
                 int channels = {len(splatmap_layers)};
-                int expectedAlphaBytes = alphaW * alphaH * channels;
-                if (alphaRawBytes.Length != expectedAlphaBytes)
+                float[,,] alphamaps = new float[alphaH, alphaW, channels];
+                int byteIndex = 0;
+                for (int ay = 0; ay < alphaH; ay++)
                 {{
-                    Debug.LogError("[VeilBreakers] Alphamap file size mismatch: expected " + expectedAlphaBytes + " bytes (" + alphaW + "x" + alphaH + "x" + channels + ") but got " + alphaRawBytes.Length + " bytes.");
-                }}
-                else
-                {{
-                    float[,,] alphamaps = new float[alphaH, alphaW, channels];
-                    int alphaByteIdx = 0;
-                    for (int ay = 0; ay < alphaH; ay++)
+                    for (int ax = 0; ax < alphaW; ax++)
                     {{
-                        for (int ax = 0; ax < alphaW; ax++)
+                        float total = 0f;
+                        for (int c = 0; c < channels; c++)
                         {{
-                            float total = 0f;
+                            float value = 0f;
+                            if (byteIndex < rawBytes.Length)
+                            {{
+                                value = rawBytes[byteIndex] / 255f;
+                                byteIndex++;
+                            }}
+                            alphamaps[ay, ax, c] = value;
+                            total += value;
+                        }}
+                        if (total <= 0f)
+                        {{
+                            alphamaps[ay, ax, 0] = 1f;
+                        }}
+                        else
+                        {{
                             for (int c = 0; c < channels; c++)
                             {{
-                                float value = alphaRawBytes[alphaByteIdx] / 255f;
-                                alphaByteIdx++;
-                                alphamaps[ay, ax, c] = value;
-                                total += value;
-                            }}
-                            if (total <= 0f)
-                            {{
-                                alphamaps[ay, ax, 0] = 1f;
-                            }}
-                            else
-                            {{
-                                for (int c = 0; c < channels; c++)
-                                {{
-                                    alphamaps[ay, ax, c] /= total;
-                                }}
+                                alphamaps[ay, ax, c] /= total;
                             }}
                         }}
                     }}
-                    terrainData.SetAlphamaps(0, 0, alphamaps);
                 }}
+                terrainData.SetAlphamaps(0, 0, alphamaps);
             }}
             else
             {{
@@ -216,32 +195,27 @@ public static class VeilBreakers_TerrainSetup
             terrainData.heightmapResolution = {resolution};
             terrainData.size = new Vector3({size[0]}f, {size[1]}f, {size[2]}f);
 
-            // Load RAW heightmap (16-bit, {byte_order}-endian)
+            // Load RAW heightmap
             string heightmapPath = Path.Combine(Application.dataPath, "{safe_heightmap_path}".Replace("Assets/", ""));
             if (File.Exists(heightmapPath))
             {{
                 byte[] rawBytes = File.ReadAllBytes(heightmapPath);
                 int res = {resolution};
-                int expectedBytes = res * res * 2;
-                if (rawBytes.Length != expectedBytes)
+                float[,] heights = new float[res, res];
+                int byteIndex = 0;
+                for (int y = 0; y < res; y++)
                 {{
-                    Debug.LogError("[VeilBreakers] Heightmap file size mismatch: expected " + expectedBytes + " bytes (" + res + "x" + res + " at 16-bit) but got " + rawBytes.Length + " bytes. Check resolution or file.");
-                }}
-                else
-                {{
-                    float[,] heights = new float[res, res];
-                    int byteIndex = 0;
-                    for (int y = 0; y < res; y++)
+                    for (int x = 0; x < res; x++)
                     {{
-                        for (int x = 0; x < res; x++)
+                        if (byteIndex + 1 < rawBytes.Length)
                         {{
-                            ushort value = {decode_expr};
+                            ushort value = (ushort)(rawBytes[byteIndex] | (rawBytes[byteIndex + 1] << 8));
                             heights[y, x] = value / 65535f;
                             byteIndex += 2;
                         }}
                     }}
-                    terrainData.SetHeights(0, 0, heights);
                 }}
+                terrainData.SetHeights(0, 0, heights);
             }}
             else
             {{
@@ -264,17 +238,15 @@ public static class VeilBreakers_TerrainSetup
             AssetDatabase.CreateAsset(terrainData, assetPath);
             AssetDatabase.SaveAssets();
 
-            // Write terrain manifest
-            string manifest = "{{\\"status\\": \\"success\\", \\"action\\": \\"setup_terrain\\", \\"terrain_name\\": \\"VB_Terrain\\", \\"resolution\\": {resolution}, \\"size\\": \\"{size[0]}x{size[1]}x{size[2]}\\", \\"heightmap\\": \\"{safe_heightmap_path}\\", \\"byte_order\\": \\"{byte_order}\\", \\"alphamap\\": \\"{sanitize_cs_string(alphamap_path or '')}\\", \\"splatmap_layers\\": {len(splatmap_layers or [])}}}";
-            File.WriteAllText("Temp/vb_result.json", manifest);
-            File.WriteAllText("Temp/vb_terrain_manifest.json", manifest);
+            string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"setup_terrain\\", \\"terrain_name\\": \\"VB_Terrain\\", \\"resolution\\": {resolution}, \\"size\\": \\"{size[0]}x{size[1]}x{size[2]}\\"}}";
+            File.WriteAllText("Temp/vb_result.json", json);
             Debug.Log("[VeilBreakers] Terrain setup completed.");
         }}
         catch (System.Exception ex)
         {{
             string json = "{{\\"status\\": \\"error\\", \\"action\\": \\"setup_terrain\\", \\"message\\": \\"" + ex.Message.Replace("\\"", "\\\\\\"") + "\\"}}";
             File.WriteAllText("Temp/vb_result.json", json);
-            Debug.LogError("[VeilBreakers] Terrain setup failed: " + ex.Message);
+        Debug.LogError("[VeilBreakers] Terrain setup failed: " + ex.Message);
         }}
     }}
 }}
@@ -287,7 +259,6 @@ def generate_tiled_terrain_setup_script(
     default_resolution: int = 513,
     splatmap_layers: list[dict] | None = None,
     parent_name: str = "VB_TerrainRoot",
-    byte_order: str = "little",
 ) -> str:
     """Generate C# editor script that creates a tiled terrain set.
 
@@ -306,18 +277,12 @@ def generate_tiled_terrain_setup_script(
         default_resolution: Fallback heightmap resolution for tiles that omit it.
         splatmap_layers: Optional shared terrain layers applied to every tile.
         parent_name: Name of the parent GameObject that contains all tiles.
-        byte_order: Endianness of RAW heightmaps -- ``"little"`` or ``"big"``.
 
     Returns:
         Complete C# source string.
-
-    Raises:
-        ValueError: If byte_order is invalid or tiles is empty.
     """
     if not tiles:
         raise ValueError("tiles must not be empty")
-    if byte_order not in ("little", "big"):
-        raise ValueError(f"byte_order must be 'little' or 'big', got {byte_order!r}")
 
     safe_parent_name = sanitize_cs_string(parent_name)
 
@@ -376,46 +341,42 @@ def generate_tiled_terrain_setup_script(
             string tile{suffix}AlphamapPath = Path.Combine(Application.dataPath, "{safe_alphamap_path}".Replace("Assets/", ""));
             if (File.Exists(tile{suffix}AlphamapPath))
             {{
-                byte[] alphaRaw{suffix} = File.ReadAllBytes(tile{suffix}AlphamapPath);
+                byte[] rawBytes{suffix} = File.ReadAllBytes(tile{suffix}AlphamapPath);
                 int tile{suffix}AlphaW = terrainData{suffix}.alphamapWidth;
                 int tile{suffix}AlphaH = terrainData{suffix}.alphamapHeight;
                 int tile{suffix}Channels = {len(splatmap_layers)};
-                int tile{suffix}ExpectedAlpha = tile{suffix}AlphaW * tile{suffix}AlphaH * tile{suffix}Channels;
-                if (alphaRaw{suffix}.Length != tile{suffix}ExpectedAlpha)
+                float[,,] tile{suffix}Alphamaps = new float[tile{suffix}AlphaH, tile{suffix}AlphaW, tile{suffix}Channels];
+                int tile{suffix}ByteIndex = 0;
+                for (int ay = 0; ay < tile{suffix}AlphaH; ay++)
                 {{
-                    Debug.LogError("[VeilBreakers] Tile {index} alphamap size mismatch: expected " + tile{suffix}ExpectedAlpha + " bytes but got " + alphaRaw{suffix}.Length);
-                }}
-                else
-                {{
-                    float[,,] tile{suffix}Alphamaps = new float[tile{suffix}AlphaH, tile{suffix}AlphaW, tile{suffix}Channels];
-                    int tile{suffix}ByteIndex = 0;
-                    for (int ay = 0; ay < tile{suffix}AlphaH; ay++)
+                    for (int ax = 0; ax < tile{suffix}AlphaW; ax++)
                     {{
-                        for (int ax = 0; ax < tile{suffix}AlphaW; ax++)
+                        float tile{suffix}Total = 0f;
+                        for (int c = 0; c < tile{suffix}Channels; c++)
                         {{
-                            float tile{suffix}Total = 0f;
+                            float value = 0f;
+                            if (tile{suffix}ByteIndex < rawBytes{suffix}.Length)
+                            {{
+                                value = rawBytes{suffix}[tile{suffix}ByteIndex] / 255f;
+                                tile{suffix}ByteIndex++;
+                            }}
+                            tile{suffix}Alphamaps[ay, ax, c] = value;
+                            tile{suffix}Total += value;
+                        }}
+                        if (tile{suffix}Total <= 0f)
+                        {{
+                            tile{suffix}Alphamaps[ay, ax, 0] = 1f;
+                        }}
+                        else
+                        {{
                             for (int c = 0; c < tile{suffix}Channels; c++)
                             {{
-                                float value = alphaRaw{suffix}[tile{suffix}ByteIndex] / 255f;
-                                tile{suffix}ByteIndex++;
-                                tile{suffix}Alphamaps[ay, ax, c] = value;
-                                tile{suffix}Total += value;
-                            }}
-                            if (tile{suffix}Total <= 0f)
-                            {{
-                                tile{suffix}Alphamaps[ay, ax, 0] = 1f;
-                            }}
-                            else
-                            {{
-                                for (int c = 0; c < tile{suffix}Channels; c++)
-                                {{
-                                    tile{suffix}Alphamaps[ay, ax, c] /= tile{suffix}Total;
-                                }}
+                                tile{suffix}Alphamaps[ay, ax, c] /= tile{suffix}Total;
                             }}
                         }}
                     }}
-                    terrainData{suffix}.SetAlphamaps(0, 0, tile{suffix}Alphamaps);
                 }}
+                terrainData{suffix}.SetAlphamaps(0, 0, tile{suffix}Alphamaps);
             }}
             else
             {{
@@ -430,14 +391,8 @@ def generate_tiled_terrain_setup_script(
                 for (int ax = 0; ax < tile{suffix}AlphaW; ax++)
                     tile{suffix}Alphamaps[ay, ax, 0] = 1f;
             terrainData{suffix}.SetAlphamaps(0, 0, tile{suffix}Alphamaps);"""
-        # Build decode expression for this tile based on byte_order
-        if byte_order == "little":
-            tile_decode = f"(ushort)(rawBytes{suffix}[byteIndex{suffix}] | (rawBytes{suffix}[byteIndex{suffix} + 1] << 8))"
-        else:
-            tile_decode = f"(ushort)((rawBytes{suffix}[byteIndex{suffix}] << 8) | rawBytes{suffix}[byteIndex{suffix} + 1])"
-
         tile_blocks.append(f"""
-            // Tile {index}: {safe_tile_name} (16-bit {byte_order}-endian)
+            // Tile {index}: {safe_tile_name}
             var terrainData{suffix} = new TerrainData();
             terrainData{suffix}.heightmapResolution = {resolution};
             terrainData{suffix}.size = new Vector3({size[0]}f, {size[1]}f, {size[2]}f);
@@ -447,26 +402,21 @@ def generate_tiled_terrain_setup_script(
             {{
                 byte[] rawBytes{suffix} = File.ReadAllBytes(heightmapPath{suffix});
                 int res{suffix} = {resolution};
-                int expectedBytes{suffix} = res{suffix} * res{suffix} * 2;
-                if (rawBytes{suffix}.Length != expectedBytes{suffix})
+                float[,] heights{suffix} = new float[res{suffix}, res{suffix}];
+                int byteIndex{suffix} = 0;
+                for (int y = 0; y < res{suffix}; y++)
                 {{
-                    Debug.LogError("[VeilBreakers] Tile {index} heightmap size mismatch: expected " + expectedBytes{suffix} + " bytes (" + res{suffix} + "x" + res{suffix} + " at 16-bit) but got " + rawBytes{suffix}.Length);
-                }}
-                else
-                {{
-                    float[,] heights{suffix} = new float[res{suffix}, res{suffix}];
-                    int byteIndex{suffix} = 0;
-                    for (int y = 0; y < res{suffix}; y++)
+                    for (int x = 0; x < res{suffix}; x++)
                     {{
-                        for (int x = 0; x < res{suffix}; x++)
+                        if (byteIndex{suffix} + 1 < rawBytes{suffix}.Length)
                         {{
-                            ushort value = {tile_decode};
+                            ushort value = (ushort)(rawBytes{suffix}[byteIndex{suffix}] | (rawBytes{suffix}[byteIndex{suffix} + 1] << 8));
                             heights{suffix}[y, x] = value / 65535f;
                             byteIndex{suffix} += 2;
                         }}
                     }}
-                    terrainData{suffix}.SetHeights(0, 0, heights{suffix});
                 }}
+                terrainData{suffix}.SetHeights(0, 0, heights{suffix});
             }}
             else
             {{
@@ -520,9 +470,8 @@ public static class VeilBreakers_TiledTerrainSetup
 
             AssetDatabase.SaveAssets();
 
-            string manifest = "{{\\"status\\": \\"success\\", \\"action\\": \\"setup_tiled_terrain\\", \\"tile_count\\": {len(tiles)}, \\"byte_order\\": \\"{byte_order}\\", \\"splatmap_layers\\": {len(splatmap_layers or [])}, \\"tile_names\\": \\"" + string.Join(",", tileNames) + "\\"}}";
-            File.WriteAllText("Temp/vb_result.json", manifest);
-            File.WriteAllText("Temp/vb_terrain_manifest.json", manifest);
+            string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"setup_tiled_terrain\\", \\"tile_count\\": {len(tiles)}, \\"tile_names\\": \\"" + string.Join(",", tileNames) + "\\"}}";
+            File.WriteAllText("Temp/vb_result.json", json);
             Debug.Log("[VeilBreakers] Tiled terrain setup completed.");
         }}
         catch (System.Exception ex)

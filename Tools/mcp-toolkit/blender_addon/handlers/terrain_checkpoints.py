@@ -17,11 +17,8 @@ No Blender / bpy imports. Pure Python + numpy — fully unit-testable.
 from __future__ import annotations
 
 import json
-import logging
 import time
 import uuid
-
-logger = logging.getLogger(__name__)
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -354,7 +351,7 @@ def autosave_after_pass(controller: TerrainPassController, enabled: bool = True)
                     )
                 except Exception:
                     # Autosave must never break the pipeline
-                    logger.debug("Autosave failed for pass %s", pass_name, exc_info=True)
+                    pass
             return result
 
         controller.run_pass = wrapped_run_pass  # type: ignore[method-assign]

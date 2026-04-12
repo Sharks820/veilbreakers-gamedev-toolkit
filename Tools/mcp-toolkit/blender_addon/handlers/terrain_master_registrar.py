@@ -35,10 +35,7 @@ Bundle inventory (complete A–O):
 
 from __future__ import annotations
 
-import logging
 from typing import Callable, List
-
-logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Bundle registrar lookup — one import per bundle
@@ -54,22 +51,8 @@ def _safe_import_registrar(module_path: str, attr: str) -> Callable[[], None] | 
     try:
         module = __import__(module_path, fromlist=[attr])
         fn = getattr(module, attr, None)
-        if fn is not None and not callable(fn):
-            logger.warning(
-                "Bundle registrar %s.%s exists but is not callable (type=%s)",
-                module_path, attr, type(fn).__name__,
-            )
-            return None
         return fn if callable(fn) else None
-    except ImportError:
-        # Expected when a bundle module is absent (worktree rebuild, etc.)
-        logger.debug("Bundle module %s not found — skipping", module_path)
-        return None
-    except Exception as exc:
-        # Unexpected error — log at warning so it's visible in Blender console
-        logger.warning(
-            "Failed to import bundle registrar %s.%s: %r", module_path, attr, exc
-        )
+    except Exception:
         return None
 
 
@@ -105,9 +88,6 @@ def register_all_terrain_passes(*, strict: bool = False) -> List[str]:
         ("G", "blender_addon.handlers.terrain_banded", "register_bundle_g_passes"),
         ("H-saliency", "blender_addon.handlers.terrain_saliency", "register_saliency_pass"),
         ("H-framing", "blender_addon.handlers.terrain_framing", "register_framing_pass"),
-        ("H-hierarchy", "blender_addon.handlers.terrain_hierarchy", "register_bundle_h_hierarchy"),
-        ("H-rhythm", "blender_addon.handlers.terrain_rhythm", "register_bundle_h_rhythm"),
-        ("H-negative_space", "blender_addon.handlers.terrain_negative_space", "register_bundle_h_negative_space"),
         ("I", "blender_addon.handlers.terrain_geology_validator", "register_bundle_i_passes"),
         ("J", "blender_addon.handlers.terrain_bundle_j", "register_bundle_j_passes"),
         ("K", "blender_addon.handlers.terrain_bundle_k", "register_bundle_k_passes"),

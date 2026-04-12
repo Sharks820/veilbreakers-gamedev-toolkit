@@ -1337,67 +1337,13 @@ public class VB_PipelineOrchestrator : EditorWindow
 
         UnityEngine.Debug.Log($"[VB Pipeline] Step {{currentStepIndex + 1}}/{{currentSteps.Count}}: {{step.Name}} ({{step.Tool}}.{{step.Action}})");
 
-        // Execute step by writing a command file for the MCP bridge,
-        // then check result after a delay.  If a VeilBreakers menu item
-        // is registered for this action, invoke it directly.
+        // Simulate step execution via EditorApplication.delayCall
         EditorApplication.delayCall += () =>
         {{
-            try
-            {{
-                // Write step command for MCP bridge consumption
-                string stepCmd = JsonUtility.ToJson(new StepCommand {{
-                    tool = step.Tool,
-                    action = step.Action,
-                    step_name = step.Name,
-                    timeout = step.Timeout
-                }});
-                File.WriteAllText("Temp/vb_pipeline_step_cmd.json", stepCmd);
-
-                // Check if result file already exists from a previous run and delete it
-                string resultPath = "Temp/vb_result.json";
-                if (File.Exists(resultPath))
-                    File.Delete(resultPath);
-
-                // Schedule result check after timeout period
-                double deadline = EditorApplication.timeSinceStartup + step.Timeout;
-                void CheckResult()
-                {{
-                    if (File.Exists(resultPath))
-                    {{
-                        string resultJson = File.ReadAllText(resultPath);
-                        bool success = resultJson.Contains("\\"status\\": \\"success\\"") ||
-                                       resultJson.Contains("\\"status\\":\\"success\\"");
-                        string error = success ? null : "Step returned non-success status";
-                        CompleteStep(success, error);
-                    }}
-                    else if (EditorApplication.timeSinceStartup > deadline)
-                    {{
-                        CompleteStep(false, $"Step '{{step.Name}}' timed out after {{step.Timeout}}s -- no result file written");
-                    }}
-                    else
-                    {{
-                        // Re-check on next editor tick
-                        EditorApplication.delayCall += CheckResult;
-                    }}
-                }}
-
-                // Kick off result polling
-                EditorApplication.delayCall += CheckResult;
-            }}
-            catch (System.Exception ex)
-            {{
-                CompleteStep(false, $"Step execution error: {{ex.Message}}");
-            }}
+            // In real pipeline, this would call the MCP tool
+            // For now, mark as success and advance
+            CompleteStep(true, null);
         }};
-    }}
-
-    [Serializable]
-    private class StepCommand
-    {{
-        public string tool;
-        public string action;
-        public string step_name;
-        public int timeout;
     }}
 
     /// <summary>

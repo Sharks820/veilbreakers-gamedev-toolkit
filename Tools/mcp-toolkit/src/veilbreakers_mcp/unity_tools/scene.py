@@ -55,7 +55,6 @@ async def unity_scene(
     splatmap_layers: list[dict] | None = None,
     terrain_tiles: list[dict] | None = None,
     tile_parent_name: str = "VB_TerrainRoot",
-    byte_order: str = "little",
     # Scatter params
     prefab_paths: list[str] | None = None,
     density: float = 0.5,
@@ -105,13 +104,12 @@ async def unity_scene(
     try:
         if action == "setup_terrain":
             return await _handle_scene_setup_terrain(
-                heightmap_path, alphamap_path, terrain_size, terrain_resolution,
-                splatmap_layers, byte_order,
+                heightmap_path, alphamap_path, terrain_size, terrain_resolution, splatmap_layers
             )
         elif action == "setup_tiled_terrain":
             return await _handle_scene_setup_tiled_terrain(
                 terrain_tiles, terrain_size, terrain_resolution, splatmap_layers,
-                tile_parent_name, byte_order,
+                tile_parent_name,
             )
         elif action == "scatter_objects":
             return await _handle_scene_scatter_objects(
@@ -164,7 +162,6 @@ async def _handle_scene_setup_terrain(
     terrain_size: list[float] | None,
     terrain_resolution: int,
     splatmap_layers: list[dict] | None,
-    byte_order: str = "little",
 ) -> str:
     """Create terrain from heightmap (SCENE-01)."""
     if not heightmap_path:
@@ -182,7 +179,6 @@ async def _handle_scene_setup_terrain(
         resolution=terrain_resolution,
         splatmap_layers=splatmap_layers,
         alphamap_path=alphamap_path or None,
-        byte_order=byte_order,
     )
     script_path = "Assets/Editor/Generated/Scene/VeilBreakers_TerrainSetup.cs"
 
@@ -214,7 +210,6 @@ async def _handle_scene_setup_tiled_terrain(
     terrain_resolution: int,
     splatmap_layers: list[dict] | None,
     tile_parent_name: str,
-    byte_order: str = "little",
 ) -> str:
     """Create a tiled terrain set from multiple heightmap tiles."""
     if not terrain_tiles:
@@ -232,7 +227,6 @@ async def _handle_scene_setup_tiled_terrain(
         default_resolution=terrain_resolution,
         splatmap_layers=splatmap_layers,
         parent_name=tile_parent_name,
-        byte_order=byte_order,
     )
     script_path = "Assets/Editor/Generated/Scene/VeilBreakers_TiledTerrainSetup.cs"
 

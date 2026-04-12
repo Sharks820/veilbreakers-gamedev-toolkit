@@ -27,12 +27,9 @@ re-composable bands + a domain-warp field:
 
 from __future__ import annotations
 
-import logging
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Tuple
-
-logger = logging.getLogger(__name__)
 
 import numpy as np
 
@@ -618,13 +615,11 @@ def pass_banded_macro(state, region):  # type: ignore[no-untyped-def]
         try:
             state.banded_cache = {}  # type: ignore[attr-defined]
         except Exception:
-            # State object may be frozen or read-only; cache is optional.
-            logger.debug("Cannot init banded_cache on state", exc_info=True)
+            pass
     try:
         state.banded_cache[side_effect_token] = bands  # type: ignore[attr-defined]
     except Exception:
-        # Cache write is best-effort; downstream reads fall back gracefully.
-        logger.debug("Cannot store bands in banded_cache", exc_info=True)
+        pass
 
     return PassResult(
         pass_name="banded_macro",
@@ -645,24 +640,6 @@ def pass_banded_macro(state, region):  # type: ignore[no-untyped-def]
             "band_strata_std": float(bands.strata_band.std()),
         },
     )
-
-
-def get_banded_cache(state: Any) -> Optional[Dict[str, "BandedHeightmap"]]:
-    """Retrieve the banded-cache stashed by ``pass_banded_macro``.
-
-    Returns ``None`` if the cache was never written (pass not yet run, or
-    state was frozen). Downstream passes (e.g. erosion, vegetation scatter)
-    can use this to access individual frequency bands without re-generating
-    them.
-
-    Usage::
-
-        cache = get_banded_cache(state)
-        if cache:
-            for token, bands in cache.items():
-                print(bands.macro_band.shape, bands.meso_band.shape)
-    """
-    return getattr(state, "banded_cache", None) or None
 
 
 def register_bundle_g_passes() -> None:
@@ -698,7 +675,6 @@ __all__ = [
     "generate_banded_heightmap",
     "compose_banded_heightmap",
     "pass_banded_macro",
-    "get_banded_cache",
     "register_bundle_g_passes",
     # Re-export so legacy callers can still reach the old backend via
     # ``from blender_addon.handlers.terrain_banded import generate_heightmap``.
