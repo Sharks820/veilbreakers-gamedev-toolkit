@@ -764,3 +764,72 @@ Plans:
 *v10.0 Phase 46 planned: 2026-04-04*
 *v10.0 Phase 47 planned: 2026-04-04*
 *v10.0 Phase 48 planned: 2026-04-04*
+*v11.0 Terrain AAA Overhaul phases added: 2026-04-12*
+
+---
+
+## v11.0 Terrain AAA Overhaul — Phases 49-59
+
+**Goal:** Fix all ~780 terrain findings, 84 AAA gaps, implement analytical erosion, seamless node merging, AAA materials, Unity integration.
+**Branch:** feature/terrain-world-foundation
+**Audit:** .planning/terrain_audit_2026-04-11/FINDINGS.md (7 rounds, 22 agents)
+**Best practices:** .planning/terrain_audit_2026-04-11/BEST_PRACTICES.md
+
+### Phase 49: Foundation — Test Infrastructure + Contract Regen
+**Depends on:** v10.0 complete
+**Requirements:** TFIX-001
+**Goal:** Replace MagicMock conftest with strict fake_bpy, regenerate terrain.yaml, fix test_substance_lint blind spots. Establish honest test baseline.
+**Plans:** 2 plans
+Plans:
+- [ ] 49-01-PLAN.md — Replace MagicMock conftest with strict fake_bpy + fix substance lint np.testing blind spot
+- [ ] 49-02-PLAN.md — Regenerate terrain.yaml + establish honest test baseline
+
+### Phase 50: Analytical Erosion Filter
+**Depends on:** Phase 49
+**Requirements:** TFIX-002
+**Goal:** Port runevision analytical erosion to numpy, replace broken droplet sim (F277), add ridgeMap output, per-pixel biome overrides, finite-diff gradient fallback.
+
+### Phase 51: Dead Delta Integration
+**Depends on:** Phase 50
+**Requirements:** TFIX-003
+**Goal:** Create integrator pass, wire waterfall/cave/stratigraphy deltas to stack.height. Delete bug-ratifying tests.
+
+### Phase 52: Bundle I Delta Conversion
+**Depends on:** Phase 51
+**Requirements:** TFIX-004
+**Goal:** Convert coastline/karst/wind/glacial from height-overwriters to delta-producers. Add AST lint rule.
+
+### Phase 53: BakedTerrain + Path Unification
+**Depends on:** Phase 52
+**Requirements:** TFIX-005
+**Goal:** Define BakedTerrain contract, unify all 5 authoring paths. Fix compose_map LOD dispatch.
+
+### Phase 54: Seam System + Node Merging
+**Depends on:** Phase 53
+**Requirements:** TFIX-006
+**Goal:** Fix seam guards, add hero blend-weight, create node registry, cross-tile validation. Puzzle-piece tiling.
+
+### Phase 55: Scatter + Rivers + Water
+**Depends on:** Phase 54
+**Requirements:** TFIX-007
+**Goal:** Fix scatter Z=0/slope, wire river mesh, build waterfall mesh, implement slope-threshold instancing + path network.
+
+### Phase 56: Material Pipeline + Shaders
+**Depends on:** Phase 55
+**Requirements:** TFIX-008
+**Goal:** Wire V2 materials to Blender, upgrade Unity shader (wetness, POM, macro variation, terrain holes, wind).
+
+### Phase 57: Unity Integration
+**Depends on:** Phase 56
+**Requirements:** TFIX-009
+**Goal:** Add AdvancedTerrainErosion UPM, fix size/resolution bridging, add terrain LOD/holes/trees/collision.
+
+### Phase 58: Cleanup — Silent Swallows + Stubs
+**Depends on:** Phase 57
+**Requirements:** TFIX-010
+**Goal:** Replace all bare except:pass, fix registrar, delete dead modules, vectorize flow_map, fix all remaining P2s.
+
+### Phase 59: Final Verification
+**Depends on:** Phase 58
+**Requirements:** TFIX-011
+**Goal:** All tests green, all lints clean, code reviewer 0 P0/P1, FINDINGS.md shows resolution status for every finding.
