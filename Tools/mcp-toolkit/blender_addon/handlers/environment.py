@@ -63,21 +63,6 @@ _VALID_EROSION_MODES = frozenset({"none", "hydraulic", "thermal", "both"})
 _MAX_RESOLUTION = 4096  # 8192 can OOM Blender; 4096 is practical AAA limit
 
 
-def _parse_bool(value: Any) -> bool:
-    """Parse a boolean value correctly, handling string 'false'/'true'.
-
-    F152: bool("false") == True in Python -- this helper fixes that.
-    Accepts bool, int, and common string representations.
-    """
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return bool(value)
-    if isinstance(value, str):
-        return value.strip().lower() in ("true", "1", "yes")
-    return bool(value)
-
-
 def _detect_grid_dims(bm) -> tuple[int, int]:
     """WORLD-004: Detect actual (rows, cols) of a terrain grid mesh.
 
@@ -1000,15 +985,9 @@ def handle_generate_terrain(params: dict) -> dict:
     erosion = validated["erosion"]
     erosion_iters = validated["erosion_iterations"]
 
-    # F140: Auto-scale erosion only when caller did NOT explicitly set iterations.
-    # When caller supplies erosion_iterations, respect their value even if < 150K.
-    # This prevents uncontrolled escalation (e.g. 5000 -> 150000+) on large grids.
-    _caller_set_erosion_iters = "erosion_iterations" in params
-    if (
-        erosion in ("hydraulic", "both")
-        and erosion_iters < 150000
-        and not _caller_set_erosion_iters
-    ):
+    # Auto-scale erosion: minimum 150K droplets for AAA-quality river channels
+    # and natural-looking drainage (Skyrim/Valhalla uses 150K+ for visible features)
+    if erosion in ("hydraulic", "both") and erosion_iters < 150000:
         erosion_iters = max(150000, resolution * resolution // 2)
 
     # Domain warp params (organic terrain features)
@@ -1041,31 +1020,27 @@ def handle_generate_terrain(params: dict) -> dict:
         heightmap = erosion_result["heightmap"]
         erosion_applied = True
 
-    # F143: Compute moisture map BEFORE flatten_zones so drainage signal is
-    # derived from the natural terrain, not from flattened building pads.
-    # F144: Compute moisture unconditionally (not only when erosion_applied)
-    # so splatmap painting always has drainage data.
-    moisture_map = None
-    from .terrain_advanced import compute_flow_map
-    flow_result = compute_flow_map(heightmap)
-    flow_acc = np.asarray(flow_result["flow_accumulation"], dtype=np.float64)
-    # Normalize flow accumulation to [0, 1] using log scale
-    log_flow = np.log1p(flow_acc)
-    fa_max = float(log_flow.max())
-    if fa_max > 0:
-        moisture_map = log_flow / fa_max
-    else:
-        moisture_map = np.zeros_like(heightmap)
-
-    # Apply flatten zones for building foundations AFTER moisture (MESH-05, F143)
+    # Apply flatten zones for building foundations (MESH-05)
     flatten_zones = params.get("flatten_zones", None)
     if flatten_zones:
         from .terrain_advanced import flatten_multiple_zones
         heightmap = flatten_multiple_zones(heightmap, flatten_zones)
 
-    # F142: Separate world-size from noise scale. terrain_size controls the
-    # physical extent of the mesh; scale controls noise frequency.
-    terrain_size = float(params.get("terrain_size", scale))
+    # Compute moisture map from flow accumulation (for splatmap painting)
+    moisture_map = None
+    if erosion_applied:
+        from .terrain_advanced import compute_flow_map
+        flow_result = compute_flow_map(heightmap)
+        flow_acc = np.asarray(flow_result["flow_accumulation"], dtype=np.float64)
+        # Normalize flow accumulation to [0, 1] using log scale
+        log_flow = np.log1p(flow_acc)
+        fa_max = log_flow.max()
+        if fa_max > 0:
+            moisture_map = log_flow / fa_max
+        else:
+            moisture_map = np.zeros_like(heightmap)
+
+    terrain_size = scale
     terrain_result = _create_terrain_mesh_from_heightmap(
         name=name,
         heightmap=heightmap,
@@ -1074,7 +1049,7 @@ def handle_generate_terrain(params: dict) -> dict:
         seed=seed,
         terrain_type=terrain_type,
         object_location=(0.0, 0.0, 0.0),
-        cliff_overlays_enabled=_parse_bool(params.get("cliff_overlays", True)),
+        cliff_overlays_enabled=params.get("cliff_overlays", True),
         cliff_threshold_deg=params.get("cliff_threshold_deg", 60.0),
     )
 
@@ -1128,11 +1103,11 @@ def handle_generate_terrain_tile(params: dict) -> dict:
     warp_scale = float(params.get("warp_scale", 0.5))
     world_center_x = params.get("world_center_x")
     world_center_y = params.get("world_center_y")
-    cliff_overlays_enabled = _parse_bool(params.get("cliff_overlays", True))
+    cliff_overlays_enabled = bool(params.get("cliff_overlays", True))
     cliff_threshold = float(params.get("cliff_threshold_deg", 60.0))
     erosion_margin = max(0, int(params.get("erosion_margin", 0)))
     biome_name = params.get("biome_name", params.get("terrain_type", "thornwood_forest"))
-    export_splatmaps = _parse_bool(params.get("export_splatmaps", True))
+    export_splatmaps = bool(params.get("export_splatmaps", True))
     export_root = Path(
         params.get("export_dir")
         or params.get("output_dir")
@@ -1163,15 +1138,20 @@ def handle_generate_terrain_tile(params: dict) -> dict:
         world_center_y=world_center_y,
     )
 
-    # F148: single erode_world_heightmap call for "both" (was double-eroding)
     erosion_applied = False
-    _hydraulic = erosion_iters if erosion in ("hydraulic", "both") else 0
-    _thermal = max(erosion_iters // 50, 5) if erosion in ("thermal", "both") else 0
-    if _hydraulic > 0 or _thermal > 0:
+    if erosion in ("hydraulic", "both"):
         heightmap = erode_world_heightmap(
             heightmap,
-            hydraulic_iterations=_hydraulic,
-            thermal_iterations=_thermal,
+            hydraulic_iterations=erosion_iters,
+            thermal_iterations=0,
+            seed=seed,
+        )["heightmap"]
+        erosion_applied = True
+    if erosion in ("thermal", "both"):
+        heightmap = erode_world_heightmap(
+            heightmap,
+            hydraulic_iterations=0,
+            thermal_iterations=max(erosion_iters // 50, 5),
             seed=seed,
         )["heightmap"]
         erosion_applied = True
@@ -1182,20 +1162,6 @@ def handle_generate_terrain_tile(params: dict) -> dict:
             erosion_margin : erosion_margin + tile_size + 1,
         ]
 
-    # F143/F144: Compute moisture BEFORE flatten_zones (preserve drainage signal)
-    # and unconditionally (not just when export_splatmaps).
-    from .terrain_advanced import compute_flow_map
-    moisture_map = None
-    flow_result = compute_flow_map(heightmap)
-    flow_acc = np.asarray(flow_result["flow_accumulation"], dtype=np.float64)
-    log_flow = np.log1p(flow_acc)
-    fa_max = float(log_flow.max())
-    if fa_max > 0:
-        moisture_map = log_flow / fa_max
-    else:
-        moisture_map = np.zeros_like(heightmap)
-
-    # Apply flatten zones AFTER moisture (F143)
     flatten_zones = params.get("flatten_zones", None)
     if flatten_zones:
         from .terrain_advanced import flatten_multiple_zones
@@ -1203,6 +1169,8 @@ def handle_generate_terrain_tile(params: dict) -> dict:
 
     # Ask _resolve_height_range without local fallback; fall back to the
     # per-terrain-type estimator only when no explicit range was supplied.
+    # This is clean "single source of truth" for range resolution and fixes
+    # the duplicate key-presence check (Gemini consensus finding).
     height_range = _resolve_height_range(
         params, heightmap, allow_local_fallback=False
     )
@@ -1213,8 +1181,20 @@ def handle_generate_terrain_tile(params: dict) -> dict:
             persistence=persistence,
         )
 
+    moisture_map = None
     splatmap = None
     if export_splatmaps:
+        from .terrain_advanced import compute_flow_map
+
+        flow_result = compute_flow_map(heightmap)
+        flow_acc = np.asarray(flow_result["flow_accumulation"], dtype=np.float64)
+        log_flow = np.log1p(flow_acc)
+        fa_max = float(log_flow.max())
+        if fa_max > 0:
+            moisture_map = log_flow / fa_max
+        else:
+            moisture_map = np.zeros_like(heightmap)
+
         splatmap = compute_world_splatmap_weights(
             heightmap,
             biome_name=biome_name,
@@ -1376,18 +1356,7 @@ def handle_run_terrain_pass(params: dict) -> dict:
         if pass_name not in TerrainPassController.PASS_REGISTRY
     ]
     if missing_passes or not TerrainPassController.PASS_REGISTRY:
-        # F151: capture and log return value so skipped bundles are visible
-        loaded_bundles = register_all_terrain_passes(strict=False)
-        still_missing = [
-            p for p in requested_passes
-            if p not in TerrainPassController.PASS_REGISTRY
-        ]
-        if still_missing:
-            logger.warning(
-                "Terrain passes still missing after registration "
-                "(loaded bundles: %s): %s",
-                loaded_bundles, still_missing,
-            )
+        register_all_terrain_passes(strict=False)
 
     tile_size = int(params.get("tile_size", 64))
     cell_size = float(params.get("cell_size", 1.0))
@@ -1517,14 +1486,14 @@ def handle_run_terrain_pass(params: dict) -> dict:
     # Every production mutation handler MUST route through ProtocolGate.
     # Callers that cannot attach a full scene/vantage (unit tests, CLI dev
     # runs) opt out via ``enforce_protocol=False`` in params.
-    if _parse_bool(params.get("enforce_protocol", False)):
+    if bool(params.get("enforce_protocol", False)):
         from .terrain_protocol import ProtocolGate, ProtocolViolation
 
         try:
             ProtocolGate.rule_1_observe_before_calculate(state)
             ProtocolGate.rule_2_sync_to_user_viewport(
                 state,
-                out_of_view_ok=_parse_bool(params.get("out_of_view_ok", True)),
+                out_of_view_ok=bool(params.get("out_of_view_ok", True)),
             )
             ProtocolGate.rule_3_lock_reference_empties(state)
             ProtocolGate.rule_4_real_geometry_not_vertex_tricks(params)
@@ -1532,7 +1501,7 @@ def handle_run_terrain_pass(params: dict) -> dict:
                 state,
                 cells_affected=int(params.get("cells_affected", 0)),
                 objects_affected=int(params.get("objects_affected", 0)),
-                bulk_edit=_parse_bool(params.get("bulk_edit", True)),
+                bulk_edit=bool(params.get("bulk_edit", True)),
             )
             ProtocolGate.rule_6_surface_vs_interior_classification(params)
             ProtocolGate.rule_7_plugin_usage(params)
@@ -1549,7 +1518,7 @@ def handle_run_terrain_pass(params: dict) -> dict:
     pipeline = params.get("pipeline")
 
     composition_hints = params.get("composition_hints") or {}
-    unity_export_opt_out = _parse_bool(composition_hints.get("unity_export_opt_out", False))
+    unity_export_opt_out = bool(composition_hints.get("unity_export_opt_out", False))
 
     if pipeline is None and pass_name is None:
         pipeline = ["macro_world", "structural_masks", "validation_minimal"]
@@ -1566,42 +1535,20 @@ def handle_run_terrain_pass(params: dict) -> dict:
             insert_at = pipeline.index("validation_full")
             pipeline.insert(insert_at, "prepare_heightmap_raw_u16")
 
-    # F150: try/finally ensures cleanup of leaked bpy meshes/objects on exception
-    _leaked_meshes = []
-    _leaked_objects = []
-    try:
-        # Snapshot meshes/objects before pass execution for cleanup tracking
-        try:
-            _pre_meshes = set(bpy.data.meshes[:])
-            _pre_objects = set(bpy.data.objects[:])
-        except Exception:
-            _pre_meshes = set()
-            _pre_objects = set()
-
-        if pipeline is not None:
-            results = controller.run_pipeline(
-                pass_sequence=pipeline,
+    if pipeline is not None:
+        results = controller.run_pipeline(
+            pass_sequence=pipeline,
+            region=region,
+            checkpoint=bool(params.get("checkpoint", False)),
+        )
+    else:
+        results = [
+            controller.run_pass(
+                str(pass_name),
                 region=region,
-                checkpoint=_parse_bool(params.get("checkpoint", False)),
+                checkpoint=bool(params.get("checkpoint", False)),
             )
-        else:
-            results = [
-                controller.run_pass(
-                    str(pass_name),
-                    region=region,
-                    checkpoint=_parse_bool(params.get("checkpoint", False)),
-                )
-            ]
-    except Exception:
-        # Clean up any meshes/objects created during the failed pass
-        try:
-            for obj in set(bpy.data.objects[:]) - _pre_objects:
-                bpy.data.objects.remove(obj, do_unlink=True)
-            for mesh in set(bpy.data.meshes[:]) - _pre_meshes:
-                bpy.data.meshes.remove(mesh)
-        except Exception:
-            pass  # best-effort cleanup in exception handler
-        raise
+        ]
 
     def _serialize(pr) -> dict:
         return {
@@ -1674,7 +1621,7 @@ def handle_generate_waterfall(params: dict) -> dict:
             width=max(float(chosen["width"]), 1.0),
             pool_radius=max(float(params.get("pool_radius", chosen["width"] * 1.5)), 1.0),
             num_steps=int(params.get("num_steps", 3)),
-            has_cave_behind=_parse_bool(params.get("has_cave_behind", True)),
+            has_cave_behind=bool(params.get("has_cave_behind", True)),
             seed=int(params.get("seed", 42)),
         )
         fallback["authoring_path"] = "water_network_derived"
@@ -2158,7 +2105,7 @@ def handle_create_water(params: dict) -> dict:
     material_name = params.get("material_name", "Water_Material")
     path_points_raw = params.get("path_points")
     cross_sections = max(8, min(16, int(params.get("cross_sections", 12))))
-    preview_fast = _parse_bool(params.get("preview_fast", True))
+    preview_fast = bool(params.get("preview_fast", True))
 
     # If terrain specified, use its Z for water level snapping
     terrain_origin_x = 0.0
