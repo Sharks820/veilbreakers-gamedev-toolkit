@@ -2932,6 +2932,8 @@ async def asset_pipeline(
                     save_pipeline_checkpoint as _save_cp,
                 )
             except ImportError:
+                # pipeline_state module not available outside Blender addon env
+                logger.debug("_save_chkpt skipped: pipeline_state not importable")
                 return
             _save_cp(checkpoint_dir, {
                 "map_name": map_name,
@@ -3113,8 +3115,8 @@ async def asset_pipeline(
                             "blend_distance": loc_radius * 0.5,
                         })
                         _flatten_ok = True
-                    except Exception:
-                        pass
+                    except Exception as _flat_exc:
+                        logger.debug("terrain_flatten_zone failed, trying spline fallback: %s", _flat_exc)
                     if not _flatten_ok:
                         # Fallback: spline deform for non-heightmap terrain
                         try:
@@ -3130,8 +3132,8 @@ async def asset_pipeline(
                                 "falloff": 0.85,
                                 "width": loc_radius * 0.4,
                             })
-                        except Exception:
-                            pass  # Non-fatal
+                        except Exception as _spline_exc:
+                            logger.debug("Spline deform fallback also failed: %s", _spline_exc)
 
                     # Auto-compute foundation profile from terrain slope
                     if corner_heights and len(corner_heights) >= 5:
@@ -3341,8 +3343,8 @@ async def asset_pipeline(
                                 "object": _obj_name,
                                 "issues": _gc.get("summary", "Unknown"),
                             })
-                    except Exception:
-                        pass  # Skip objects that can't be checked
+                    except Exception as _gc_exc:
+                        logger.debug("Game-check skipped for %s: %s", _obj_name, _gc_exc)
                 steps_completed.append("game_check_validated")
                 _save_chkpt()
             except Exception as e:
@@ -3358,8 +3360,8 @@ async def asset_pipeline(
                             "channels": ["diffuse", "normal", "ao"],
                             "resolution": 1024,
                         })
-                    except Exception:
-                        pass  # Bake failures are non-fatal
+                    except Exception as _bake_exc:
+                        logger.debug("Texture bake skipped for %s: %s", _obj_name, _bake_exc)
                 steps_completed.append("textures_baked")
                 _save_chkpt()
             except Exception as e:
@@ -3374,8 +3376,8 @@ async def asset_pipeline(
                             "action": "generate_lods",
                             "object_name": _obj_name,
                         })
-                    except Exception:
-                        pass  # LOD failures are non-fatal
+                    except Exception as _lod_exc:
+                        logger.debug("LOD generation skipped for %s: %s", _obj_name, _lod_exc)
                 steps_completed.append("lods_generated")
                 _save_chkpt()
             except Exception as e:
@@ -3409,8 +3411,8 @@ async def asset_pipeline(
                             "output_path": _veg_path,
                             "terrain_name": terrain_name or f"{map_name}_Terrain",
                         })
-                    except Exception:
-                        pass  # Non-fatal if vegetation collection empty
+                    except Exception as _veg_exc:
+                        logger.debug("Vegetation serialize skipped: %s", _veg_exc)
 
                 if terrain_name:
                     try:
@@ -3420,8 +3422,8 @@ async def asset_pipeline(
                             "output_path": _splat_path,
                             "target_resolution": 512,
                         })
-                    except Exception:
-                        pass  # Non-fatal if terrain has no splatmap layer
+                    except Exception as _splat_exc:
+                        logger.debug("Splatmap export skipped: %s", _splat_exc)
 
                 steps_completed.append("data_exported")
                 _save_chkpt()
@@ -3453,8 +3455,8 @@ async def asset_pipeline(
                             "object_names": _grp_objects,
                         })
                         _fbx_files.append(_fbx_path)
-                    except Exception:
-                        pass
+                    except Exception as _fbx_exc:
+                        logger.debug("FBX export skipped for group %s: %s", _grp['group_name'], _fbx_exc)
                 steps_completed.append("fbx_exported")
                 _save_chkpt()
             except Exception as e:
@@ -3548,8 +3550,8 @@ async def asset_pipeline(
                             "failed_checks": _failed_checks,
                             "summary": _chk.get("summary", "Unknown failure"),
                         })
-                except Exception:
-                    pass
+                except Exception as _chk_exc:
+                    logger.debug("Game-check skipped for %s in map package: %s", _obj_name, _chk_exc)
 
         if _game_failures and not _mp_skip_check:
             return json.dumps({
@@ -3569,8 +3571,8 @@ async def asset_pipeline(
                         "object_name": _obj_name,
                     })
                     _lod_count += 1
-                except Exception:
-                    pass
+                except Exception as _lod_pkg_exc:
+                    logger.debug("LOD generation skipped for %s in map package: %s", _obj_name, _lod_pkg_exc)
 
         # Step 3: Derive Addressable groups
         _addr_groups = _derive_groups(
@@ -3595,8 +3597,8 @@ async def asset_pipeline(
                 })
                 if _os.path.isfile(_export_path):
                     _fbx_files.append(_export_path)
-            except Exception:
-                pass
+            except Exception as _fbx_pkg_exc:
+                logger.debug("FBX export skipped for group %s in map package: %s", _grp_name, _fbx_pkg_exc)
 
         # Step 5: Emit scene hierarchy JSON
         _hierarchy_path = _os.path.join(_mp_export_dir, _mp_name, "scene_hierarchy.json")
@@ -3604,7 +3606,8 @@ async def asset_pipeline(
             _hierarchy = _emit_hierarchy(_mp_name, _mp_locations, created_objects=_mp_objects)
             with open(_hierarchy_path, "w", encoding="utf-8") as _fh:
                 json.dump(_hierarchy, _fh, indent=2, default=str)
-        except RuntimeError:
+        except RuntimeError as _hier_exc:
+            logger.debug("Scene hierarchy emission failed: %s", _hier_exc)
             _hierarchy_path = None
 
         return {
