@@ -64,6 +64,17 @@ class ThermalErosionMasks:
     metrics: dict = field(default_factory=dict)
 
 
+@dataclass
+class MultiMaterialThermalResult:
+    """Output of multi-material thermal erosion with sediment/bedrock separation."""
+
+    height: np.ndarray              # final combined height (bedrock + sediment)
+    sediment_height: np.ndarray     # sediment layer thickness per cell
+    bedrock_height: np.ndarray      # bedrock surface height per cell
+    talus: np.ndarray               # accumulated material moved per cell
+    metrics: dict = field(default_factory=dict)
+
+
 # ---------------------------------------------------------------------------
 # Hydraulic erosion — new masks entry point
 # ---------------------------------------------------------------------------
@@ -510,11 +521,136 @@ def apply_thermal_erosion(
     return np.clip(masks.height, source_min, source_max)
 
 
+# ---------------------------------------------------------------------------
+# Multi-material thermal erosion (Phase 51, task 2.8)
+# ---------------------------------------------------------------------------
+
+
+def apply_multi_material_thermal_erosion(
+    heightmap: np.ndarray,
+    *,
+    sediment_height: np.ndarray,
+    bedrock_height: np.ndarray,
+    rock_hardness: np.ndarray,
+    iterations: int = 10,
+    talus_angle: float = 40.0,
+    cell_size: float = 1.0,
+) -> MultiMaterialThermalResult:
+    """Thermal erosion with separate sediment and bedrock layers.
+
+    Erosion depletes sediment first; only erodes bedrock when sediment
+    is exhausted. Deposition always adds to the sediment buffer.
+    Rock hardness modulates the erosion rate per-cell: harder rock
+    transfers less material.
+
+    Parameters
+    ----------
+    heightmap : (H, W) float64 — total surface height
+    sediment_height : (H, W) float64 — thickness of sediment layer
+    bedrock_height : (H, W) float64 — bedrock surface elevation
+    rock_hardness : (H, W) float64 — 0=soft, 1=hard
+    iterations : int — number of relaxation sweeps
+    talus_angle : float — critical angle in degrees
+    cell_size : float — world-space cell size in meters
+
+    Returns
+    -------
+    MultiMaterialThermalResult with updated height, sediment, bedrock, talus.
+    """
+    h = np.asarray(heightmap, dtype=np.float64).copy()
+    sed = np.asarray(sediment_height, dtype=np.float64).copy()
+    bed = np.asarray(bedrock_height, dtype=np.float64).copy()
+    hardness = np.clip(np.asarray(rock_hardness, dtype=np.float64), 0.0, 1.0)
+    rows, cols = h.shape
+
+    sample_spacing = max(float(cell_size), 1e-9)
+    talus_threshold = math.tan(math.radians(talus_angle))
+
+    offsets = []
+    for dr in (-1, 0, 1):
+        for dc in (-1, 0, 1):
+            if dr == 0 and dc == 0:
+                continue
+            dist = math.sqrt(dr * dr + dc * dc)
+            offsets.append((dr, dc, dist))
+
+    talus_accumulated = np.zeros_like(h, dtype=np.float64)
+
+    for _iteration in range(iterations):
+        padded = np.pad(h, 1, mode="edge")
+
+        accumulated_total_diff = np.zeros_like(h)
+        accumulated_max_diff = np.zeros_like(h)
+        neighbor_excess: list[tuple[int, int, np.ndarray]] = []
+
+        for dr, dc, dist in offsets:
+            shifted = padded[1 + dr: 1 + dr + rows, 1 + dc: 1 + dc + cols]
+            slope = (h - shifted) / (dist * sample_spacing)
+            excess = np.maximum(slope - talus_threshold, 0.0)
+            accumulated_total_diff += excess
+            accumulated_max_diff = np.maximum(accumulated_max_diff, excess)
+            neighbor_excess.append((dr, dc, excess))
+
+        has_transfer = accumulated_total_diff > 0
+        # Rock hardness reduces transfer: soft rock (0) = full transfer,
+        # hard rock (1) = minimal transfer
+        erosion_factor = 1.0 - hardness * 0.9  # hard rock keeps 90% strength
+        transfer = accumulated_max_diff * 0.5 * erosion_factor
+
+        for dr, dc, excess in neighbor_excess:
+            with np.errstate(divide="ignore", invalid="ignore"):
+                fraction = np.where(
+                    has_transfer, excess / accumulated_total_diff, 0.0
+                )
+            amount = transfer * fraction * has_transfer
+
+            # Deplete sediment first, then bedrock
+            from_sediment = np.minimum(amount, sed)
+            from_bedrock = amount - from_sediment
+
+            # Update source cell
+            sed -= from_sediment
+            bed -= from_bedrock
+            h -= amount
+            talus_accumulated += amount
+
+            # Deposit at destination — always goes into sediment
+            r_src_start = max(0, -dr)
+            r_src_end = min(rows, rows - dr)
+            c_src_start = max(0, -dc)
+            c_src_end = min(cols, cols - dc)
+            r_dst_start = max(0, dr)
+            c_dst_start = max(0, dc)
+            r_dst_end = r_dst_start + (r_src_end - r_src_start)
+            c_dst_end = c_dst_start + (c_src_end - c_src_start)
+
+            deposit = amount[r_src_start:r_src_end, c_src_start:c_src_end]
+            sed[r_dst_start:r_dst_end, c_dst_start:c_dst_end] += deposit
+            h[r_dst_start:r_dst_end, c_dst_start:c_dst_end] += deposit
+
+    return MultiMaterialThermalResult(
+        height=h,
+        sediment_height=sed,
+        bedrock_height=bed,
+        talus=talus_accumulated,
+        metrics={
+            "iterations": int(iterations),
+            "talus_angle": float(talus_angle),
+            "cell_size": float(cell_size),
+            "total_talus_moved": float(talus_accumulated.sum()),
+            "sediment_mean": float(sed.mean()),
+            "bedrock_mean": float(bed.mean()),
+        },
+    )
+
+
 __all__ = [
     "ErosionMasks",
     "ThermalErosionMasks",
+    "MultiMaterialThermalResult",
     "apply_hydraulic_erosion",
     "apply_hydraulic_erosion_masks",
     "apply_thermal_erosion",
     "apply_thermal_erosion_masks",
+    "apply_multi_material_thermal_erosion",
 ]
