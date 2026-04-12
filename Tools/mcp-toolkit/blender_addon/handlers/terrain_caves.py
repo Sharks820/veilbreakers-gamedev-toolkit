@@ -964,6 +964,14 @@ def get_cave_entrance_specs(
 # ---------------------------------------------------------------------------
 
 
+def _hash_int(x: int) -> int:
+    """Deterministic integer hash (Robert Jenkins 32-bit mix)."""
+    x = ((x >> 16) ^ x) * 0x45D9F3B
+    x = ((x >> 16) ^ x) * 0x45D9F3B
+    x = (x >> 16) ^ x
+    return x & 0x7FFFFFFF
+
+
 def _perlin_1d(t: float, seed: int, octaves: int = 3) -> float:
     """Simple 1D value noise for worm path perturbation.
 
@@ -980,9 +988,9 @@ def _perlin_1d(t: float, seed: int, octaves: int = 3) -> float:
         frac = (t * frequency) - n
         # Smoothstep
         frac_s = frac * frac * (3.0 - 2.0 * frac)
-        # Two hash values
-        h0 = ((n * 127 + seed * 311 + o * 997) & 0x7FFFFFFF) / 0x7FFFFFFF * 2.0 - 1.0
-        h1 = (((n + 1) * 127 + seed * 311 + o * 997) & 0x7FFFFFFF) / 0x7FFFFFFF * 2.0 - 1.0
+        # Two hash values using robust integer mixing
+        h0 = _hash_int(n * 73856093 ^ seed * 19349663 ^ o * 83492791) / 0x7FFFFFFF * 2.0 - 1.0
+        h1 = _hash_int((n + 1) * 73856093 ^ seed * 19349663 ^ o * 83492791) / 0x7FFFFFFF * 2.0 - 1.0
         value += (h0 + (h1 - h0) * frac_s) * amplitude
         max_amp += amplitude
         amplitude *= 0.5
