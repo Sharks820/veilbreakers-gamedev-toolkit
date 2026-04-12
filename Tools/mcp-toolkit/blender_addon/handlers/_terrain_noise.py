@@ -718,11 +718,22 @@ def _astar(
     dest: tuple[int, int],
     slope_weight: float = 5.0,
     height_weight: float = 1.0,
+    prefer_downhill: bool = False,
 ) -> list[tuple[int, int]]:
     """A* pathfinding on a heightmap.
 
-    Cost = height difference * slope_weight + destination height * height_weight.
-    Prefers downhill paths and low-height cells.
+    When ``prefer_downhill`` is False (default, legacy behavior for roads):
+        Cost = step_dist + abs(h_diff) * slope_weight + h_next * height_weight
+
+    When ``prefer_downhill`` is True (river mode):
+        Uphill steps are penalized 10x heavier than downhill steps.
+        Downhill steps have near-zero slope cost, encouraging natural drainage.
+        A lateral-deviation penalty nudges the path away from straight lines
+        and toward valleys.
+
+    This asymmetric cost is the ROOT FIX for straight rivers: the old
+    symmetric ``abs(h_diff)`` cost made downhill just as expensive as uphill,
+    so A* took the shortest Euclidean path instead of following terrain.
     """
     rows, cols = heightmap.shape
     sr, sc = source
@@ -744,6 +755,13 @@ def _astar(
     def heuristic(r: int, c: int) -> float:
         return math.sqrt((r - dr) ** 2 + (c - dc) ** 2)
 
+    # For downhill mode: compute a straight-line vector from source to dest
+    # to penalize lateral sameness (encourages meander-like deviation).
+    if prefer_downhill:
+        s2d_r = dr - sr
+        s2d_c = dc - sc
+        s2d_len = math.sqrt(s2d_r * s2d_r + s2d_c * s2d_c) or 1.0
+
     while open_set:
         f, g, cr, cc = heapq.heappop(open_set)
 
@@ -761,13 +779,33 @@ def _astar(
             return path
 
         for nr, nc in _neighbors(cr, cc, rows, cols):
-            h_diff = abs(float(heightmap[nr, nc]) - float(heightmap[cr, cc]))
+            h_cur = float(heightmap[cr, cc])
+            h_next = float(heightmap[nr, nc])
+            h_diff = h_next - h_cur  # positive = uphill, negative = downhill
             step_dist = math.sqrt((nr - cr) ** 2 + (nc - cc) ** 2)
-            move_cost = (
-                step_dist
-                + h_diff * slope_weight
-                + float(heightmap[nr, nc]) * height_weight
-            )
+
+            if prefer_downhill:
+                # River-mode asymmetric cost:
+                # - Downhill (h_diff < 0): very cheap, encourages following drainage
+                # - Flat (h_diff ~ 0): moderate cost
+                # - Uphill (h_diff > 0): very expensive, 10x slope_weight
+                if h_diff < 0:
+                    slope_cost = abs(h_diff) * slope_weight * 0.1
+                else:
+                    slope_cost = h_diff * slope_weight * 10.0
+
+                # Valley preference: lower absolute height is cheaper
+                valley_cost = h_next * height_weight * 0.5
+
+                move_cost = step_dist + slope_cost + valley_cost
+            else:
+                # Legacy symmetric cost (roads, etc.)
+                move_cost = (
+                    step_dist
+                    + abs(h_diff) * slope_weight
+                    + h_next * height_weight
+                )
+
             tentative_g = g + move_cost
 
             if tentative_g < g_score.get((nr, nc), float("inf")):
@@ -826,7 +864,7 @@ def carve_river_path(
     result = heightmap.copy()
     rows, cols = result.shape
 
-    path = _astar(result, source, dest, slope_weight=8.0, height_weight=2.0)
+    path = _astar(result, source, dest, slope_weight=8.0, height_weight=2.0, prefer_downhill=True)
 
     # Carve channel along path
     half_w = width // 2
@@ -919,6 +957,587 @@ def generate_road_path(
 
     result = np.clip(result, 0.0, 1.0)
     return full_path, result
+
+
+# ---------------------------------------------------------------------------
+# Meander — sinusoidal lateral perturbation for natural river curves
+# ---------------------------------------------------------------------------
+
+def add_meander(
+    path: list[tuple[int, int]],
+    amplitude: float = 3.0,
+    wavelength: float = 20.0,
+    seed: int = 0,
+    heightmap: np.ndarray | None = None,
+) -> list[tuple[int, int]]:
+    """Apply meander perturbation to a river path for natural-looking curves.
+
+    Rivers in nature don't follow straight or purely drainage-optimal lines.
+    They develop sinusoidal meanders due to erosion dynamics. This function
+    post-processes an A* path by displacing points laterally using a sum of
+    sine waves with varying frequency and phase, then snaps results back to
+    the grid.
+
+    Parameters
+    ----------
+    path : list of (row, col)
+        Input path from A* or any grid pathfinder.
+    amplitude : float
+        Maximum lateral displacement in cells. Controls how wide the
+        bends are. Typical: 2-5 for narrow streams, 5-15 for wide rivers.
+    wavelength : float
+        Base wavelength of meander oscillation in path-steps. Shorter
+        wavelengths produce tighter bends. Typical: 15-40.
+    seed : int
+        Random seed for phase offsets and harmonic variation.
+    heightmap : np.ndarray or None
+        If provided, clamps displaced points to valid grid bounds and
+        avoids pushing the path uphill by more than 20% of the local
+        height range.
+
+    Returns
+    -------
+    list of (row, col)
+        Meandered path, same start/end points as input.
+    """
+    if len(path) < 4:
+        return list(path)
+
+    rng = np.random.default_rng(seed)
+    n = len(path)
+    rows_max = cols_max = 999999
+    if heightmap is not None:
+        rows_max, cols_max = heightmap.shape
+
+    # Convert to float arrays for smooth displacement
+    rs = np.array([p[0] for p in path], dtype=np.float64)
+    cs = np.array([p[1] for p in path], dtype=np.float64)
+
+    # Compute per-vertex tangent vectors
+    tangents_r = np.zeros(n, dtype=np.float64)
+    tangents_c = np.zeros(n, dtype=np.float64)
+    tangents_r[1:-1] = rs[2:] - rs[:-2]
+    tangents_c[1:-1] = cs[2:] - cs[:-2]
+    tangents_r[0] = rs[1] - rs[0]
+    tangents_c[0] = cs[1] - cs[0]
+    tangents_r[-1] = rs[-1] - rs[-2]
+    tangents_c[-1] = cs[-1] - cs[-2]
+
+    # Normalize tangents
+    lengths = np.sqrt(tangents_r ** 2 + tangents_c ** 2)
+    lengths = np.where(lengths < 1e-8, 1.0, lengths)
+    tangents_r /= lengths
+    tangents_c /= lengths
+
+    # Left-normals (perpendicular to tangent)
+    normals_r = -tangents_c
+    normals_c = tangents_r
+
+    # Cumulative arc-length parameter for sine wave
+    arc = np.zeros(n, dtype=np.float64)
+    for i in range(1, n):
+        dr = rs[i] - rs[i - 1]
+        dc = cs[i] - cs[i - 1]
+        arc[i] = arc[i - 1] + math.sqrt(dr * dr + dc * dc)
+
+    # Multi-harmonic meander: sum of 3 sine waves with different frequencies
+    phase1 = rng.uniform(0, 2 * math.pi)
+    phase2 = rng.uniform(0, 2 * math.pi)
+    phase3 = rng.uniform(0, 2 * math.pi)
+    wl = max(wavelength, 4.0)
+
+    displacement = (
+        amplitude * 0.6 * np.sin(2 * math.pi * arc / wl + phase1)
+        + amplitude * 0.3 * np.sin(2 * math.pi * arc / (wl * 0.5) + phase2)
+        + amplitude * 0.1 * np.sin(2 * math.pi * arc / (wl * 2.0) + phase3)
+    )
+
+    # Taper to zero at start and end to preserve endpoints
+    taper = np.ones(n, dtype=np.float64)
+    taper_len = max(3, n // 8)
+    for i in range(taper_len):
+        t = i / taper_len
+        taper[i] = t * t  # quadratic ease-in
+        taper[n - 1 - i] = t * t
+    displacement *= taper
+
+    # Apply lateral displacement
+    new_rs = rs + displacement * normals_r
+    new_cs = cs + displacement * normals_c
+
+    # Clamp to grid bounds
+    new_rs = np.clip(new_rs, 0, rows_max - 1)
+    new_cs = np.clip(new_cs, 0, cols_max - 1)
+
+    # If heightmap provided, reject displacements that push strongly uphill
+    if heightmap is not None:
+        h_range = float(heightmap.max() - heightmap.min()) or 1.0
+        uphill_limit = h_range * 0.2
+        for i in range(1, n - 1):
+            nr, nc = int(round(new_rs[i])), int(round(new_cs[i]))
+            nr = max(0, min(rows_max - 1, nr))
+            nc = max(0, min(cols_max - 1, nc))
+            or_, oc = int(round(rs[i])), int(round(cs[i]))
+            or_ = max(0, min(rows_max - 1, or_))
+            oc = max(0, min(cols_max - 1, oc))
+            if float(heightmap[nr, nc]) - float(heightmap[or_, oc]) > uphill_limit:
+                # Revert this point
+                new_rs[i] = rs[i]
+                new_cs[i] = cs[i]
+
+    # Force exact start and end
+    new_rs[0] = rs[0]
+    new_cs[0] = cs[0]
+    new_rs[-1] = rs[-1]
+    new_cs[-1] = cs[-1]
+
+    # Convert back to integer grid coordinates, dedup consecutive duplicates
+    result: list[tuple[int, int]] = []
+    for i in range(n):
+        r = int(round(new_rs[i]))
+        c = int(round(new_cs[i]))
+        r = max(0, min(rows_max - 1, r))
+        c = max(0, min(cols_max - 1, c))
+        if not result or result[-1] != (r, c):
+            result.append((r, c))
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# River surface mesh generation
+# ---------------------------------------------------------------------------
+
+def generate_river_mesh(
+    path: list[tuple[int, int]],
+    heightmap: np.ndarray,
+    width: float = 2.0,
+    depth_offset: float = 0.15,
+    segments_per_cell: int = 2,
+) -> dict:
+    """Generate a river surface mesh (quad strip) from a grid path.
+
+    Creates a ribbon of quads following the river path, with the surface
+    slightly below terrain height to represent water level. The mesh is
+    suitable for Blender import or MeshSpec-style consumption.
+
+    Parameters
+    ----------
+    path : list of (row, col)
+        River path on the heightmap grid.
+    heightmap : np.ndarray
+        2D heightmap array.
+    width : float
+        River width in cells.
+    depth_offset : float
+        How far below the terrain surface the water sits.
+    segments_per_cell : int
+        Tessellation density along the path.
+
+    Returns
+    -------
+    dict with keys:
+        "vertices": list of (x, y, z) tuples
+        "faces": list of (v0, v1, v2, v3) quad index tuples
+        "vertex_count": int
+        "face_count": int
+        "path_length": int
+        "width": float
+    """
+    if len(path) < 2:
+        return {
+            "vertices": [],
+            "faces": [],
+            "vertex_count": 0,
+            "face_count": 0,
+            "path_length": len(path),
+            "width": width,
+        }
+
+    rows, cols = heightmap.shape
+    half_w = width / 2.0
+    vertices: list[tuple[float, float, float]] = []
+    faces: list[tuple[int, int, int, int]] = []
+
+    # Resample path at finer resolution if requested
+    if segments_per_cell > 1 and len(path) > 1:
+        fine_path: list[tuple[float, float]] = []
+        for i in range(len(path) - 1):
+            r0, c0 = path[i]
+            r1, c1 = path[i + 1]
+            for s in range(segments_per_cell):
+                t = s / segments_per_cell
+                fine_path.append((r0 + t * (r1 - r0), c0 + t * (c1 - c0)))
+        fine_path.append((float(path[-1][0]), float(path[-1][1])))
+    else:
+        fine_path = [(float(r), float(c)) for r, c in path]
+
+    n = len(fine_path)
+    if n < 2:
+        return {
+            "vertices": [],
+            "faces": [],
+            "vertex_count": 0,
+            "face_count": 0,
+            "path_length": len(path),
+            "width": width,
+        }
+
+    # Compute tangent and normal at each point
+    for i in range(n):
+        r, c = fine_path[i]
+
+        # Tangent from neighboring points
+        if i == 0:
+            tr = fine_path[1][0] - fine_path[0][0]
+            tc = fine_path[1][1] - fine_path[0][1]
+        elif i == n - 1:
+            tr = fine_path[-1][0] - fine_path[-2][0]
+            tc = fine_path[-1][1] - fine_path[-2][1]
+        else:
+            tr = fine_path[i + 1][0] - fine_path[i - 1][0]
+            tc = fine_path[i + 1][1] - fine_path[i - 1][1]
+
+        tlen = math.sqrt(tr * tr + tc * tc)
+        if tlen < 1e-8:
+            tr, tc = 0.0, 1.0
+        else:
+            tr /= tlen
+            tc /= tlen
+
+        # Left normal (perpendicular)
+        nr = -tc
+        nc = tr
+
+        # Sample height at center
+        ri = max(0, min(rows - 1, int(round(r))))
+        ci = max(0, min(cols - 1, int(round(c))))
+        h = float(heightmap[ri, ci]) - depth_offset
+
+        # Left and right bank vertices
+        # Using row=Y, col=X convention for world coords
+        vertices.append((c - nr * half_w, r - nc * half_w, h))
+        vertices.append((c + nr * half_w, r + nc * half_w, h))
+
+    # Build quad strip: each segment connects two cross-sections
+    for i in range(n - 1):
+        v0 = i * 2       # left of current cross-section
+        v1 = i * 2 + 1   # right of current cross-section
+        v2 = (i + 1) * 2 + 1  # right of next
+        v3 = (i + 1) * 2      # left of next
+        faces.append((v0, v1, v2, v3))
+
+    return {
+        "vertices": vertices,
+        "faces": faces,
+        "vertex_count": len(vertices),
+        "face_count": len(faces),
+        "path_length": len(path),
+        "width": width,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Lake surface mesh generation
+# ---------------------------------------------------------------------------
+
+def generate_lake_mesh(
+    center_row: int,
+    center_col: int,
+    heightmap: np.ndarray,
+    radius: float = 10.0,
+    resolution: int = 24,
+    shore_noise: float = 0.15,
+    depth_offset: float = 0.2,
+    seed: int = 0,
+) -> dict:
+    """Generate a lake surface mesh (radial disc with shore noise).
+
+    Creates a roughly circular water surface centered at the given grid
+    position, with organic shoreline variation. The mesh sits slightly
+    below terrain to represent the water table.
+
+    Parameters
+    ----------
+    center_row, center_col : int
+        Center of the lake on the heightmap grid.
+    heightmap : np.ndarray
+        2D heightmap array.
+    radius : float
+        Base radius of the lake in cells.
+    resolution : int
+        Number of radial segments around the perimeter.
+    shore_noise : float
+        Amplitude of Perlin-like shore variation as fraction of radius.
+    depth_offset : float
+        How far below the center terrain height the water surface sits.
+    seed : int
+        Random seed for shore noise.
+
+    Returns
+    -------
+    dict with keys:
+        "vertices": list of (x, y, z) tuples
+        "faces": list of face index tuples
+        "vertex_count": int
+        "face_count": int
+        "center": (x, y, z)
+        "radius": float
+    """
+    rows, cols = heightmap.shape
+    cr = max(0, min(rows - 1, center_row))
+    cc = max(0, min(cols - 1, center_col))
+    center_h = float(heightmap[cr, cc]) - depth_offset
+
+    rng = np.random.default_rng(seed)
+    vertices: list[tuple[float, float, float]] = []
+    faces: list[tuple[int, ...]] = []
+
+    # Center vertex
+    vertices.append((float(cc), float(cr), center_h))
+
+    # Radial rings: inner ring at 0.4*radius and outer ring at full radius
+    rings = 3
+    for ring_idx in range(1, rings + 1):
+        ring_frac = ring_idx / rings
+        ring_r = radius * ring_frac
+
+        for i in range(resolution):
+            angle = 2 * math.pi * i / resolution
+
+            # Shore noise on outer ring only
+            noise = 0.0
+            if ring_idx == rings:
+                # Sum of 2 harmonics for organic shoreline
+                noise = shore_noise * radius * (
+                    0.7 * math.sin(3 * angle + rng.uniform(0, 2 * math.pi))
+                    + 0.3 * math.sin(7 * angle + rng.uniform(0, 2 * math.pi))
+                )
+
+            r_actual = ring_r + noise
+            vr = cr + r_actual * math.sin(angle)
+            vc = cc + r_actual * math.cos(angle)
+
+            # Sample terrain height at this point for gentle draping
+            sri = max(0, min(rows - 1, int(round(vr))))
+            sci = max(0, min(cols - 1, int(round(vc))))
+            local_h = float(heightmap[sri, sci])
+            # Water surface is flat or gently curved — use the lower of
+            # center height and local terrain minus offset
+            vh = min(center_h, local_h - depth_offset * 0.5)
+
+            vertices.append((float(vc), float(vr), vh))
+
+    # Build faces
+    # Inner fan: center to first ring
+    for i in range(resolution):
+        v0 = 0  # center
+        v1 = 1 + i
+        v2 = 1 + (i + 1) % resolution
+        faces.append((v0, v1, v2))
+
+    # Ring-to-ring quads
+    for ring_idx in range(1, rings):
+        base_inner = 1 + (ring_idx - 1) * resolution
+        base_outer = 1 + ring_idx * resolution
+        for i in range(resolution):
+            i0 = base_inner + i
+            i1 = base_inner + (i + 1) % resolution
+            o0 = base_outer + i
+            o1 = base_outer + (i + 1) % resolution
+            faces.append((i0, i1, o1, o0))
+
+    return {
+        "vertices": vertices,
+        "faces": faces,
+        "vertex_count": len(vertices),
+        "face_count": len(faces),
+        "center": (float(cc), float(cr), center_h),
+        "radius": radius,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Waterfall volumetric mesh generation
+# ---------------------------------------------------------------------------
+
+def generate_waterfall_volumetric_mesh(
+    lip_pos: tuple[float, float, float],
+    pool_pos: tuple[float, float, float],
+    width: float = 3.0,
+    thickness_top: float = 0.3,
+    thickness_bottom: float = 0.8,
+    curvature_segments: int = 6,
+    vertical_segments: int = 12,
+    taper_exponent: float = 1.4,
+    seed: int = 0,
+) -> dict:
+    """Generate a 3D volumetric waterfall mesh (thick tapered prism, rounded front).
+
+    Waterfalls MUST be 3D volumetric meshes, never flat planes. This function
+    creates a tapered prism that is thicker at the bottom (splash zone) than
+    the top (lip), with a rounded front face for visual readability.
+
+    Parameters
+    ----------
+    lip_pos : (x, y, z)
+        World position of the waterfall lip (top).
+    pool_pos : (x, y, z)
+        World position of the impact pool (bottom).
+    width : float
+        Width of the waterfall sheet.
+    thickness_top : float
+        Thickness at the lip (thin).
+    thickness_bottom : float
+        Thickness at the pool (thicker due to splash diffusion).
+    curvature_segments : int
+        Number of segments for the rounded front face. Must be >= 3.
+    vertical_segments : int
+        Number of vertical subdivisions along the drop.
+    taper_exponent : float
+        Controls how thickness grows from top to bottom. 1.0 = linear.
+    seed : int
+        Random seed for surface noise.
+
+    Returns
+    -------
+    dict with keys:
+        "vertices": list of (x, y, z) tuples
+        "faces": list of face index tuples
+        "vertex_count": int
+        "face_count": int
+        "drop_height": float
+        "is_volumetric": True
+        "thickness_top": float
+        "thickness_bottom": float
+    """
+    curvature_segments = max(3, curvature_segments)
+    vertical_segments = max(2, vertical_segments)
+
+    rng = np.random.default_rng(seed)
+
+    lx, ly, lz = float(lip_pos[0]), float(lip_pos[1]), float(lip_pos[2])
+    px, py, pz = float(pool_pos[0]), float(pool_pos[1]), float(pool_pos[2])
+    drop_height = lz - pz
+    if drop_height < 0.1:
+        drop_height = 0.1
+
+    # Direction vector from lip to pool (horizontal component)
+    dx = px - lx
+    dy = py - ly
+    horiz_dist = math.sqrt(dx * dx + dy * dy)
+    if horiz_dist < 1e-6:
+        # Straight down — pick arbitrary forward direction
+        fwd_x, fwd_y = 0.0, 1.0
+    else:
+        fwd_x = dx / horiz_dist
+        fwd_y = dy / horiz_dist
+
+    # Right vector (perpendicular to forward in XY plane)
+    right_x = -fwd_y
+    right_y = fwd_x
+
+    half_w = width / 2.0
+    vertices: list[tuple[float, float, float]] = []
+    faces: list[tuple[int, ...]] = []
+
+    # Generate cross-sections at each vertical level
+    # Each cross-section is a rounded-front profile:
+    #   back edge (flat) -> curved front
+    # The profile in local coords (across width, forward depth):
+    #   Back: straight line at depth=0
+    #   Front: semicircular arc at depth=thickness
+
+    for vi in range(vertical_segments + 1):
+        t = vi / vertical_segments  # 0 at top, 1 at bottom
+
+        # Interpolate position along the drop
+        cx = lx + t * (px - lx)
+        cy = ly + t * (py - ly)
+        cz = lz - t * drop_height
+
+        # Taper: thickness increases from top to bottom
+        thickness = thickness_top + (thickness_bottom - thickness_top) * (t ** taper_exponent)
+
+        # Add small surface noise for organic appearance
+        noise_amp = 0.02 * thickness
+
+        # Back edge: straight line across width
+        for wi in range(curvature_segments + 1):
+            wt = wi / curvature_segments  # 0=left, 1=right
+            local_x = -half_w + wt * width
+
+            # Back vertex (depth = 0)
+            wx = cx + local_x * right_x
+            wy = cy + local_x * right_y
+            noise = rng.uniform(-noise_amp, noise_amp)
+            vertices.append((wx, wy, cz + noise))
+
+        # Front edge: curved arc across width
+        for wi in range(curvature_segments + 1):
+            wt = wi / curvature_segments
+            angle = math.pi * wt  # 0 to pi for semicircle
+            local_x = -half_w + wt * width
+
+            # Curved front: sinusoidal depth profile
+            local_depth = thickness * math.sin(angle)
+            # Also add the base forward offset
+            base_depth = thickness * 0.3
+
+            wx = cx + local_x * right_x + (base_depth + local_depth) * fwd_x
+            wy = cy + local_x * right_y + (base_depth + local_depth) * fwd_y
+            noise = rng.uniform(-noise_amp, noise_amp)
+            vertices.append((wx, wy, cz + noise))
+
+    # Build faces connecting adjacent cross-sections
+    verts_per_section = 2 * (curvature_segments + 1)
+
+    for vi in range(vertical_segments):
+        base_top = vi * verts_per_section
+        base_bot = (vi + 1) * verts_per_section
+
+        # Back face quads
+        for wi in range(curvature_segments):
+            v0 = base_top + wi
+            v1 = base_top + wi + 1
+            v2 = base_bot + wi + 1
+            v3 = base_bot + wi
+            faces.append((v0, v1, v2, v3))
+
+        # Front face quads
+        front_offset = curvature_segments + 1
+        for wi in range(curvature_segments):
+            v0 = base_top + front_offset + wi
+            v1 = base_top + front_offset + wi + 1
+            v2 = base_bot + front_offset + wi + 1
+            v3 = base_bot + front_offset + wi
+            faces.append((v0, v1, v2, v3))
+
+        # Side caps: connect back edges to front edges on left and right
+        # Left side
+        v0 = base_top
+        v1 = base_top + front_offset
+        v2 = base_bot + front_offset
+        v3 = base_bot
+        faces.append((v0, v1, v2, v3))
+
+        # Right side
+        v0 = base_top + curvature_segments
+        v1 = base_top + front_offset + curvature_segments
+        v2 = base_bot + front_offset + curvature_segments
+        v3 = base_bot + curvature_segments
+        faces.append((v0, v1, v2, v3))
+
+    return {
+        "vertices": vertices,
+        "faces": faces,
+        "vertex_count": len(vertices),
+        "face_count": len(faces),
+        "drop_height": drop_height,
+        "is_volumetric": True,
+        "thickness_top": thickness_top,
+        "thickness_bottom": thickness_bottom,
+    }
 
 
 # ---------------------------------------------------------------------------
