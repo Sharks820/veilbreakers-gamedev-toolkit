@@ -164,27 +164,21 @@ def _make_noise_generator(seed: int) -> _PermTableNoise:
 class _OpenSimplexWrapper(_PermTableNoise):
     """Wrap the real opensimplex library with vectorized noise support.
 
-    The scalar ``noise2()`` delegates to the real opensimplex for exact
-    compatibility with existing tests that check specific values.
-    The vectorized ``noise2_array()`` uses the parent class's numpy-native
-    Perlin implementation (permutation table), which is 50-200x faster
-    than calling opensimplex.noise2 per-pixel via np.vectorize.
+    F805 fix: Both ``noise2()`` and ``noise2_array()`` now use the same
+    permutation-table Perlin implementation so that scalar and array
+    evaluations produce identical results for the same coordinates.
 
-    The heightmap output values will differ slightly from pure-opensimplex
-    (different noise algorithm), but all terrain-shaping properties
-    (determinism, range, distribution) are preserved.
+    The real opensimplex library is kept as ``_os`` for potential future
+    use but is NOT used for evaluation — consistency trumps algorithm choice.
     """
 
     def __init__(self, seed: int = 0) -> None:
         super().__init__(seed)
         self._os = _RealOpenSimplex(seed=seed)  # type: ignore[misc]
 
-    def noise2(self, x: float, y: float) -> float:
-        """Scalar evaluation using the real opensimplex library."""
-        return self._os.noise2(x, y)
-
-    # noise2_array() intentionally NOT overridden: inherits the fast
-    # numpy-vectorized Perlin implementation from _PermTableNoise.
+    # F805 fix: noise2() now inherits from _PermTableNoise (same as noise2_array)
+    # instead of delegating to opensimplex which uses a different algorithm.
+    # This ensures noise2(x,y) == noise2_array([x],[y])[0] always.
 
 
 # Legacy alias so that any code importing ``OpenSimplex`` from this module
@@ -1133,8 +1127,10 @@ def hydraulic_erosion(
                 hmap[cy + 1, cx] -= erode * (1 - fx) * fy
                 hmap[cy + 1, cx + 1] -= erode * fx * fy
 
-            # Update speed: v = sqrt(v^2 + delta_h * gravity)
-            speed_sq = speed * speed + delta_h * gravity
+            # Update speed: v = sqrt(v^2 - delta_h * gravity)
+            # F277 fix: delta_h < 0 when going downhill, so -delta_h > 0,
+            # meaning speed increases going downhill (physically correct).
+            speed_sq = speed * speed - delta_h * gravity
             speed = math.sqrt(max(0.0, speed_sq))
 
             # Evaporate water
