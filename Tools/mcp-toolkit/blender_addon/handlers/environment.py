@@ -790,10 +790,16 @@ def _create_terrain_mesh_from_heightmap(
     seed: int,
     terrain_type: str,
     object_location: tuple[float, float, float] = (0.0, 0.0, 0.0),
-    cliff_overlays_enabled: bool = True,
+    cliff_overlays_enabled: bool = False,
     cliff_threshold_deg: float = 60.0,
 ) -> dict[str, Any]:
-    """Create a terrain mesh object from a heightmap and optional cliff overlays."""
+    """Create a terrain mesh object from a heightmap.
+
+    Legacy cliff overlay code has been removed (Phase 53 F145).
+    All cliff geometry is now produced by the pass_cliffs pipeline pass.
+    The cliff_overlays_enabled parameter is retained for signature
+    compatibility but is always ignored.
+    """
     rows, cols = heightmap.shape
 
     mesh = bpy.data.meshes.new(name)
@@ -849,69 +855,11 @@ def _create_terrain_mesh_from_heightmap(
     obj.location = object_location
     bpy.context.collection.objects.link(obj)
 
-    cliff_placements: list[dict[str, Any]] = []
-    if cliff_overlays_enabled:
-        from ._terrain_depth import detect_cliff_edges, generate_cliff_face_mesh
-
-        cliff_placements = detect_cliff_edges(
-            heightmap,
-            slope_threshold_deg=cliff_threshold_deg,
-            min_cluster_size=4,
-            terrain_size=terrain_size,
-            height_scale=height_scale,
-        )
-        for i, cp in enumerate(cliff_placements):
-            cliff_mesh_spec = generate_cliff_face_mesh(
-                width=cp["width"],
-                height=cp["height"],
-                seed=seed + i + 1000,
-            )
-            cliff_mesh = bpy.data.meshes.new(f"{name}_Cliff_{i}")
-            cliff_bm = bmesh.new()
-            for vert_data in cliff_mesh_spec["vertices"]:
-                cliff_bm.verts.new(vert_data)
-            cliff_bm.verts.ensure_lookup_table()
-            for face_data in cliff_mesh_spec["faces"]:
-                try:
-                    cliff_bm.faces.new([cliff_bm.verts[vi] for vi in face_data])
-                except (ValueError, IndexError):
-                    pass
-            cliff_bm.to_mesh(cliff_mesh)
-            cliff_bm.free()
-
-            cliff_obj = bpy.data.objects.new(f"{name}_Cliff_{i}", cliff_mesh)
-            bpy.context.collection.objects.link(cliff_obj)
-            # --- Parent first, THEN set transform ---
-            # The legacy order (location → parent) silently offset cliffs
-            # on non-origin tiles: Blender's Python parent assignment
-            # does not auto-adjust matrix_parent_inverse, so a world-space
-            # location set before parenting was reinterpreted as local
-            # after parenting and the visual world position drifted by
-            # whatever the parent's world offset was. The fix is to
-            # establish the parent relationship first with
-            # ``matrix_parent_inverse`` forced to identity, then write the
-            # transform — which is now unambiguously terrain-local. The
-            # positions returned by ``detect_cliff_edges`` are already
-            # in terrain-local coordinates (grid-center mapped to
-            # [-tw/2, +tw/2]) and Z is already multiplied by
-            # ``height_scale`` inside ``detect_cliff_edges`` — no further
-            # scaling here.
-            cliff_obj.parent = obj
-            mpi = getattr(cliff_obj, "matrix_parent_inverse", None)
-            if mpi is not None and hasattr(mpi, "identity"):
-                mpi.identity()
-            cliff_obj.location = (
-                cp["position"][0],
-                cp["position"][1],
-                cp["position"][2],
-            )
-            cliff_obj.rotation_euler = tuple(cp["rotation"])
-
     return {
         "object": obj,
         "name": obj.name,
         "vertex_count": vertex_count,
-        "cliff_overlays": len(cliff_placements),
+        "cliff_overlays": 0,
         "terrain_size": terrain_size,
         "object_location": tuple(obj.location),
         "terrain_type": terrain_type,
