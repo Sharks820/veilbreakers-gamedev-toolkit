@@ -467,7 +467,8 @@ def test_unity_export_manifest_writes_files(state):
         assert (out / "ecosystem_meta.json").exists()
         assert manifest["schema_version"] == "1.0"
         assert "determinism_hash" in manifest
-        assert manifest["coordinate_system"] == "z-up"
+        assert manifest["coordinate_system"] == "y-up"  # F050: export is Y-up for Unity
+        assert manifest["source_coordinate_system"] == "z-up"  # Original Blender system preserved
 
 
 def test_unity_export_json_schemas(state):
