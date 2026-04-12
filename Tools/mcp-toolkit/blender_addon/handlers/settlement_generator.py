@@ -422,7 +422,6 @@ ROOM_FURNISHINGS: dict[str, list[str]] = {
     "barracks": ["bed_frame", "weapon_rack", "chest", "barrel"],
     "market": ["market_stall", "crate", "sack", "basket", "signpost"],
     "guard_post": ["weapon_rack", "chair", "lantern", "barrel"],
-    "armory": ["weapon_rack", "weapon_rack", "chest", "barrel", "shelf"],
 }
 
 # Building type -> default room functions
@@ -1602,10 +1601,6 @@ _ROOM_LIGHTS: dict[str, list[tuple[str, tuple[float, float, float], float, float
         ("wall_torch_1", (1.0, 0.55, 0.2), 0.5, 5.0, "point"),
         ("wall_torch_2", (1.0, 0.55, 0.2), 0.5, 5.0, "point"),
         ("fireplace_glow", (1.0, 0.4, 0.1), 0.8, 6.0, "point"),
-    ],
-    "armory": [
-        ("armory_torch_1", (1.0, 0.55, 0.2), 0.7, 6.0, "point"),
-        ("armory_torch_2", (1.0, 0.55, 0.2), 0.7, 6.0, "point"),
     ],
     "manor": [
         ("chandelier_light", (1.0, 0.85, 0.6), 1.0, 8.0, "point"),
@@ -2821,21 +2816,14 @@ def generate_settlement(
             bx, by = bld["position"]
             fp = bld.get("footprint", (6.0, 6.0))
             num_floors = bld.get("floors", 1)
+            room_height = fp[1] / max(len(rooms), 1)
             room_furnishings: list[dict[str, Any]] = []
             building_lights: list[dict[str, Any]] = []
-            # Distribute rooms across floors (not all rooms on every floor)
-            rooms_per_floor: dict[int, list[tuple[int, str]]] = {}
-            for ri, room_type in enumerate(rooms):
-                floor_idx = ri % max(1, num_floors)
-                rooms_per_floor.setdefault(floor_idx, []).append((ri, room_type))
             for floor in range(max(1, num_floors)):
-                floor_rooms = rooms_per_floor.get(floor, [(0, rooms[0])] if rooms else [])
-                floor_room_count = max(len(floor_rooms), 1)
-                floor_room_height = fp[1] / floor_room_count
-                for local_ri, (ri, room_type) in enumerate(floor_rooms):
+                for ri, room_type in enumerate(rooms):
                     room_bounds = {
-                        "min": (bx - fp[0] / 2, by - fp[1] / 2 + local_ri * floor_room_height),
-                        "max": (bx + fp[0] / 2, by - fp[1] / 2 + (local_ri + 1) * floor_room_height),
+                        "min": (bx - fp[0] / 2, by - fp[1] / 2 + ri * room_height),
+                        "max": (bx + fp[0] / 2, by - fp[1] / 2 + (ri + 1) * room_height),
                     }
                     room_rng = random.Random(bld["unique_seed"] + ri + floor * 1000)
                     room_seed = room_rng.randint(0, 2**31)
@@ -2968,27 +2956,24 @@ def generate_settlement(
         fp = bld.get("footprint", (6.0, 6.0))
         num_floors = bld.get("floors", 1)
 
-        # Distribute rooms across floors (not all rooms on every floor)
+        # Divide building footprint into rooms (stacked vertically within footprint)
+        room_height = fp[1] / max(len(rooms), 1)
         room_furnishings: list[dict[str, Any]] = []
         building_lights: list[dict[str, Any]] = []
-        rooms_per_floor: dict[int, list[tuple[int, str]]] = {}
-        for ri, room_type in enumerate(rooms):
-            floor_idx = ri % max(1, num_floors)
-            rooms_per_floor.setdefault(floor_idx, []).append((ri, room_type))
 
         for floor in range(max(1, num_floors)):
-            floor_rooms = rooms_per_floor.get(floor, [(0, rooms[0])] if rooms else [])
-            floor_room_count = max(len(floor_rooms), 1)
-            floor_room_height = fp[1] / floor_room_count
-            for local_ri, (ri, room_type) in enumerate(floor_rooms):
+            for ri, room_type in enumerate(rooms):
+                # Offset room bounds Y by floor * wall_height for
+                # multi-floor buildings (furniture Y remains in footprint
+                # space; floor index is stored for 3D placement)
                 room_bounds = {
                     "min": (
                         bx - fp[0] / 2,
-                        by - fp[1] / 2 + local_ri * floor_room_height,
+                        by - fp[1] / 2 + ri * room_height,
                     ),
                     "max": (
                         bx + fp[0] / 2,
-                        by - fp[1] / 2 + (local_ri + 1) * floor_room_height,
+                        by - fp[1] / 2 + (ri + 1) * room_height,
                     ),
                 }
                 room_rng = random.Random(
@@ -3008,6 +2993,7 @@ def generate_settlement(
                     item["position"][1] += room_bounds["min"][1]
                     item["floor"] = floor
                 furnishings.extend(clutter)
+                # Tag each furniture item with its floor
                 room_furnishings.extend(furnishings)
 
                 # Place lights for this room on this floor

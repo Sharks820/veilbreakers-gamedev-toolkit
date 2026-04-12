@@ -20,19 +20,13 @@ class BlenderMCPServer:
         self.server_thread: threading.Thread | None = None
         self.running = False
         self._server_socket: socket.socket | None = None
-        self._socket_lock = threading.Lock()
-        self._started_event = threading.Event()
 
     def start(self):
         self.running = True
-        self._started_event.clear()
         self.server_thread = threading.Thread(
             target=self._server_loop, daemon=True
         )
         self.server_thread.start()
-        # Wait for the server socket to be bound before returning,
-        # preventing a race where stop() is called before the socket exists.
-        self._started_event.wait(timeout=5.0)
         # 10ms poll interval for snappy interactive editing response.
         # Tradeoff: ~1% more idle CPU than 50ms, but commands execute 5x
         # faster after arriving.  Acceptable for a dev-time tool.
@@ -43,27 +37,14 @@ class BlenderMCPServer:
 
     def stop(self):
         self.running = False
-        with self._socket_lock:
-            if self._server_socket is not None:
-                try:
-                    self._server_socket.close()
-                except OSError:
-                    pass
-                self._server_socket = None
+        if self._server_socket is not None:
+            try:
+                self._server_socket.close()
+            except OSError:
+                pass
+            self._server_socket = None
         if bpy.app.timers.is_registered(self._process_commands):
             bpy.app.timers.unregister(self._process_commands)
-        # Drain the command queue so waiting clients get an error response
-        # instead of hanging until the 300s timeout expires.
-        while True:
-            try:
-                _cmd, event, container = self.command_queue.get_nowait()
-                container["response"] = {
-                    "status": "error",
-                    "message": "Server shutting down",
-                }
-                event.set()
-            except queue.Empty:
-                break
         if self.server_thread is not None:
             self.server_thread.join(timeout=2.0)
             self.server_thread = None
@@ -76,10 +57,7 @@ class BlenderMCPServer:
         srv.bind(("localhost", self.port))
         srv.listen(5)
         srv.settimeout(1.0)
-        with self._socket_lock:
-            self._server_socket = srv
-        # Signal that the socket is bound and ready for connections.
-        self._started_event.set()
+        self._server_socket = srv
         try:
             while self.running:
                 try:
@@ -126,10 +104,7 @@ class BlenderMCPServer:
                         f"Message too large: {length} bytes (max {MAX_MESSAGE_SIZE})"
                     )
                 json_bytes = self._receive_exactly(client_sock, length)
-                try:
-                    command = json.loads(json_bytes)
-                except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-                    raise ValueError(f"Invalid JSON payload: {exc}") from exc
+                command = json.loads(json_bytes)
 
                 result_event = threading.Event()
                 result_container: dict = {}
@@ -191,8 +166,6 @@ class BlenderMCPServer:
 
     def _process_commands(self) -> float:
         """MAIN THREAD via bpy.app.timers - safe for bpy calls."""
-        if not self.running:
-            return 0.0  # Stop the timer when server is shutting down
         try:
             # Process one command per tick to avoid freezing Blender UI
             try:
@@ -225,6 +198,6 @@ class BlenderMCPServer:
             finally:
                 event.set()
         except Exception as e:
-            # Outer guard -- prevents timer from being silently unregistered
+            # Outer guard — prevents timer from being silently unregistered
             print(f"[VeilBreakers MCP] Timer error: {e}")
         return 0.01

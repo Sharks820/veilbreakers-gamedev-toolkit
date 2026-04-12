@@ -447,265 +447,24 @@ def build_talus_field(
 
 
 # ---------------------------------------------------------------------------
-# Hero cliff mesh generation
+# Hero mesh insertion (placeholder — records intent only)
 # ---------------------------------------------------------------------------
-
-
-def _cliff_face_mesh_spec(
-    cliff: CliffStructure,
-    stack: TerrainMaskStack,
-    *,
-    overhang_fraction: float = 0.15,
-    roughness: float = 0.3,
-    seed: int = 0,
-) -> dict:
-    """Generate a mesh spec dict for a single cliff face.
-
-    Builds a vertical wall from the cliff's bounding box and height range.
-    The wall has:
-      - Irregular surface roughness derived from the seed
-      - Slight overhang at the top (top leans outward by ``overhang_fraction``
-        of the cliff height)
-      - Per-face material zones: 0=base_rock, 1=mid_rock, 2=top_overhang
-
-    Returns dict with ``vertices``, ``faces``, ``material_indices``,
-    ``cliff_id``, ``world_bounds``.
-    """
-    rng = np.random.default_rng(int(seed) & 0xFFFFFFFF)
-    h = np.asarray(stack.height, dtype=np.float64)
-
-    bounds = cliff.world_bounds
-    if bounds is None:
-        return {"vertices": [], "faces": [], "material_indices": [], "cliff_id": cliff.cliff_id}
-
-    z_min = cliff.min_height_m
-    z_max = cliff.max_height_m
-    z_span = z_max - z_min
-    if z_span < 0.5:
-        return {"vertices": [], "faces": [], "material_indices": [], "cliff_id": cliff.cliff_id}
-
-    # Resolution based on cliff extent
-    x_span = bounds.max_x - bounds.min_x
-    y_span = bounds.max_y - bounds.min_y
-    res_h = max(4, int(max(x_span, y_span) / stack.cell_size))
-    res_v = max(4, int(z_span / 2.0))
-
-    # We generate the cliff face along the longest horizontal axis.
-    # If x_span >= y_span, cliff face runs along X; otherwise along Y.
-    along_x = x_span >= y_span
-    if along_x:
-        u_min, u_max = bounds.min_x, bounds.max_x
-        v_base = (bounds.min_y + bounds.max_y) / 2.0
-    else:
-        u_min, u_max = bounds.min_y, bounds.max_y
-        v_base = (bounds.min_x + bounds.max_x) / 2.0
-
-    overhang_m = z_span * float(overhang_fraction)
-    vertices: list = []
-    faces: list = []
-    mat_indices: list = []
-
-    for k in range(res_v + 1):
-        kt = k / res_v
-        z = z_min + kt * z_span
-
-        # Overhang: top 30% leans outward
-        lean = 0.0
-        if kt > 0.7:
-            lean_t = (kt - 0.7) / 0.3
-            lean = -overhang_m * lean_t
-
-        for i in range(res_h + 1):
-            it = i / res_h
-            u = u_min + it * (u_max - u_min)
-
-            # Surface roughness
-            noise = float(rng.standard_normal()) * roughness * 0.5
-
-            if along_x:
-                vx = u
-                vy = v_base + lean + noise
-                vz = z
-            else:
-                vx = v_base + lean + noise
-                vy = u
-                vz = z
-
-            vertices.append((float(vx), float(vy), float(vz)))
-
-    # Build quad faces
-    for k in range(res_v):
-        kt = k / res_v
-        for i in range(res_h):
-            v0 = k * (res_h + 1) + i
-            v1 = v0 + 1
-            v2 = v0 + (res_h + 1) + 1
-            v3 = v0 + (res_h + 1)
-            faces.append((v0, v1, v2, v3))
-
-            # Material zone by height fraction
-            if kt > 0.7:
-                mat_indices.append(2)  # overhang
-            elif kt > 0.3:
-                mat_indices.append(1)  # mid rock
-            else:
-                mat_indices.append(0)  # base rock
-
-    return {
-        "vertices": vertices,
-        "faces": faces,
-        "material_indices": mat_indices,
-        "cliff_id": cliff.cliff_id,
-        "world_bounds": {
-            "min_x": bounds.min_x,
-            "min_y": bounds.min_y,
-            "max_x": bounds.max_x,
-            "max_y": bounds.max_y,
-        },
-        "z_range": (z_min, z_max),
-        "vertex_count": len(vertices),
-        "face_count": len(faces),
-    }
-
-
-def _ledge_mesh_spec(
-    cliff: CliffStructure,
-    stack: TerrainMaskStack,
-    ledge_index: int,
-    *,
-    ledge_depth: float = 1.0,
-    seed: int = 0,
-) -> dict:
-    """Generate a mesh spec for a single horizontal ledge on a cliff.
-
-    Ledge geometry is a flat shelf protruding from the cliff face at the
-    ledge's vertical position. Returns a dict with vertices/faces or empty
-    if the ledge mask is empty.
-    """
-    if ledge_index >= len(cliff.ledges):
-        return {"vertices": [], "faces": []}
-
-    ledge_mask = cliff.ledges[ledge_index]
-    if not ledge_mask.any():
-        return {"vertices": [], "faces": []}
-
-    h = np.asarray(stack.height, dtype=np.float64)
-    bounds = cliff.world_bounds
-    if bounds is None:
-        return {"vertices": [], "faces": []}
-
-    rng = np.random.default_rng(int(seed + ledge_index * 997) & 0xFFFFFFFF)
-
-    # Get average height of the ledge band
-    ledge_z = float(h[ledge_mask].mean())
-
-    rr, cc = np.where(ledge_mask)
-    if len(rr) == 0:
-        return {"vertices": [], "faces": []}
-
-    # Build a simple shelf strip along the ledge
-    # Sort by column for a left-to-right strip
-    order = np.argsort(cc)
-    rr = rr[order]
-    cc = cc[order]
-
-    # Subsample to reasonable resolution
-    stride = max(1, len(rr) // 20)
-    indices = list(range(0, len(rr), stride))
-    if indices[-1] != len(rr) - 1:
-        indices.append(len(rr) - 1)
-
-    vertices: list = []
-    faces: list = []
-
-    for idx in indices:
-        wx = stack.world_origin_x + float(cc[idx]) * stack.cell_size
-        wy = stack.world_origin_y + float(rr[idx]) * stack.cell_size
-        noise = float(rng.standard_normal()) * 0.1
-
-        # Inner edge (against cliff) and outer edge (protruding)
-        vertices.append((wx, wy + noise, ledge_z))
-        vertices.append((wx, wy - ledge_depth + noise, ledge_z))
-
-    for i in range(len(indices) - 1):
-        v0 = i * 2
-        v1 = v0 + 1
-        v2 = v0 + 3
-        v3 = v0 + 2
-        faces.append((v0, v1, v2, v3))
-
-    return {
-        "vertices": vertices,
-        "faces": faces,
-        "ledge_z": ledge_z,
-        "vertex_count": len(vertices),
-        "face_count": len(faces),
-    }
 
 
 def insert_hero_cliff_meshes(
     state: TerrainPipelineState,
     cliffs: List[CliffStructure],
 ) -> List[str]:
-    """Generate mesh specs for hero-tier cliffs and record on side_effects.
+    """Placeholder: record insertion intent on ``state.side_effects``.
 
-    For each hero cliff, generates:
-      - A cliff face mesh spec (vertical wall with overhang + roughness)
-      - A ledge mesh spec per ledge
-      - A talus scatter region spec
-
-    Mesh specs are appended to ``state.side_effects`` as structured dicts
-    (prefixed with ``cliff_mesh_spec:``). String intents are also returned
-    for backward-compatible pipeline integration tests.
+    Real bmesh geometry generation ships in a later Bundle B extension.
+    This function exists so Bundle B integration tests can verify that
+    the pipeline would fire mesh creation for each hero-tier cliff.
     """
-    from .terrain_pipeline import derive_pass_seed  # lazy to dodge circular import
-
     intents: List[str] = []
     for cliff in cliffs:
         if cliff.tier != "hero":
             continue
-
-        seed = derive_pass_seed(
-            state.intent.seed,
-            f"cliff_mesh_{cliff.cliff_id}",
-            state.tile_x,
-            state.tile_y,
-            None,
-        )
-
-        # Generate the main cliff face
-        face_spec = _cliff_face_mesh_spec(
-            cliff, state.mask_stack,
-            overhang_fraction=0.15,
-            roughness=0.3,
-            seed=seed,
-        )
-        if face_spec["vertices"]:
-            state.side_effects.append(
-                f"cliff_mesh_spec:{cliff.cliff_id}:face:"
-                f"verts={face_spec['vertex_count']}:faces={face_spec['face_count']}"
-            )
-
-        # Generate ledge meshes
-        for li in range(len(cliff.ledges)):
-            ledge_spec = _ledge_mesh_spec(
-                cliff, state.mask_stack, li,
-                ledge_depth=1.0,
-                seed=seed,
-            )
-            if ledge_spec["vertices"]:
-                state.side_effects.append(
-                    f"cliff_mesh_spec:{cliff.cliff_id}:ledge_{li}:"
-                    f"verts={ledge_spec['vertex_count']}"
-                )
-
-        # Record talus scatter region (not geometry — downstream scatters rocks)
-        if cliff.talus_mask is not None and cliff.talus_mask.any():
-            talus_cells = int(cliff.talus_mask.sum())
-            state.side_effects.append(
-                f"cliff_talus_scatter:{cliff.cliff_id}:cells={talus_cells}"
-            )
-
         intent = (
             f"insert_hero_cliff_mesh:{cliff.cliff_id}:"
             f"cells={cliff.cell_count}:"
@@ -937,6 +696,4 @@ __all__ = [
     "validate_cliff_readability",
     "pass_cliffs",
     "register_bundle_b_passes",
-    "_cliff_face_mesh_spec",
-    "_ledge_mesh_spec",
 ]
