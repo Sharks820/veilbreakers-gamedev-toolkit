@@ -1683,6 +1683,316 @@ def _create_height_blend_group(name: str = "HeightBlend") -> Any:
     return group
 
 
+def _create_triplanar_group(name: str = "TriplanarMapping") -> Any:
+    """Create a Blender node group for triplanar texture projection.
+
+    Triplanar mapping projects textures from three orthogonal axes (XY, XZ, YZ)
+    and blends them based on the surface normal direction. This eliminates
+    texture stretching on steep cliff faces where standard UV unwrapping fails.
+
+    Inputs:
+      - Vector (vector): Object-space position
+      - Normal (vector): Object-space normal
+      - Scale (float): Texture tiling scale
+      - Blend (float): Sharpness of axis transitions (higher = sharper)
+
+    Outputs:
+      - UV_X (vector): UV for X-axis projection (YZ plane)
+      - UV_Y (vector): UV for Y-axis projection (XZ plane)
+      - UV_Z (vector): UV for Z-axis projection (XY plane)
+      - Weights (vector): Per-axis blend weights (R=X, G=Y, B=Z)
+
+    The caller should sample the texture 3 times (once per UV output), then
+    blend the results using the Weights output.
+
+    Args:
+        name: Name for the node group.
+
+    Returns:
+        bpy.types.NodeGroup
+    """
+    if bpy is None:
+        raise RuntimeError("_create_triplanar_group requires bpy.")
+
+    existing = bpy.data.node_groups.get(name)
+    if existing is not None:
+        return existing
+
+    group = bpy.data.node_groups.new(name, "ShaderNodeTree")
+
+    # -- Group Inputs --
+    group_in = group.nodes.new("NodeGroupInput")
+    group_in.location = (-800, 0)
+
+    def _new_input(n: str, socket_type: str = "NodeSocketFloat", **kwargs):
+        if hasattr(group, "interface"):
+            item = group.interface.new_socket(
+                name=n, in_out="INPUT", socket_type=socket_type,
+            )
+            for k, v in kwargs.items():
+                if hasattr(item, k):
+                    setattr(item, k, v)
+            return item
+        else:
+            sock = group.inputs.new(socket_type, n)
+            for k, v in kwargs.items():
+                if hasattr(sock, k):
+                    setattr(sock, k, v)
+            return sock
+
+    _new_input("Vector", "NodeSocketVector")
+    _new_input("Normal", "NodeSocketVector")
+    _new_input("Scale", default_value=1.0)
+    _new_input("Blend", default_value=4.0)
+
+    # -- Group Outputs --
+    group_out = group.nodes.new("NodeGroupOutput")
+    group_out.location = (600, 0)
+
+    def _new_output(n: str, socket_type: str = "NodeSocketVector"):
+        if hasattr(group, "interface"):
+            group.interface.new_socket(
+                name=n, in_out="OUTPUT", socket_type=socket_type,
+            )
+        else:
+            group.outputs.new(socket_type, n)
+
+    _new_output("UV_X", "NodeSocketVector")
+    _new_output("UV_Y", "NodeSocketVector")
+    _new_output("UV_Z", "NodeSocketVector")
+    _new_output("Weights", "NodeSocketVector")
+
+    # -- Separate position XYZ --
+    sep_pos = group.nodes.new("ShaderNodeSeparateXYZ")
+    sep_pos.location = (-600, 200)
+    sep_pos.label = "Separate Position"
+    group.links.new(group_in.outputs["Vector"], sep_pos.inputs["Vector"])
+
+    # -- Separate normal XYZ --
+    sep_norm = group.nodes.new("ShaderNodeSeparateXYZ")
+    sep_norm.location = (-600, -100)
+    sep_norm.label = "Separate Normal"
+    group.links.new(group_in.outputs["Normal"], sep_norm.inputs["Vector"])
+
+    # -- Scale multiplier --
+    scale_x = group.nodes.new("ShaderNodeMath")
+    scale_x.operation = "MULTIPLY"
+    scale_x.location = (-400, 300)
+    group.links.new(sep_pos.outputs["X"], scale_x.inputs[0])
+    group.links.new(group_in.outputs["Scale"], scale_x.inputs[1])
+
+    scale_y = group.nodes.new("ShaderNodeMath")
+    scale_y.operation = "MULTIPLY"
+    scale_y.location = (-400, 150)
+    group.links.new(sep_pos.outputs["Y"], scale_y.inputs[0])
+    group.links.new(group_in.outputs["Scale"], scale_y.inputs[1])
+
+    scale_z = group.nodes.new("ShaderNodeMath")
+    scale_z.operation = "MULTIPLY"
+    scale_z.location = (-400, 0)
+    group.links.new(sep_pos.outputs["Z"], scale_z.inputs[0])
+    group.links.new(group_in.outputs["Scale"], scale_z.inputs[1])
+
+    # -- UV_X: YZ plane (for faces pointing along X) --
+    uv_x = group.nodes.new("ShaderNodeCombineXYZ")
+    uv_x.location = (-200, 300)
+    uv_x.label = "UV_X"
+    group.links.new(scale_y.outputs["Value"], uv_x.inputs["X"])
+    group.links.new(scale_z.outputs["Value"], uv_x.inputs["Y"])
+    group.links.new(group_out.inputs["UV_X"], uv_x.outputs["Vector"])
+
+    # -- UV_Y: XZ plane (for faces pointing along Y) --
+    uv_y = group.nodes.new("ShaderNodeCombineXYZ")
+    uv_y.location = (-200, 150)
+    uv_y.label = "UV_Y"
+    group.links.new(scale_x.outputs["Value"], uv_y.inputs["X"])
+    group.links.new(scale_z.outputs["Value"], uv_y.inputs["Y"])
+    group.links.new(group_out.inputs["UV_Y"], uv_y.outputs["Vector"])
+
+    # -- UV_Z: XY plane (for faces pointing along Z / flat ground) --
+    uv_z = group.nodes.new("ShaderNodeCombineXYZ")
+    uv_z.location = (-200, 0)
+    uv_z.label = "UV_Z"
+    group.links.new(scale_x.outputs["Value"], uv_z.inputs["X"])
+    group.links.new(scale_y.outputs["Value"], uv_z.inputs["Y"])
+    group.links.new(group_out.inputs["UV_Z"], uv_z.outputs["Vector"])
+
+    # -- Normal-based weights: abs(normal) ^ blend, normalized --
+    # |Nx|^blend, |Ny|^blend, |Nz|^blend
+    abs_nx = group.nodes.new("ShaderNodeMath")
+    abs_nx.operation = "ABSOLUTE"
+    abs_nx.location = (-400, -100)
+    group.links.new(sep_norm.outputs["X"], abs_nx.inputs[0])
+
+    abs_ny = group.nodes.new("ShaderNodeMath")
+    abs_ny.operation = "ABSOLUTE"
+    abs_ny.location = (-400, -200)
+    group.links.new(sep_norm.outputs["Y"], abs_ny.inputs[0])
+
+    abs_nz = group.nodes.new("ShaderNodeMath")
+    abs_nz.operation = "ABSOLUTE"
+    abs_nz.location = (-400, -300)
+    group.links.new(sep_norm.outputs["Z"], abs_nz.inputs[0])
+
+    pow_nx = group.nodes.new("ShaderNodeMath")
+    pow_nx.operation = "POWER"
+    pow_nx.location = (-200, -100)
+    group.links.new(abs_nx.outputs["Value"], pow_nx.inputs[0])
+    group.links.new(group_in.outputs["Blend"], pow_nx.inputs[1])
+
+    pow_ny = group.nodes.new("ShaderNodeMath")
+    pow_ny.operation = "POWER"
+    pow_ny.location = (-200, -200)
+    group.links.new(abs_ny.outputs["Value"], pow_ny.inputs[0])
+    group.links.new(group_in.outputs["Blend"], pow_ny.inputs[1])
+
+    pow_nz = group.nodes.new("ShaderNodeMath")
+    pow_nz.operation = "POWER"
+    pow_nz.location = (-200, -300)
+    group.links.new(abs_nz.outputs["Value"], pow_nz.inputs[0])
+    group.links.new(group_in.outputs["Blend"], pow_nz.inputs[1])
+
+    # Sum for normalization
+    sum_xy = group.nodes.new("ShaderNodeMath")
+    sum_xy.operation = "ADD"
+    sum_xy.location = (0, -150)
+    group.links.new(pow_nx.outputs["Value"], sum_xy.inputs[0])
+    group.links.new(pow_ny.outputs["Value"], sum_xy.inputs[1])
+
+    sum_xyz = group.nodes.new("ShaderNodeMath")
+    sum_xyz.operation = "ADD"
+    sum_xyz.location = (100, -200)
+    group.links.new(sum_xy.outputs["Value"], sum_xyz.inputs[0])
+    group.links.new(pow_nz.outputs["Value"], sum_xyz.inputs[1])
+
+    # Normalize: w = pow / sum
+    div_nx = group.nodes.new("ShaderNodeMath")
+    div_nx.operation = "DIVIDE"
+    div_nx.location = (200, -100)
+    group.links.new(pow_nx.outputs["Value"], div_nx.inputs[0])
+    group.links.new(sum_xyz.outputs["Value"], div_nx.inputs[1])
+
+    div_ny = group.nodes.new("ShaderNodeMath")
+    div_ny.operation = "DIVIDE"
+    div_ny.location = (200, -200)
+    group.links.new(pow_ny.outputs["Value"], div_ny.inputs[0])
+    group.links.new(sum_xyz.outputs["Value"], div_ny.inputs[1])
+
+    div_nz = group.nodes.new("ShaderNodeMath")
+    div_nz.operation = "DIVIDE"
+    div_nz.location = (200, -300)
+    group.links.new(pow_nz.outputs["Value"], div_nz.inputs[0])
+    group.links.new(sum_xyz.outputs["Value"], div_nz.inputs[1])
+
+    # Combine weights into vector output
+    weights_comb = group.nodes.new("ShaderNodeCombineXYZ")
+    weights_comb.location = (400, -200)
+    weights_comb.label = "Weights"
+    group.links.new(div_nx.outputs["Value"], weights_comb.inputs["X"])
+    group.links.new(div_ny.outputs["Value"], weights_comb.inputs["Y"])
+    group.links.new(div_nz.outputs["Value"], weights_comb.inputs["Z"])
+    group.links.new(weights_comb.outputs["Vector"], group_out.inputs["Weights"])
+
+    return group
+
+
+def _apply_triplanar_to_layer(
+    tree: Any,
+    links: Any,
+    bsdf: Any,
+    noise: Any,
+    tex_coord: Any,
+    layer_name: str,
+    y_offset: int,
+    detail_scale: float,
+) -> None:
+    """Apply triplanar projection to a terrain layer's noise texture.
+
+    Instead of using a single UV-mapped noise sample, this creates a
+    TriplanarMapping group that samples noise from 3 axes and blends
+    the results based on surface normal. This eliminates stretching
+    artifacts on steep cliff faces.
+
+    Args:
+        tree: Shader node tree.
+        links: Node tree links.
+        bsdf: The layer's Principled BSDF node.
+        noise: The layer's noise texture node (will be duplicated for 3 axes).
+        tex_coord: TexCoord node for this layer.
+        layer_name: Layer name for labeling.
+        y_offset: Y position offset for node layout.
+        detail_scale: Texture scale for triplanar mapping.
+    """
+    triplanar_group = _create_triplanar_group()
+    tp = tree.nodes.new(type="ShaderNodeGroup")
+    tp.node_tree = triplanar_group
+    tp.location = (-700, y_offset - 200)
+    tp.label = f"Triplanar {layer_name}"
+
+    # Connect position and normal
+    geom = _add_node(tree, "ShaderNodeNewGeometry", -900, y_offset - 200, f"Geom {layer_name}")
+    links.new(tex_coord.outputs["Object"], tp.inputs["Vector"])
+    links.new(geom.outputs["Normal"], tp.inputs["Normal"])
+    tp.inputs["Scale"].default_value = detail_scale
+    tp.inputs["Blend"].default_value = 4.0
+
+    # Create 3 noise samples — one per axis
+    noise_y = _add_node(tree, "ShaderNodeTexNoise", -500, y_offset - 300, f"Noise_Y {layer_name}")
+    noise_y.inputs["Scale"].default_value = noise.inputs["Scale"].default_value
+    noise_y.inputs["Detail"].default_value = noise.inputs["Detail"].default_value
+
+    noise_z = _add_node(tree, "ShaderNodeTexNoise", -500, y_offset - 450, f"Noise_Z {layer_name}")
+    noise_z.inputs["Scale"].default_value = noise.inputs["Scale"].default_value
+    noise_z.inputs["Detail"].default_value = noise.inputs["Detail"].default_value
+
+    # Wire triplanar UVs to noise inputs
+    links.new(tp.outputs["UV_X"], noise.inputs["Vector"])
+    links.new(tp.outputs["UV_Y"], noise_y.inputs["Vector"])
+    links.new(tp.outputs["UV_Z"], noise_z.inputs["Vector"])
+
+    # Blend 3 samples using triplanar weights
+    sep_weights = _add_node(tree, "ShaderNodeSeparateXYZ", -350, y_offset - 350, f"SepW {layer_name}")
+    links.new(tp.outputs["Weights"], sep_weights.inputs["Vector"])
+
+    # Weighted sum: result = noise_x * wx + noise_y * wy + noise_z * wz
+    mul_x = _add_node(tree, "ShaderNodeMath", -200, y_offset - 250, f"MulX {layer_name}")
+    mul_x.operation = "MULTIPLY"
+    links.new(noise.outputs["Fac"], mul_x.inputs[0])
+    links.new(sep_weights.outputs["X"], mul_x.inputs[1])
+
+    mul_y = _add_node(tree, "ShaderNodeMath", -200, y_offset - 350, f"MulY {layer_name}")
+    mul_y.operation = "MULTIPLY"
+    links.new(noise_y.outputs["Fac"], mul_y.inputs[0])
+    links.new(sep_weights.outputs["Y"], mul_y.inputs[1])
+
+    mul_z = _add_node(tree, "ShaderNodeMath", -200, y_offset - 450, f"MulZ {layer_name}")
+    mul_z.operation = "MULTIPLY"
+    links.new(noise_z.outputs["Fac"], mul_z.inputs[0])
+    links.new(sep_weights.outputs["Z"], mul_z.inputs[1])
+
+    add_xy = _add_node(tree, "ShaderNodeMath", -50, y_offset - 300, f"AddXY {layer_name}")
+    add_xy.operation = "ADD"
+    links.new(mul_x.outputs["Value"], add_xy.inputs[0])
+    links.new(mul_y.outputs["Value"], add_xy.inputs[1])
+
+    add_xyz = _add_node(tree, "ShaderNodeMath", 50, y_offset - 350, f"AddXYZ {layer_name}")
+    add_xyz.operation = "ADD"
+    links.new(add_xy.outputs["Value"], add_xyz.inputs[0])
+    links.new(mul_z.outputs["Value"], add_xyz.inputs[1])
+
+    # Reconnect bump to use triplanar-blended output instead of single noise
+    for link in list(tree.links):
+        if (link.from_node == noise and link.from_socket.name == "Fac"
+                and link.to_socket.name == "Height"):
+            links.remove(link)
+    # Find the bump node for this layer
+    bump_label = f"Bump {layer_name}"
+    for node in tree.nodes:
+        if node.label == bump_label:
+            links.new(add_xyz.outputs["Value"], node.inputs["Height"])
+            break
+
+
 # ---------------------------------------------------------------------------
 # Blender handler: handle_setup_terrain_biome
 # ---------------------------------------------------------------------------
@@ -2286,6 +2596,7 @@ def _build_pbr_layer_nodes(
     y_offset: int,
     *,
     pbr_textures: dict[str, str] | None = None,
+    enable_triplanar: bool = False,
 ) -> tuple[Any, Any]:
     """Build a full PBR node chain for one terrain layer.
 
@@ -2296,6 +2607,9 @@ def _build_pbr_layer_nodes(
       - Bump node for micro-detail normals
       - Optional PBR image texture inputs (albedo, roughness, normal, height)
         when ``pbr_textures`` provides paths
+      - Optional triplanar projection for cliff/steep layers (when
+        ``enable_triplanar=True``), which samples noise from 3 axes to
+        eliminate texture stretching on steep faces
 
     Returns:
         (bsdf_node, height_output_node) — the height output feeds HeightBlend.
@@ -2373,6 +2687,13 @@ def _build_pbr_layer_nodes(
     bump.inputs["Distance"].default_value = 0.02
     links.new(noise.outputs["Fac"], bump.inputs["Height"])
     links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+
+    # -- Triplanar projection for steep/cliff layers --
+    if enable_triplanar:
+        _apply_triplanar_to_layer(
+            tree, links, bsdf, noise, tex_coord,
+            layer_name, y_offset, lp["detail_scale"],
+        )
 
     # -- PBR image texture overrides (when available) --
     height_source = noise  # Default: noise Fac output for HeightBlend
@@ -2508,12 +2829,18 @@ def create_biome_terrain_material(
     layer_bsdfs: list[Any] = []
     height_sources: list[Any] = []
 
+    # Cliff and slope layers get triplanar projection to avoid stretching
+    triplanar_layers = {"cliff", "slope"}
+
     for i, ln in enumerate(layer_names):
         lp = palette[ln]
         y = 500 - i * 400
         layer_pbr = (pbr_textures or {}).get(ln)
+        use_triplanar = ln in triplanar_layers
         bsdf_node, height_node = _build_pbr_layer_nodes(
-            tree, links, lp, ln, y, pbr_textures=layer_pbr,
+            tree, links, lp, ln, y,
+            pbr_textures=layer_pbr,
+            enable_triplanar=use_triplanar,
         )
         layer_bsdfs.append(bsdf_node)
         height_sources.append(height_node)

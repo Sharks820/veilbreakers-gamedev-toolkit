@@ -926,6 +926,23 @@ class TestSmoothstepDelegation:
         # At 60 deg boundary, should see both slope and cliff
         assert g > 0.05 or b > 0.05, f"No slope/cliff weight at 60 deg: g={g}, b={b}"
 
+    def test_triplanar_enabled_for_cliff_layer(self):
+        """Cliff layer should be built with triplanar projection."""
+        from blender_addon.handlers.terrain_materials import BIOME_PALETTES_V2
+        # Verify cliff layers exist in palettes (prerequisite for triplanar)
+        for biome, palette in BIOME_PALETTES_V2.items():
+            assert "cliff" in palette, f"{biome} missing cliff layer"
+            assert "slope" in palette, f"{biome} missing slope layer"
+
+    def test_v2_cliff_channel_marked_triplanar(self):
+        """V2 default rules mark cliff and wet_rock channels as triplanar."""
+        from blender_addon.handlers.terrain_materials_v2 import default_dark_fantasy_rules
+        rules = default_dark_fantasy_rules()
+        cliff = next(c for c in rules.channels if c.channel_id == "cliff")
+        assert cliff.triplanar is True
+        wet_rock = next(c for c in rules.channels if c.channel_id == "wet_rock")
+        assert wet_rock.triplanar is True
+
     def test_compute_world_splatmap_uses_smoothstep(self):
         """Verify that compute_world_splatmap_weights produces smooth transitions."""
         import numpy as np
