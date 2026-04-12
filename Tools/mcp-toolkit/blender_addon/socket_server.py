@@ -90,7 +90,7 @@ class BlenderMCPServer:
             try:
                 srv.close()
             except OSError:
-                pass
+                pass  # Socket already closed by stop() — expected during shutdown
 
     def _handle_client(self, client_sock: socket.socket):
         """Background thread - NO bpy calls here.
@@ -110,16 +110,21 @@ class BlenderMCPServer:
             while self.running:
                 try:
                     length_bytes = self._receive_exactly(client_sock, 4)
-                except (ConnectionError, OSError):
-                    # Client disconnected cleanly or connection lost
+                except (ConnectionError, OSError, socket.timeout):
+                    # Client disconnected, connection lost, or idle timeout
                     break
                 length = struct.unpack(">I", length_bytes)[0]
+                if length == 0:
+                    raise ValueError("Zero-length message received")
                 if length > MAX_MESSAGE_SIZE:
                     raise ValueError(
                         f"Message too large: {length} bytes (max {MAX_MESSAGE_SIZE})"
                     )
                 json_bytes = self._receive_exactly(client_sock, length)
-                command = json.loads(json_bytes)
+                try:
+                    command = json.loads(json_bytes)
+                except (json.JSONDecodeError, UnicodeDecodeError) as json_err:
+                    raise ValueError(f"Invalid JSON in command: {json_err}") from json_err
 
                 result_event = threading.Event()
                 result_container: dict = {}
