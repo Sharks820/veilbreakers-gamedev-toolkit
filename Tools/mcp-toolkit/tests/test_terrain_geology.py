@@ -553,6 +553,7 @@ def test_bundle_i_does_not_modify_default_passes():
         assert default_names.issubset(after_names)
         assert after_names - default_names == {
             "stratigraphy",
+            "differential_erosion",
             "glacial",
             "wind_erosion",
             "coastline",
