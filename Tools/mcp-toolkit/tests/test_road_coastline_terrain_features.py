@@ -501,7 +501,7 @@ class TestGenerateCanyon:
         assert result["vertex_count"] > 0
         assert result["face_count"] > 0
         assert len(result["floor_path"]) > 0
-        assert len(result["materials"]) >= 4  # 5 with strata_band
+        assert len(result["materials"]) == 4
 
     def test_canyon_dimensions(self):
         from blender_addon.handlers.terrain_features import generate_canyon

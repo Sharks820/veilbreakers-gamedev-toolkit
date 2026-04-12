@@ -258,16 +258,6 @@ from .coastline import (  # noqa: F401 -- coastline terrain generation
     generate_coastline,
     COASTLINE_STYLES,
 )
-from .terrain_weathering_timeline import (  # noqa: F401 -- weathering event timeline
-    generate_weathering_timeline,
-    apply_weathering_event,
-    WeatheringEvent,
-    WEATHER_KINDS,
-)
-from .terrain_live_preview import (  # noqa: F401 -- live preview editing session
-    LivePreviewSession,
-    edit_hero_feature,
-)
 from .terrain_features import (  # noqa: F401 -- terrain feature generators
     generate_canyon,
     generate_waterfall,
@@ -1752,26 +1742,6 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "texture_mix_weathering_over_texture": handle_mix_weathering_over_texture,
     # (g) Server sends viewport_screenshot, handler registered as get_viewport_screenshot
     "viewport_screenshot": handle_get_viewport_screenshot,
-    # --- Terrain weathering timeline (Bundle Q) ---
-    "terrain_generate_weathering_timeline": lambda params: {
-        "events": [
-            {
-                "time_hours": e.time_hours,
-                "kind": e.kind,
-                "intensity": e.intensity,
-            }
-            for e in generate_weathering_timeline(
-                duration_hours=params.get("duration_hours", 24.0),
-                seed=params.get("seed", 42),
-            )
-        ],
-    },
-    # --- Terrain live preview (Bundle M) ---
-    "terrain_edit_hero_feature": lambda params: edit_hero_feature(
-        state=params["state"],
-        feature_id=params.get("feature_id", ""),
-        mutations=params.get("mutations", []),
-    ),
 }
 
 

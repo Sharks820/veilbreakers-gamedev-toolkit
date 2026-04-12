@@ -107,7 +107,7 @@ def generate_canyon(
     rng = random.Random(seed)
     res_along = max(4, int(length / 2))
     res_across = max(4, int(width) + 6)  # Extra for walls
-    res_wall = max(6, int(depth / 1.5))  # Higher resolution for strata detail
+    res_wall = max(4, int(depth / 2))
 
     vertices: list[Vec3] = []
     faces: list[tuple[int, ...]] = []
@@ -115,50 +115,11 @@ def generate_canyon(
 
     half_w = width / 2.0
 
-    # Material zones: 0=floor, 1=wall_rock, 2=wet_rock, 3=ledge, 4=strata_band
-    materials = ["canyon_floor", "canyon_wall", "wet_rock", "canyon_ledge", "strata_band"]
-
-    # Strata ledge positions (horizontal steps in the wall profile)
-    # 3-5 strata layers at deterministic heights
-    num_strata = 3 + (seed % 3)
-    strata_fracs = [(i + 1) / (num_strata + 1) for i in range(num_strata)]
-
-    def _wall_profile_offset(kt: float, x: float, z: float, wall_seed: int) -> float:
-        """Stepped wall profile with multi-octave roughness.
-
-        Returns Y offset (positive = outward from canyon centre).
-        Strata layers create small horizontal ledges at regular intervals.
-        """
-        # Multi-octave FBM roughness (replaces single-octave noise)
-        rough = _fbm(x * 0.12, z * 0.12, seed=wall_seed, octaves=3,
-                      persistence=0.45, lacunarity=2.2) * wall_roughness * 1.2
-
-        # Strata stepping: at each strata layer, create a small inset
-        strata_inset = 0.0
-        for sf in strata_fracs:
-            dist_to_layer = abs(kt - sf)
-            if dist_to_layer < 0.04:
-                # Sharp ledge inset at strata boundary
-                strata_inset += 0.3 * (1.0 - dist_to_layer / 0.04)
-
-        # Inward lean increases with height but not linearly --
-        # lower portion is near-vertical, upper portion leans more
-        lean = 0.0
-        if kt < 0.3:
-            lean = kt * 0.1  # Nearly vertical lower wall
-        elif kt < 0.7:
-            lean = 0.03 + (kt - 0.3) * 0.4  # Moderate lean mid-section
-        else:
-            lean = 0.19 + (kt - 0.7) * 0.7  # Steeper lean at top
-
-        return rough - strata_inset - lean
+    # Material zones: 0=floor, 1=wall_rock, 2=wet_rock, 3=ledge
+    materials = ["canyon_floor", "canyon_wall", "wet_rock", "canyon_ledge"]
 
     # --- Floor mesh ---
     floor_verts_start = len(vertices)
-    # Cache floor edge Z values for wall base connection
-    floor_edge_z_left: list[float] = []
-    floor_edge_z_right: list[float] = []
-
     for i in range(res_along):
         t = i / max(res_along - 1, 1)
         x = t * length
@@ -174,12 +135,6 @@ def generate_canyon(
 
             vertices.append((x, y, z))
 
-            # Track floor edge heights for wall base connection
-            if j == 0:
-                floor_edge_z_left.append(z)
-            if j == res_across - 1:
-                floor_edge_z_right.append(z)
-
     for i in range(res_along - 1):
         for j in range(res_across - 1):
             v0 = floor_verts_start + i * res_across + j
@@ -189,19 +144,20 @@ def generate_canyon(
             faces.append((v0, v1, v2, v3))
             mat_indices.append(0)  # floor
 
-    # --- Left wall (connects to floor left edge) ---
+    # --- Left wall ---
     left_wall_start = len(vertices)
     for i in range(res_along):
         t = i / max(res_along - 1, 1)
         x = t * length
-        # Wall base Z matches floor edge (no gap)
-        base_z = floor_edge_z_left[i] if i < len(floor_edge_z_left) else 0.0
 
         for k in range(res_wall):
             kt = k / max(res_wall - 1, 1)
-            z = base_z + kt * depth
+            z = kt * depth
 
-            y_offset = _wall_profile_offset(kt, x, z, seed + 1)
+            # Wall profile: slightly inward at top, rough
+            y_offset = -wall_roughness * _hash_noise(x * 0.15, z * 0.15, seed + 1) * 1.5
+            # Inward lean
+            y_offset -= kt * 0.3
             y = -half_w + y_offset
 
             vertices.append((x, y, z))
@@ -213,31 +169,22 @@ def generate_canyon(
             v2 = v0 + res_wall + 1
             v3 = v0 + res_wall
             faces.append((v0, v1, v2, v3))
+            # Lower portions are wet
+            mat_indices.append(2 if k < res_wall // 4 else 1)
 
-            kt = k / max(res_wall - 1, 1)
-            # Material assignment by height band
-            if kt < 0.15:
-                mat_indices.append(2)  # wet_rock (splash zone)
-            elif any(abs(kt - sf) < 0.04 for sf in strata_fracs):
-                mat_indices.append(4)  # strata_band (visible layer lines)
-            elif kt > 0.85:
-                mat_indices.append(3)  # ledge (near rim)
-            else:
-                mat_indices.append(1)  # wall_rock
-
-    # --- Right wall (connects to floor right edge) ---
+    # --- Right wall ---
     right_wall_start = len(vertices)
     for i in range(res_along):
         t = i / max(res_along - 1, 1)
         x = t * length
-        base_z = floor_edge_z_right[i] if i < len(floor_edge_z_right) else 0.0
 
         for k in range(res_wall):
             kt = k / max(res_wall - 1, 1)
-            z = base_z + kt * depth
+            z = kt * depth
 
-            y_offset = _wall_profile_offset(kt, x, z, seed + 2)
-            y = half_w - y_offset  # Mirror: outward is positive Y
+            y_offset = wall_roughness * _hash_noise(x * 0.15, z * 0.15, seed + 2) * 1.5
+            y_offset += kt * 0.3
+            y = half_w + y_offset
 
             vertices.append((x, y, z))
 
@@ -248,16 +195,7 @@ def generate_canyon(
             v2 = v0 + res_wall + 1
             v3 = v0 + res_wall
             faces.append((v0, v1, v2, v3))
-
-            kt = k / max(res_wall - 1, 1)
-            if kt < 0.15:
-                mat_indices.append(2)
-            elif any(abs(kt - sf) < 0.04 for sf in strata_fracs):
-                mat_indices.append(4)
-            elif kt > 0.85:
-                mat_indices.append(3)
-            else:
-                mat_indices.append(1)
+            mat_indices.append(2 if k < res_wall // 4 else 1)
 
     # --- Floor path (walkable waypoints) ---
     floor_path: list[Vec3] = []

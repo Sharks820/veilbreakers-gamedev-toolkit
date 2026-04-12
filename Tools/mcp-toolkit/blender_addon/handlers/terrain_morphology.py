@@ -97,24 +97,6 @@ DEFAULT_TEMPLATES: Tuple[MorphologyTemplate, ...] = (
     MorphologyTemplate("valley_hanging", "valley", 100.0, 3.0, _valley_params(35.0, 0.55)),
     MorphologyTemplate("valley_glaciated", "valley", 350.0, 5.0, _valley_params(70.0, 0.85)),
     MorphologyTemplate("valley_headwater_bowl", "valley", 120.0, 1.5, _valley_params(40.0, 0.70)),
-    # --- Volcanic variants (5) ---
-    MorphologyTemplate("volcanic_caldera", "volcanic", 250.0, 1.1, {"height_m": 80.0, "rim_width": 0.3, "crater_depth": 0.6, "sign": 1.0}),
-    MorphologyTemplate("volcanic_cinder_cone", "volcanic", 80.0, 1.0, {"height_m": 40.0, "rim_width": 0.15, "crater_depth": 0.3, "sign": 1.0}),
-    MorphologyTemplate("volcanic_shield", "volcanic", 400.0, 1.2, {"height_m": 25.0, "rim_width": 0.05, "crater_depth": 0.1, "sign": 1.0}),
-    MorphologyTemplate("volcanic_lava_dome", "volcanic", 60.0, 1.0, {"height_m": 55.0, "rim_width": 0.0, "crater_depth": 0.0, "sign": 1.0}),
-    MorphologyTemplate("volcanic_maar", "volcanic", 120.0, 1.0, {"height_m": 10.0, "rim_width": 0.4, "crater_depth": 0.8, "sign": -1.0}),
-    # --- Glacial variants (5) ---
-    MorphologyTemplate("glacial_cirque", "glacial", 200.0, 1.3, {"depth_m": 60.0, "headwall": 0.8, "lip_height": 0.15, "sign": -1.0}),
-    MorphologyTemplate("glacial_arete", "glacial", 300.0, 6.0, {"height_m": 70.0, "sharpness": 0.85, "sign": 1.0}),
-    MorphologyTemplate("glacial_horn", "glacial", 100.0, 1.0, {"height_m": 120.0, "sharpness": 0.95, "sign": 1.0}),
-    MorphologyTemplate("glacial_trough", "glacial", 350.0, 4.0, {"depth_m": 80.0, "headwall": 0.4, "lip_height": 0.0, "sign": -1.0}),
-    MorphologyTemplate("glacial_drumlin", "glacial", 150.0, 3.0, {"height_m": 20.0, "sharpness": 0.3, "sign": 1.0}),
-    # --- Karst variants (5) ---
-    MorphologyTemplate("karst_sinkhole", "karst", 40.0, 1.0, {"depth_m": 25.0, "rim_sharpness": 0.7, "sign": -1.0}),
-    MorphologyTemplate("karst_doline_field", "karst", 200.0, 1.5, {"depth_m": 15.0, "rim_sharpness": 0.5, "count": 5, "sign": -1.0}),
-    MorphologyTemplate("karst_mogote", "karst", 60.0, 1.0, {"height_m": 50.0, "steepness": 0.8, "sign": 1.0}),
-    MorphologyTemplate("karst_polje", "karst", 300.0, 2.0, {"depth_m": 20.0, "rim_sharpness": 0.3, "sign": -1.0}),
-    MorphologyTemplate("karst_tower", "karst", 35.0, 1.0, {"height_m": 70.0, "steepness": 0.95, "sign": 1.0}),
 )
 
 
@@ -215,59 +197,6 @@ def apply_morphology_template(
         across = np.exp(-0.5 * (v / (across_sigma * (0.4 + broadness))) ** 2)
         along = np.exp(-0.5 * (u / along_sigma) ** 2)
         delta = sign * depth_m * across * along
-    elif kind == "volcanic":
-        height_m = float(params.get("height_m", 50.0))
-        rim_w = float(params.get("rim_width", 0.2))
-        crater_d = float(params.get("crater_depth", 0.4))
-        r_norm = np.sqrt((u / along_sigma) ** 2 + (v / across_sigma) ** 2)
-        # Conical rise with a crater rim and depression
-        cone = np.clip(1.0 - r_norm, 0.0, 1.0)
-        rim = np.exp(-((r_norm - rim_w) ** 2) / (0.02 + 1e-9))
-        crater = np.where(r_norm < rim_w, crater_d * (1.0 - r_norm / max(rim_w, 1e-6)), 0.0)
-        delta = sign * height_m * (cone + 0.3 * rim - crater)
-    elif kind == "glacial":
-        sharpness = float(params.get("sharpness", 0.7))
-        height_m = float(params.get("height_m", 0.0))
-        depth_m = float(params.get("depth_m", 0.0))
-        headwall = float(params.get("headwall", 0.5))
-        lip_height = float(params.get("lip_height", 0.0))
-        if height_m > 0:
-            # Arete / horn / drumlin: sharp ridge or rounded hump
-            across = np.exp(-0.5 * (v / (across_sigma * (1.0 - sharpness * 0.7))) ** 2)
-            along = np.exp(-0.5 * (u / along_sigma) ** 2)
-            delta = sign * height_m * across * along
-        else:
-            # Cirque / trough: bowl shape with steep headwall
-            r_norm = np.sqrt((u / along_sigma) ** 2 + (v / across_sigma) ** 2)
-            bowl = np.clip(r_norm, 0.0, 1.0) ** (1.0 + headwall)
-            lip = np.where(r_norm > 0.9, lip_height * depth_m * np.exp(-((r_norm - 1.0) ** 2) / 0.01), 0.0)
-            delta = sign * depth_m * (1.0 - bowl) + lip
-    elif kind == "karst":
-        depth_m = float(params.get("depth_m", 0.0))
-        height_m = float(params.get("height_m", 0.0))
-        steepness = float(params.get("steepness", 0.7))
-        rim_sharp = float(params.get("rim_sharpness", 0.5))
-        count = int(params.get("count", 1))
-        if height_m > 0:
-            # Mogote / tower: steep-sided residual hill
-            r_norm = np.sqrt((u / along_sigma) ** 2 + (v / across_sigma) ** 2)
-            tower = np.clip(1.0 - r_norm, 0.0, 1.0) ** (0.5 + steepness * 2.0)
-            delta = sign * height_m * tower
-        elif count > 1:
-            # Doline field: multiple small depressions
-            delta = np.zeros_like(radial)
-            for ci in range(count):
-                offset_u = float(rng.uniform(-along_sigma * 0.6, along_sigma * 0.6))
-                offset_v = float(rng.uniform(-across_sigma * 0.6, across_sigma * 0.6))
-                r_local = np.sqrt(((u - offset_u) / (along_sigma * 0.3)) ** 2
-                                  + ((v - offset_v) / (across_sigma * 0.3)) ** 2)
-                hole = np.exp(-(r_local ** (1.0 + rim_sharp)))
-                delta += sign * (depth_m / count) * hole
-        else:
-            # Single sinkhole / polje
-            r_norm = np.sqrt((u / along_sigma) ** 2 + (v / across_sigma) ** 2)
-            hole = np.exp(-(r_norm ** (1.0 + rim_sharp * 2.0)))
-            delta = sign * depth_m * hole
     else:
         # Generic gaussian fallback
         height_m = float(params.get("height_m", 20.0))
@@ -284,16 +213,13 @@ def list_templates_for_biome(biome: str) -> List[MorphologyTemplate]:
     """
     biome = (biome or "").lower()
     biome_kinds: Dict[str, Tuple[str, ...]] = {
-        "alpine": ("ridge_spur", "pinnacle", "valley", "spur", "glacial"),
-        "desert": ("mesa", "canyon", "pinnacle", "ridge_spur", "volcanic"),
-        "forest": ("ridge_spur", "valley", "spur", "karst"),
+        "alpine": ("ridge_spur", "pinnacle", "valley", "spur"),
+        "desert": ("mesa", "canyon", "pinnacle", "ridge_spur"),
+        "forest": ("ridge_spur", "valley", "spur"),
         "plains": ("mesa", "valley", "spur"),
-        "badlands": ("canyon", "mesa", "pinnacle", "spur", "volcanic"),
-        "tundra": ("ridge_spur", "valley", "mesa", "glacial"),
-        "coast": ("canyon", "pinnacle", "mesa", "spur", "karst"),
-        "volcanic": ("volcanic", "canyon", "ridge_spur", "pinnacle"),
-        "karst": ("karst", "canyon", "valley", "pinnacle"),
-        "glacial": ("glacial", "ridge_spur", "valley", "pinnacle"),
+        "badlands": ("canyon", "mesa", "pinnacle", "spur"),
+        "tundra": ("ridge_spur", "valley", "mesa"),
+        "coast": ("canyon", "pinnacle", "mesa", "spur"),
     }
     allowed = biome_kinds.get(biome)
     if allowed is None:
@@ -357,138 +283,10 @@ def get_natural_arch_specs(
     return results
 
 
-def compose_morphology(
-    stack: TerrainMaskStack,
-    templates: List[MorphologyTemplate],
-    positions: List[Tuple[float, float, float]],
-    seed: int = 42,
-    *,
-    blend_mode: str = "additive",
-    global_scale: float = 1.0,
-) -> np.ndarray:
-    """Apply multiple morphology templates and combine into a single delta.
-
-    Parameters
-    ----------
-    stack : TerrainMaskStack
-        Terrain stack (read-only -- the returned delta is not applied).
-    templates : list of MorphologyTemplate
-        Templates to apply (one per position).
-    positions : list of (x, y, z) world-space positions
-        Placement centres -- must have the same length as ``templates``.
-    seed : int
-        Base seed. Each template gets ``seed + i`` for variation.
-    blend_mode : str
-        ``"additive"`` sums all deltas. ``"max"`` takes the per-cell
-        maximum absolute contribution (preserves sharp features).
-    global_scale : float
-        Multiplier applied to the final composed delta.
-
-    Returns
-    -------
-    np.ndarray (H, W) float64 -- the combined height delta.
-    """
-    if len(templates) != len(positions):
-        raise ValueError(
-            f"templates ({len(templates)}) and positions ({len(positions)}) "
-            f"must have the same length"
-        )
-
-    h = np.asarray(stack.height, dtype=np.float64)
-    composed = np.zeros_like(h, dtype=np.float64)
-
-    for i, (tmpl, pos) in enumerate(zip(templates, positions)):
-        delta = apply_morphology_template(stack, tmpl, pos, seed + i)
-        if blend_mode == "max":
-            # Keep whichever has larger absolute magnitude per cell
-            composed = np.where(np.abs(delta) > np.abs(composed), delta, composed)
-        else:
-            composed += delta
-
-    return composed * float(global_scale)
-
-
-def select_templates_for_terrain(
-    stack: TerrainMaskStack,
-    *,
-    biome: str = "",
-    max_templates: int = 5,
-    seed: int = 42,
-) -> List[Tuple[MorphologyTemplate, Tuple[float, float, float]]]:
-    """Analyse local terrain and select appropriate templates with positions.
-
-    Heuristic selection:
-      - High local slope variance -> ridge / pinnacle templates
-      - Low slope, high elevation -> mesa / plateau templates
-      - Low elevation, concave -> valley / canyon templates
-      - Random fill from biome-appropriate pool for remaining slots
-
-    Returns a list of (template, world_pos) pairs ready for
-    ``compose_morphology``.
-    """
-    rng = np.random.default_rng(int(seed) & 0xFFFFFFFF)
-    h = np.asarray(stack.height, dtype=np.float64)
-    rows, cols = h.shape
-    cell = float(stack.cell_size)
-
-    pool = list_templates_for_biome(biome)
-    if not pool:
-        pool = list(DEFAULT_TEMPLATES)
-
-    # Compute simple terrain statistics in a coarse grid
-    block = max(4, min(rows, cols) // 4)
-    selections: List[Tuple[MorphologyTemplate, Tuple[float, float, float]]] = []
-
-    kind_priority: Dict[str, List[MorphologyTemplate]] = {}
-    for t in pool:
-        kind_priority.setdefault(t.kind, []).append(t)
-
-    for _ in range(max_templates):
-        # Pick a random block
-        r0 = int(rng.integers(0, max(1, rows - block)))
-        c0 = int(rng.integers(0, max(1, cols - block)))
-        patch = h[r0 : r0 + block, c0 : c0 + block]
-
-        mean_h = float(patch.mean())
-        std_h = float(patch.std())
-        median_h = float(np.median(h))
-
-        # Heuristic kind selection
-        if std_h > 10.0:
-            preferred = ["ridge_spur", "pinnacle", "glacial"]
-        elif mean_h > median_h + 5.0 and std_h < 5.0:
-            preferred = ["mesa", "volcanic"]
-        elif mean_h < median_h - 5.0:
-            preferred = ["valley", "canyon", "karst"]
-        else:
-            preferred = ["spur", "ridge_spur", "valley"]
-
-        # Pick from preferred kinds that exist in pool
-        chosen_tmpl = None
-        for kind in preferred:
-            candidates = kind_priority.get(kind, [])
-            if candidates:
-                chosen_tmpl = candidates[int(rng.integers(0, len(candidates)))]
-                break
-        if chosen_tmpl is None:
-            chosen_tmpl = pool[int(rng.integers(0, len(pool)))]
-
-        # World position at block centre
-        wx = stack.world_origin_x + (c0 + block / 2) * cell
-        wy = stack.world_origin_y + (r0 + block / 2) * cell
-        wz = float(patch[block // 2, block // 2])
-
-        selections.append((chosen_tmpl, (wx, wy, wz)))
-
-    return selections
-
-
 __all__ = [
     "MorphologyTemplate",
     "DEFAULT_TEMPLATES",
     "apply_morphology_template",
     "list_templates_for_biome",
     "get_natural_arch_specs",
-    "compose_morphology",
-    "select_templates_for_terrain",
 ]

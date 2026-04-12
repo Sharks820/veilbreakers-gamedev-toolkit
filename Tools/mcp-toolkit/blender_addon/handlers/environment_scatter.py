@@ -258,39 +258,6 @@ def _prop_rotation(prop_type: str, yaw_degrees: float) -> tuple[float, float, fl
     return (x_rot, 0.0, math.radians(yaw_degrees))
 
 
-# Per-type slope alignment factors: how much each vegetation type tilts
-# to follow terrain slope.  0.0 = perfectly upright, 1.0 = fully aligned.
-_SLOPE_ALIGNMENT_FACTORS: dict[str, float] = {
-    "rock": 0.0,
-    "rock_mossy": 0.0,
-    "cliff_rock": 0.0,
-    "tree": 0.3,
-    "tree_healthy": 0.3,
-    "tree_boundary": 0.3,
-    "tree_blighted": 0.3,
-    "tree_dead": 0.25,
-    "tree_twisted": 0.35,
-    "pine_tree": 0.25,
-    "bush": 0.4,
-    "shrub": 0.5,
-    "grass": 0.85,
-    "weed": 0.85,
-    "mushroom": 0.1,
-    "mushroom_cluster": 0.1,
-    "root": 0.6,
-    "fallen_log": 0.9,
-}
-
-
-def _slope_alignment_factor(veg_type: str) -> float:
-    """Return slope alignment factor for a vegetation type.
-
-    Rocks sit flat (0.0), trees are mostly upright (0.25-0.35),
-    grass and ground cover follow terrain closely (0.85).
-    """
-    return _SLOPE_ALIGNMENT_FACTORS.get(veg_type, 0.5)
-
-
 def _terrain_height_sampler(terrain_obj: bpy.types.Object | None):
     """Build a lightweight terrain-height sampler for prop placement."""
     if terrain_obj is None or terrain_obj.type != "MESH" or terrain_obj.data is None:
@@ -1221,8 +1188,6 @@ def _scatter_pass(
     -------
     list of placement dicts with keys: position, vegetation_type, rotation, scale.
     """
-    from .vegetation_system import _max_slope_for_category
-
     rng = random.Random(seed)
     density_factor = _BIOME_DENSITY.get(biome, 0.5)
     side = heightmap.shape[0]
@@ -1275,7 +1240,7 @@ def _scatter_pass(
             wy = pos[1] - terrain_half
             h = _sample_height_norm(pos)
             sl = _sample_slope(pos)
-            if sl > _max_slope_for_category("trees") or h < 0.1 or h > 0.7:
+            if sl > 30.0 or h < 0.1 or h > 0.7:
                 continue
             if _in_building(wx, wy) or _in_clearing(wx, wy):
                 continue
@@ -1295,7 +1260,7 @@ def _scatter_pass(
             wy = pos[1] - terrain_half
             h = _sample_height_norm(pos)
             sl = _sample_slope(pos)
-            if sl > _max_slope_for_category("ground_cover") or h < 0.05 or h > 0.55:
+            if sl > 35.0 or h < 0.05 or h > 0.55:
                 continue
             if _in_building(wx, wy) or _in_clearing(wx, wy):
                 continue
@@ -1335,7 +1300,7 @@ def _scatter_pass(
             ci = max(0, min(ci, side - 1))
             ri = max(0, min(ri, side - 1))
             sl = float(slope_map[ri, ci])
-            if sl > _max_slope_for_category("ground_cover"):
+            if sl > 40.0:
                 continue
             if building_zones:
                 in_bz = False
@@ -1616,17 +1581,13 @@ def handle_scatter_vegetation(params: dict) -> dict:
 
         instance.location = (wx, wy, wz)
 
-        # Align vegetation to terrain normal with per-type slope factor:
-        #   rocks: 0.0 (sit flat on terrain surface)
-        #   trees/bushes: 0.3 (mostly upright, slight lean)
-        #   grass/ground cover: 0.85 (follow terrain closely)
+        # Align vegetation to terrain normal (slope-perpendicular placement)
         slope_pitch = math.atan2(-dzdy, 1.0)  # tilt around X
         slope_roll = math.atan2(dzdx, 1.0)   # tilt around Y
         base_rot = _vegetation_rotation(vt, p["rotation"])
-        slope_factor = _slope_alignment_factor(vt)
         instance.rotation_euler = (
-            base_rot[0] + slope_pitch * slope_factor,
-            base_rot[1] + slope_roll * slope_factor,
+            base_rot[0] + slope_pitch * 0.7,  # partial alignment (70%) for natural look
+            base_rot[1] + slope_roll * 0.7,
             base_rot[2],
         )
         s = p["scale"]
@@ -1706,9 +1667,6 @@ def handle_scatter_props(params: dict) -> dict:
 
     Params:
         area_name (str, default "PropScatter"): Name for the scatter collection.
-        terrain_name (str, optional): Existing terrain object for height sampling.
-            When omitted, falls back to the first MESH object whose name
-            contains "terrain" (case-insensitive), then to z=0 placement.
         buildings (list of dict): Each has type, position, footprint (optional).
         prop_density (float, default 0.3): Scatter density.
         seed (int, default 0): Random seed.
@@ -1716,7 +1674,6 @@ def handle_scatter_props(params: dict) -> dict:
     Returns dict with: name, prop_count, prop_types.
     """
     area_name = params.get("area_name", "PropScatter")
-    terrain_name = params.get("terrain_name", None)
     buildings = params.get("buildings", [])
     prop_density = params.get("prop_density", 0.3)
     seed = params.get("seed", 0)
@@ -1730,19 +1687,7 @@ def handle_scatter_props(params: dict) -> dict:
     ys = [p[1] for p in positions]
     margin = 20.0
     area_size = max(max(xs) - min(xs) + margin * 2, max(ys) - min(ys) + margin * 2, 30.0)
-
-    # Resolve terrain object for height sampling.
-    # Priority: explicit terrain_name > auto-detect by name > None (z=0).
-    terrain_obj = None
-    if terrain_name:
-        terrain_obj = bpy.data.objects.get(terrain_name)
-    if terrain_obj is None:
-        # Auto-detect: find the first MESH object with "terrain" in the name
-        for _candidate in bpy.data.objects:
-            if _candidate.type == "MESH" and "terrain" in _candidate.name.lower():
-                terrain_obj = _candidate
-                break
-    terrain_sampler = _terrain_height_sampler(terrain_obj)
+    terrain_sampler = _terrain_height_sampler(bpy.data.objects.get(area_name))
 
     placements = context_scatter(buildings, area_size, prop_density, seed)
 
