@@ -600,7 +600,22 @@ def build_agent_tool_contract(
                     if _present(name)
                 ],
             },
+            # Backward-compatible stable alias consumed by docs/tests/agents.
             "terrain_pass_sequence": [
+                "macro_world",
+                "structural_masks",
+                "erosion",
+                "navmesh",
+                "prepare_heightmap_raw_u16",
+                "validation_full",
+            ],
+            "terrain_pass_sequence_default": [
+                "macro_world",
+                "structural_masks",
+                "erosion",
+                "validation_minimal",
+            ],
+            "terrain_pass_sequence_unity_extended": [
                 "macro_world",
                 "structural_masks",
                 "erosion",
@@ -614,7 +629,8 @@ def build_agent_tool_contract(
             "notes": [
                 "Use Terrain Mixer as the primary terrain edit layer.",
                 "Use Bagapie as the primary free scatter system.",
-                "Run prepare_heightmap_raw_u16 before validation_full for deterministic Unity readiness.",
+                "Default controller path is the 4-pass minimal sequence (macro_world -> structural_masks -> erosion -> validation_minimal).",
+                "For Unity-ready export, use terrain_pass_sequence_unity_extended which adds navmesh + prepare_heightmap_raw_u16 + validation_full.",
             ],
         }
     }

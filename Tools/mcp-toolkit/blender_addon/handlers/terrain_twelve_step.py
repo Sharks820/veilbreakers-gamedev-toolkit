@@ -53,15 +53,46 @@ def _apply_canyon_river_carves_stub(
 
 
 def _detect_cliff_edges_stub(world_hmap: np.ndarray) -> List[Tuple[int, int]]:
-    return []
+    """Detect cliff edges via gradient magnitude threshold on the heightmap."""
+    coords: List[Tuple[int, int]] = []
+    if world_hmap.size == 0:
+        return coords
+    gy, gx = np.gradient(world_hmap)
+    grad_mag = np.sqrt(gx ** 2 + gy ** 2)
+    threshold = float(np.percentile(grad_mag, 95))
+    ys, xs = np.where(grad_mag >= threshold)
+    for y, x in zip(ys.tolist(), xs.tolist()):
+        coords.append((int(x), int(y)))
+    return coords
 
 
 def _detect_cave_candidates_stub(world_hmap: np.ndarray) -> List[Tuple[int, int]]:
-    return []
+    """Detect cave candidates as local minima surrounded by higher terrain."""
+    coords: List[Tuple[int, int]] = []
+    if world_hmap.size == 0 or world_hmap.shape[0] < 3 or world_hmap.shape[1] < 3:
+        return coords
+    h, w = world_hmap.shape
+    for y in range(1, h - 1):
+        for x in range(1, w - 1):
+            centre = world_hmap[y, x]
+            neighbours = world_hmap[y - 1:y + 2, x - 1:x + 2]
+            if centre <= np.min(neighbours):
+                coords.append((x, y))
+    return coords
 
 
 def _detect_waterfall_lips_stub(world_hmap: np.ndarray) -> List[Tuple[int, int]]:
-    return []
+    """Detect waterfall lip candidates where a plateau drops sharply."""
+    coords: List[Tuple[int, int]] = []
+    if world_hmap.size == 0 or world_hmap.shape[0] < 3:
+        return coords
+    # Look for rows where height drops significantly downward
+    dy = np.diff(world_hmap, axis=0)
+    threshold = float(np.percentile(np.abs(dy), 97))
+    ys, xs = np.where(dy <= -threshold)
+    for y, x in zip(ys.tolist(), xs.tolist()):
+        coords.append((int(x), int(y)))
+    return coords
 
 
 def _generate_road_mesh_specs(

@@ -2624,7 +2624,7 @@ def _sample_scene_height(x: float, y: float, terrain_name: str | None) -> float:
                     if hit2 and loc2 is not None and obj2 is not None and obj2.name == terrain_name:
                         return float(loc2.z)
                 except Exception:
-                    pass
+                    pass  # SWALLOW: secondary ray_cast can fail if depsgraph is stale; fall through to default
             else:
                 # No terrain name specified — accept any hit (legacy behaviour)
                 return float(location.z)
@@ -5438,14 +5438,14 @@ def handle_generate_building(params: dict) -> dict:
                     _bm = bmesh.new()
                     _bm.from_mesh(child_obj.data)
                     if _bm.faces:
-                        _uv_layer = _bm.loops.layers.uv.new("UVMap")
+                        uv_layer = _bm.loops.layers.uv.new("UVMap")  # noqa: F841 — layer created in-place on bmesh
                         # Smart project-style UV: use face normals for projection
                         bmesh.ops.recalc_face_normals(_bm, faces=_bm.faces[:])
                         _bm.to_mesh(child_obj.data)
                         uv_fixed_count += 1
                     _bm.free()
                 except Exception:
-                    pass
+                    pass  # SWALLOW: bmesh UV ops can fail on degenerate geometry; skip silently
     result["uv_layers_added"] = uv_fixed_count
 
     # Auto-apply mesh repair (remove doubles, recalc normals) on all children
@@ -5463,7 +5463,7 @@ def handle_generate_building(params: dict) -> dict:
                     repair_count += 1
                 _rbm.free()
             except Exception:
-                pass
+                pass  # SWALLOW: mesh repair can fail on corrupt/empty meshes; skip silently
     result["meshes_repaired"] = repair_count
 
     # Auto-apply weathering to all building mesh children based on quality tier
@@ -5487,7 +5487,7 @@ def handle_generate_building(params: dict) -> dict:
                 })
                 weathering_applied_count += 1
             except Exception:
-                pass
+                pass  # SWALLOW: weathering import/apply can fail if addon not loaded; skip silently
     result["weathering_preset"] = _auto_weathering_preset
     result["weathering_applied_count"] = weathering_applied_count
 

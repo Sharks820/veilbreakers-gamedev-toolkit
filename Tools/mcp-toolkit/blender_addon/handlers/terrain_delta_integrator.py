@@ -25,6 +25,7 @@ from .terrain_semantics import (
     BBox,
     PassDefinition,
     PassResult,
+    ProtectedZoneSpec,
     TerrainMaskStack,
     TerrainPipelineState,
 )
@@ -104,11 +105,30 @@ def pass_integrate_deltas(
         applied_names.append(name)
 
     # Apply protected zone mask: zero out delta in protected cells
+    # 1. Hero exclusion channel
     protected = stack.get("hero_exclusion")
+    prot_bool = np.zeros_like(total_delta, dtype=bool)
     if protected is not None:
-        prot_mask = np.asarray(protected, dtype=np.float64)
-        # hero_exclusion > 0 means protected — zero the delta there
-        total_delta = np.where(prot_mask > 0.0, 0.0, total_delta)
+        prot_bool |= np.asarray(protected, dtype=np.float64) > 0.0
+
+    # 2. Intent protected zones (replicates _terrain_world._protected_mask)
+    if state.intent.protected_zones:
+        rows, cols = total_delta.shape
+        ys = stack.world_origin_y + (np.arange(rows) + 0.5) * stack.cell_size
+        xs = stack.world_origin_x + (np.arange(cols) + 0.5) * stack.cell_size
+        xg, yg = np.meshgrid(xs, ys)
+        for zone in state.intent.protected_zones:
+            if zone.permits("integrate_deltas"):
+                continue
+            inside = (
+                (xg >= zone.bounds.min_x)
+                & (xg <= zone.bounds.max_x)
+                & (yg >= zone.bounds.min_y)
+                & (yg <= zone.bounds.max_y)
+            )
+            prot_bool |= inside
+
+    total_delta = np.where(prot_bool, 0.0, total_delta)
 
     # Region scope: only apply within region bounds
     if region is not None:

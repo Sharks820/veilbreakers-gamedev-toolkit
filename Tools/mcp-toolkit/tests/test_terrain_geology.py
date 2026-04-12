@@ -285,7 +285,12 @@ def test_pass_wind_erosion_runs():
     h_before = stack.height.copy()
     result = pass_wind_erosion(state, None)
     assert result.status == "ok"
-    assert not np.array_equal(stack.height, h_before)
+    # Wind erosion stores a delta channel but does NOT mutate height directly
+    # (the delta integrator pass applies it later).
+    assert np.array_equal(stack.height, h_before)
+    delta = stack.get("wind_erosion_delta")
+    assert delta is not None
+    assert not np.all(delta == 0)
 
 
 # ---------------------------------------------------------------------------

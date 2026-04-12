@@ -164,27 +164,22 @@ def _make_noise_generator(seed: int) -> _PermTableNoise:
 class _OpenSimplexWrapper(_PermTableNoise):
     """Wrap the real opensimplex library with vectorized noise support.
 
-    The scalar ``noise2()`` delegates to the real opensimplex for exact
-    compatibility with existing tests that check specific values.
-    The vectorized ``noise2_array()`` uses the parent class's numpy-native
-    Perlin implementation (permutation table), which is 50-200x faster
-    than calling opensimplex.noise2 per-pixel via np.vectorize.
+    Both ``noise2()`` and ``noise2_array()`` use the parent class's
+    numpy-native Perlin implementation (permutation table) so that
+    scalar and batch evaluations always return identical values for the
+    same coordinates (F805 fix).
 
-    The heightmap output values will differ slightly from pure-opensimplex
-    (different noise algorithm), but all terrain-shaping properties
-    (determinism, range, distribution) are preserved.
+    The opensimplex library is still imported to confirm availability,
+    but the permutation-table Perlin is used for all evaluation to
+    guarantee scalar/array consistency.
     """
 
     def __init__(self, seed: int = 0) -> None:
         super().__init__(seed)
         self._os = _RealOpenSimplex(seed=seed)  # type: ignore[misc]
 
-    def noise2(self, x: float, y: float) -> float:
-        """Scalar evaluation using the real opensimplex library."""
-        return self._os.noise2(x, y)
-
-    # noise2_array() intentionally NOT overridden: inherits the fast
-    # numpy-vectorized Perlin implementation from _PermTableNoise.
+    # noise2() and noise2_array() both inherited from _PermTableNoise,
+    # ensuring scalar and batch results are always identical (F805).
 
 
 # Legacy alias so that any code importing ``OpenSimplex`` from this module

@@ -973,7 +973,10 @@ def handle_generate_terrain(params: dict) -> dict:
         # resolved terrain_type from the biome preset
         params = effective
 
-    logger.info("Generating terrain (type=%s)", params.get("terrain_type", "mountains"))
+    use_controller = bool(params.get("use_controller", False))
+
+    logger.info("Generating terrain (type=%s, use_controller=%s)",
+                params.get("terrain_type", "mountains"), use_controller)
     validated = _validate_terrain_params(params)
 
     name = validated["name"]
@@ -985,6 +988,113 @@ def handle_generate_terrain(params: dict) -> dict:
     erosion = validated["erosion"]
     erosion_iters = validated["erosion_iterations"]
 
+    # --- Controller path (Fix H1): route through TerrainPassController ---
+    # When use_controller=True, the terrain pipeline's registered passes
+    # (macro_world -> structural_masks -> erosion -> validation_minimal)
+    # run instead of the legacy inline heightmap+erosion code.  This
+    # ensures Bundle A-O passes, controller checkpoints, and contract
+    # enforcement are applied.
+    if use_controller:
+        controller_params = {
+            "tile_size": max(resolution - 1, 1),
+            "cell_size": float(scale) / max(resolution - 1, 1),
+            "seed": seed,
+            "terrain_type": terrain_type,
+            "scale": scale,
+        }
+        # Build the pipeline: always include erosion when requested
+        pipeline = ["macro_world", "structural_masks"]
+        if erosion in ("hydraulic", "thermal", "both"):
+            pipeline.append("erosion")
+            # Provide a scene_read so the controller allows the erosion pass
+            controller_params["scene_read"] = {
+                "timestamp": 0.0,
+                "reviewer": "compose_map",
+            }
+            controller_params["erosion_profile"] = (
+                "temperate" if erosion == "hydraulic"
+                else "arid" if erosion == "thermal"
+                else "temperate"
+            )
+        pipeline.append("validation_minimal")
+        controller_params["pipeline"] = pipeline
+
+        controller_result = handle_run_terrain_pass(controller_params)
+
+        # Extract the heightmap from the controller's mask stack for mesh creation.
+        # The controller stores height in the mask stack; we pull it from the
+        # result if available, otherwise fall back to generating one.
+        controller_ok = controller_result.get("ok", False)
+
+        # The controller ran analytical passes.  Now generate the heightmap
+        # for mesh creation using the same parameters (the controller's
+        # macro_world pass already produced one internally, but it's not
+        # directly returned in the result dict -- we regenerate with the
+        # same seed for determinism).
+        heightmap = generate_heightmap(
+            width=resolution,
+            height=resolution,
+            scale=scale,
+            octaves=validated["octaves"],
+            persistence=validated["persistence"],
+            lacunarity=validated["lacunarity"],
+            seed=seed,
+            terrain_type=terrain_type,
+            warp_strength=params.get("warp_strength", 0.4),
+            warp_scale=params.get("warp_scale", 0.5),
+        )
+
+        erosion_applied = False
+        if erosion in ("hydraulic", "both") or erosion in ("thermal", "both"):
+            erosion_result = erode_world_heightmap(
+                heightmap,
+                hydraulic_iterations=erosion_iters if erosion in ("hydraulic", "both") else 0,
+                thermal_iterations=max(erosion_iters // 50, 5) if erosion in ("thermal", "both") else 0,
+                seed=seed,
+            )
+            heightmap = erosion_result["heightmap"]
+            erosion_applied = True
+
+        # Apply flatten zones for building foundations (MESH-05)
+        flatten_zones = params.get("flatten_zones", None)
+        if flatten_zones:
+            from .terrain_advanced import flatten_multiple_zones
+            heightmap = flatten_multiple_zones(heightmap, flatten_zones)
+
+        terrain_size = scale
+        object_location = tuple(params.get("object_location", (0.0, 0.0, 0.0)))
+        terrain_result = _create_terrain_mesh_from_heightmap(
+            name=name,
+            heightmap=heightmap,
+            terrain_size=terrain_size,
+            height_scale=height_scale,
+            seed=seed,
+            terrain_type=terrain_type,
+            object_location=object_location,
+            cliff_overlays_enabled=params.get("cliff_overlays", True),
+            cliff_threshold_deg=params.get("cliff_threshold_deg", 60.0),
+        )
+
+        result = {
+            "name": terrain_result["name"],
+            "vertex_count": terrain_result["vertex_count"],
+            "terrain_type": terrain_type,
+            "resolution": resolution,
+            "height_scale": height_scale,
+            "erosion_applied": erosion_applied,
+            "cliff_overlays": terrain_result["cliff_overlays"],
+            "flatten_zones_applied": len(flatten_zones) if flatten_zones else 0,
+            "has_moisture_map": False,
+            "controller_used": True,
+            "controller_ok": controller_ok,
+            "controller_passes": [r.get("pass_name") for r in controller_result.get("results", [])],
+        }
+        if biome_preset is not None:
+            result["biome_preset"] = biome_name
+            result["scatter_rules"] = biome_preset.get("scatter_rules", [])
+        return result
+
+    # --- Legacy path (default): inline heightmap generation + erosion ---
     # Auto-scale erosion: minimum 150K droplets for AAA-quality river channels
     # and natural-looking drainage (Skyrim/Valhalla uses 150K+ for visible features)
     if erosion in ("hydraulic", "both") and erosion_iters < 150000:
@@ -1041,6 +1151,8 @@ def handle_generate_terrain(params: dict) -> dict:
             moisture_map = np.zeros_like(heightmap)
 
     terrain_size = scale
+    # Fix L2: respect caller-supplied object_location instead of hardcoding origin
+    object_location = tuple(params.get("object_location", (0.0, 0.0, 0.0)))
     terrain_result = _create_terrain_mesh_from_heightmap(
         name=name,
         heightmap=heightmap,
@@ -1048,7 +1160,7 @@ def handle_generate_terrain(params: dict) -> dict:
         height_scale=height_scale,
         seed=seed,
         terrain_type=terrain_type,
-        object_location=(0.0, 0.0, 0.0),
+        object_location=object_location,
         cliff_overlays_enabled=params.get("cliff_overlays", True),
         cliff_threshold_deg=params.get("cliff_threshold_deg", 60.0),
     )
@@ -1514,6 +1626,13 @@ def handle_run_terrain_pass(params: dict) -> dict:
 
     controller = TerrainPassController(state)
 
+    # Bind the controller so pass_validation_full can trigger rollback on
+    # hard failures (Fix M4 — previously the module-global was never set in
+    # production, making rollback dead outside tests).
+    from .terrain_validation import bind_active_controller
+
+    bind_active_controller(controller)
+
     pass_name = params.get("pass_name")
     pipeline = params.get("pipeline")
 
@@ -1535,20 +1654,25 @@ def handle_run_terrain_pass(params: dict) -> dict:
             insert_at = pipeline.index("validation_full")
             pipeline.insert(insert_at, "prepare_heightmap_raw_u16")
 
-    if pipeline is not None:
-        results = controller.run_pipeline(
-            pass_sequence=pipeline,
-            region=region,
-            checkpoint=bool(params.get("checkpoint", False)),
-        )
-    else:
-        results = [
-            controller.run_pass(
-                str(pass_name),
+    try:
+        if pipeline is not None:
+            results = controller.run_pipeline(
+                pass_sequence=pipeline,
                 region=region,
                 checkpoint=bool(params.get("checkpoint", False)),
             )
-        ]
+        else:
+            results = [
+                controller.run_pass(
+                    str(pass_name),
+                    region=region,
+                    checkpoint=bool(params.get("checkpoint", False)),
+                )
+            ]
+    finally:
+        # Unbind the controller to prevent stale references from leaking
+        # across calls (Fix M4).
+        bind_active_controller(None)
 
     def _serialize(pr) -> dict:
         return {

@@ -13,6 +13,7 @@ import pytest
 from blender_addon.handlers.terrain_semantics import (
     BBox,
     PassResult,
+    ProtectedZoneSpec,
     TerrainIntentState,
     TerrainMaskStack,
     TerrainPipelineState,
@@ -193,3 +194,136 @@ class TestDeltaIntegratorStratErosionDelta:
             stack.height, h_before - 0.5,
             err_msg="Stratigraphic erosion delta was not applied"
         )
+
+
+def _make_state_with_protected_zones(
+    stack: TerrainMaskStack,
+    zones: tuple,
+) -> TerrainPipelineState:
+    """Build a pipeline state with protected zones on the intent."""
+    bounds = BBox(0.0, 0.0, float(stack.tile_size), float(stack.tile_size))
+    scene_read = TerrainSceneRead(
+        timestamp=0.0,
+        major_landforms=("flat",),
+        focal_point=(float(stack.tile_size) * 0.5, float(stack.tile_size) * 0.5, 0.0),
+        hero_features_present=(),
+        hero_features_missing=(),
+        waterfall_chains=(),
+        cave_candidates=(),
+        protected_zones_in_region=(),
+        edit_scope=bounds,
+        success_criteria=("delta_test",),
+        reviewer="pytest",
+    )
+    intent = TerrainIntentState(
+        seed=42,
+        region_bounds=bounds,
+        tile_size=stack.tile_size,
+        cell_size=1.0,
+        scene_read=scene_read,
+        protected_zones=zones,
+    )
+    return TerrainPipelineState(intent=intent, mask_stack=stack)
+
+
+class TestDeltaIntegratorProtectedZones:
+    """Protected zones from state.intent must zero out deltas."""
+
+    def test_protected_zone_blocks_delta(self):
+        from blender_addon.handlers.terrain_delta_integrator import pass_integrate_deltas
+
+        stack = _make_stack(size=16, base_height=100.0)
+        h_before = stack.height.copy()
+
+        # Apply a uniform -5m delta everywhere
+        delta = np.full_like(stack.height, -5.0, dtype=np.float32)
+        stack.set("waterfall_pool_delta", delta, "waterfalls")
+
+        # Protect cells covering world coords [2,6] x [2,6]
+        # forbidden_mutations blocks integrate_deltas from touching this zone
+        zone = ProtectedZoneSpec(
+            zone_id="village",
+            bounds=BBox(2.0, 2.0, 6.0, 6.0),
+            kind="settlement",
+            forbidden_mutations=frozenset({"integrate_deltas"}),
+        )
+        state = _make_state_with_protected_zones(stack, (zone,))
+        result = pass_integrate_deltas(state, None)
+
+        assert result.status == "ok"
+        # Cells inside the protected zone should be unchanged
+        # Cell centers are at (col+0.5)*cell_size, so cols 2-5, rows 2-5
+        # are inside the zone [2,6]
+        for r in range(2, 6):
+            for c in range(2, 6):
+                assert stack.height[r, c] == pytest.approx(h_before[r, c]), (
+                    f"Protected cell ({r},{c}) was modified"
+                )
+        # Cells outside the zone must have the delta applied
+        assert stack.height[0, 0] == pytest.approx(h_before[0, 0] - 5.0)
+        assert stack.height[15, 15] == pytest.approx(h_before[15, 15] - 5.0)
+
+    def test_allowed_mutation_permits_delta(self):
+        from blender_addon.handlers.terrain_delta_integrator import pass_integrate_deltas
+
+        stack = _make_stack(size=16, base_height=100.0)
+        h_before = stack.height.copy()
+
+        delta = np.full_like(stack.height, -2.0, dtype=np.float32)
+        stack.set("cave_height_delta", delta, "caves")
+
+        # Zone explicitly allows integrate_deltas
+        zone = ProtectedZoneSpec(
+            zone_id="quarry",
+            bounds=BBox(0.0, 0.0, 16.0, 16.0),
+            kind="quarry",
+            allowed_mutations=frozenset({"integrate_deltas"}),
+        )
+        state = _make_state_with_protected_zones(stack, (zone,))
+        result = pass_integrate_deltas(state, None)
+
+        assert result.status == "ok"
+        # All cells should have the delta applied since zone permits it
+        np.testing.assert_array_almost_equal(
+            stack.height, h_before - 2.0,
+            err_msg="Allowed zone should not block deltas"
+        )
+
+    def test_hero_exclusion_combined_with_protected_zone(self):
+        from blender_addon.handlers.terrain_delta_integrator import pass_integrate_deltas
+
+        stack = _make_stack(size=16, base_height=100.0)
+        h_before = stack.height.copy()
+
+        delta = np.full_like(stack.height, -3.0, dtype=np.float32)
+        stack.set("strat_erosion_delta", delta, "stratigraphy")
+
+        # Hero exclusion protects row 0
+        hero = np.zeros_like(stack.height, dtype=np.float32)
+        hero[0, :] = 1.0
+        stack.set("hero_exclusion", hero, "hero")
+
+        # Protected zone protects bottom-right corner
+        zone = ProtectedZoneSpec(
+            zone_id="temple",
+            bounds=BBox(12.0, 12.0, 16.0, 16.0),
+            kind="sacred",
+            forbidden_mutations=frozenset({"integrate_deltas"}),
+        )
+        state = _make_state_with_protected_zones(stack, (zone,))
+        result = pass_integrate_deltas(state, None)
+
+        assert result.status == "ok"
+        # Row 0 protected by hero_exclusion
+        np.testing.assert_array_almost_equal(
+            stack.height[0, :], h_before[0, :],
+            err_msg="Hero exclusion row should be unchanged"
+        )
+        # Bottom-right corner protected by zone
+        for r in range(12, 16):
+            for c in range(12, 16):
+                assert stack.height[r, c] == pytest.approx(h_before[r, c]), (
+                    f"Protected zone cell ({r},{c}) was modified"
+                )
+        # Middle cells should have delta applied
+        assert stack.height[6, 6] == pytest.approx(h_before[6, 6] - 3.0)

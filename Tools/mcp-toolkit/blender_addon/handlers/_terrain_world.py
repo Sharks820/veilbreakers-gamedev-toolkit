@@ -23,11 +23,13 @@ from typing import Any, Optional
 import numpy as np
 
 from ._terrain_erosion import (
+    ErosionConfig,
     apply_hydraulic_erosion,
     apply_hydraulic_erosion_masks,
     apply_thermal_erosion,
     apply_thermal_erosion_masks,
 )
+from .terrain_erosion_filter import apply_analytical_erosion
 from ._terrain_noise import generate_heightmap
 from .terrain_advanced import compute_flow_map
 from .terrain_semantics import (
@@ -504,12 +506,44 @@ def pass_erosion(
 
     hero_arg = combined_exclusion if combined_exclusion.any() else None
 
-    hydro = apply_hydraulic_erosion_masks(
+    # --- Analytical erosion (chunk-parallel, deterministic) ---
+    # Derive an ErosionConfig from the erosion profile
+    analytical_cfg_map = {
+        "temperate": ErosionConfig(strength=0.5, gully_weight=1.0, octave_count=4),
+        "arid": ErosionConfig(strength=0.7, gully_weight=1.2, octave_count=3, fade_amplitude=0.4),
+        "alpine": ErosionConfig(strength=0.4, gully_weight=0.8, octave_count=5, fade_amplitude=0.8),
+    }
+    analytical_cfg = analytical_cfg_map.get(profile, ErosionConfig())
+
+    analytical_result = apply_analytical_erosion(
         h_before,
+        analytical_cfg,
+        seed=seed,
+        cell_size=stack.cell_size,
+    )
+
+    # Apply analytical height delta
+    h_after_analytical = h_before + analytical_result.height_delta
+
+    # Store ridge map on the mask stack
+    ridge_out = analytical_result.ridge_map
+    if region is not None:
+        r_s, c_s = _region_slice(state, region)
+        scoped_ridge = np.zeros_like(ridge_out)
+        scoped_ridge[r_s, c_s] = ridge_out[r_s, c_s]
+        ridge_out = scoped_ridge
+    if protected.any():
+        ridge_out = np.where(protected, 0.0, ridge_out)
+    stack.set("ridge", ridge_out, "erosion")
+
+    # --- Hydraulic erosion (secondary refinement on analytical output) ---
+    hydro = apply_hydraulic_erosion_masks(
+        h_after_analytical,
         iterations=profile_params["iterations"],
         seed=seed,
         hero_exclusion=hero_arg,
     )
+    # --- Thermal erosion (smooths sharp analytical features) ---
     thermal = apply_thermal_erosion_masks(
         hydro.height,
         iterations=6,
@@ -576,6 +610,7 @@ def pass_erosion(
             "drainage",
             "bank_instability",
             "talus",
+            "ridge",
         ),
         metrics={
             "profile": profile,

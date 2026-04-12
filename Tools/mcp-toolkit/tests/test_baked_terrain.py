@@ -30,7 +30,7 @@ def _make_baked(size: int = 8) -> "BakedTerrain":
         "tile_x": 0,
         "tile_y": 0,
         "world_origin_x": 0.0,
-        "world_origin_z": 0.0,
+        "world_origin_y": 0.0,
         "cell_size": 1.0,
     }
     return BakedTerrain(
@@ -162,3 +162,102 @@ class TestBakedTerrainSerialization:
 
         with pytest.raises((FileNotFoundError, OSError)):
             BakedTerrain.from_npz("/nonexistent/path.npz")
+
+
+class TestBakedTerrainFloat64Preservation:
+    """Float64 inputs must not be silently downcast to float32."""
+
+    def test_float64_height_preserved(self):
+        from blender_addon.handlers.terrain_baked import BakedTerrain
+
+        size = 4
+        height = np.linspace(0.0, 10.0, size * size, dtype=np.float64).reshape(size, size)
+        ridge = np.zeros((size, size), dtype=np.float64)
+        gx = np.zeros((size, size), dtype=np.float64)
+        gz = np.zeros((size, size), dtype=np.float64)
+        bt = BakedTerrain(
+            height_grid=height,
+            ridge_map=ridge,
+            gradient_x=gx,
+            gradient_z=gz,
+            material_masks={},
+            metadata={},
+        )
+        assert bt.height_grid.dtype == np.float64, (
+            f"Expected float64, got {bt.height_grid.dtype}"
+        )
+        assert bt.ridge_map.dtype == np.float64
+        assert bt.gradient_x.dtype == np.float64
+        assert bt.gradient_z.dtype == np.float64
+
+    def test_float32_still_accepted(self):
+        from blender_addon.handlers.terrain_baked import BakedTerrain
+
+        size = 4
+        height = np.zeros((size, size), dtype=np.float32)
+        bt = BakedTerrain(
+            height_grid=height,
+            ridge_map=np.zeros((size, size), dtype=np.float32),
+            gradient_x=np.zeros((size, size), dtype=np.float32),
+            gradient_z=np.zeros((size, size), dtype=np.float32),
+            material_masks={},
+            metadata={},
+        )
+        assert bt.height_grid.dtype == np.float32
+
+
+class TestBakedTerrainNumpyJsonEncoder:
+    """Metadata with numpy scalars must serialize to JSON without crashing."""
+
+    def test_numpy_scalars_in_metadata(self):
+        from blender_addon.handlers.terrain_baked import BakedTerrain
+
+        size = 4
+        height = np.zeros((size, size), dtype=np.float32)
+        metadata = {
+            "np_float": np.float64(3.14),
+            "np_int": np.int64(42),
+            "np_array": np.array([1, 2, 3]),
+            "seed": 1,
+        }
+        bt = BakedTerrain(
+            height_grid=height,
+            ridge_map=np.zeros((size, size), dtype=np.float32),
+            gradient_x=np.zeros((size, size), dtype=np.float32),
+            gradient_z=np.zeros((size, size), dtype=np.float32),
+            material_masks={},
+            metadata=metadata,
+        )
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "test.npz"
+            bt.to_npz(str(path))  # must not raise
+            bt2 = BakedTerrain.from_npz(str(path))
+            assert bt2.metadata["np_float"] == pytest.approx(3.14)
+            assert bt2.metadata["np_int"] == 42
+            assert bt2.metadata["np_array"] == [1, 2, 3]
+
+
+class TestBakedTerrainLegacyOriginZ:
+    """BakedTerrain with legacy world_origin_z metadata should still work."""
+
+    def test_legacy_origin_z_fallback(self):
+        from blender_addon.handlers.terrain_baked import BakedTerrain
+
+        size = 4
+        height = np.arange(16, dtype=np.float32).reshape(4, 4)
+        metadata = {
+            "world_origin_x": 0.0,
+            "world_origin_z": 0.0,  # legacy key
+            "cell_size": 1.0,
+        }
+        bt = BakedTerrain(
+            height_grid=height,
+            ridge_map=np.zeros((size, size), dtype=np.float32),
+            gradient_x=np.zeros((size, size), dtype=np.float32),
+            gradient_z=np.zeros((size, size), dtype=np.float32),
+            material_masks={},
+            metadata=metadata,
+        )
+        # Should use world_origin_z as fallback for world_origin_y
+        h = bt.sample_height(0.0, 0.0)
+        assert isinstance(h, float)

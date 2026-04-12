@@ -205,8 +205,10 @@ def phacelle_noise(
             # Accumulate with bell-curve weight
             total_cos += cos_val * weight
             total_sin += sin_val * weight
-            total_d_cos += cos_val * weight  # derivative approximation
-            total_d_sin += sin_val * weight
+            # Derivatives: d/d(pos) cos(phase) = -sin(phase) * 2π,
+            #              d/d(pos) sin(phase) =  cos(phase) * 2π
+            total_d_cos += -sin_val * (2.0 * np.pi) * weight
+            total_d_sin += cos_val * (2.0 * np.pi) * weight
             total_weight += weight
 
     # Normalize by total weight

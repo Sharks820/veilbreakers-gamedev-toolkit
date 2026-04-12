@@ -22,6 +22,19 @@ from typing import Any, Dict, Tuple
 import numpy as np
 
 
+class _NumpyEncoder(json.JSONEncoder):
+    """JSON encoder that handles numpy scalars and arrays."""
+
+    def default(self, obj: Any) -> Any:
+        if isinstance(obj, (np.integer,)):
+            return int(obj)
+        if isinstance(obj, (np.floating,)):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super().default(obj)
+
+
 @dataclass
 class BakedTerrain:
     """Frozen post-pipeline terrain tile artifact.
@@ -30,8 +43,8 @@ class BakedTerrain:
     ------
     height_grid : (H, W) float32 in world meters
     ridge_map   : (H, W) float32, -1 = crease, +1 = ridge
-    gradient_x  : (H, W) float32, dh/dx
-    gradient_z  : (H, W) float32, dh/dz
+    gradient_x  : (H, W) float, dh/dx
+    gradient_z  : (H, W) float, dh/dy (named gradient_z for legacy compat)
     material_masks : dict[str, (H, W) ndarray] — channel_name -> mask
     metadata : dict — seed, tile_x, tile_y, world_origin, cell_size, etc.
     """
@@ -44,7 +57,9 @@ class BakedTerrain:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        h = np.asarray(self.height_grid, dtype=np.float32)
+        h = np.asarray(self.height_grid)
+        if not np.issubdtype(h.dtype, np.floating):
+            h = h.astype(np.float64)
         if h.ndim != 2:
             raise ValueError(
                 f"height_grid must be 2D (got ndim={h.ndim})"
@@ -57,7 +72,9 @@ class BakedTerrain:
             ("gradient_x", self.gradient_x),
             ("gradient_z", self.gradient_z),
         ]:
-            a = np.asarray(arr, dtype=np.float32)
+            a = np.asarray(arr)
+            if not np.issubdtype(a.dtype, np.floating):
+                a = a.astype(np.float64)
             if a.shape != shape:
                 raise ValueError(
                     f"{name} shape {a.shape} does not match "
@@ -66,7 +83,9 @@ class BakedTerrain:
             setattr(self, name, a)
 
         for k, v in self.material_masks.items():
-            a = np.asarray(v, dtype=np.float32)
+            a = np.asarray(v)
+            if not np.issubdtype(a.dtype, np.floating):
+                a = a.astype(np.float64)
             if a.shape != shape:
                 raise ValueError(
                     f"material_mask '{k}' shape {a.shape} does not match "
@@ -78,14 +97,25 @@ class BakedTerrain:
     # World-coordinate sampling
     # ------------------------------------------------------------------
 
-    def _world_to_grid(self, x: float, z: float) -> Tuple[float, float]:
-        """Convert world (x, z) to continuous grid (row, col) indices."""
+    def _world_to_grid(self, x: float, y: float) -> Tuple[float, float]:
+        """Convert world (x, y) to continuous grid (row, col) indices.
+
+        Blender is Z-up, so the horizontal ground plane is X,Y.
+        Rows map to the Y axis, columns to X — matching TerrainMaskStack.
+        Legacy metadata key ``world_origin_z`` is accepted as a fallback
+        for ``world_origin_y``.
+        """
         cell_size = float(self.metadata.get("cell_size", 1.0))
         origin_x = float(self.metadata.get("world_origin_x", 0.0))
-        origin_z = float(self.metadata.get("world_origin_z", 0.0))
+        origin_y = float(
+            self.metadata.get(
+                "world_origin_y",
+                self.metadata.get("world_origin_z", 0.0),
+            )
+        )
         rows, cols = self.height_grid.shape
         col_f = (x - origin_x) / cell_size
-        row_f = (z - origin_z) / cell_size
+        row_f = (y - origin_y) / cell_size
         # Clamp to valid range
         col_f = max(0.0, min(float(cols - 1), col_f))
         row_f = max(0.0, min(float(rows - 1), row_f))
@@ -107,22 +137,26 @@ class BakedTerrain:
             + grid[r1, c1] * cf * rf
         )
 
-    def sample_height(self, x: float, z: float) -> float:
-        """Return interpolated height at world coordinates (x, z)."""
-        row_f, col_f = self._world_to_grid(x, z)
+    def sample_height(self, x: float, y: float) -> float:
+        """Return interpolated height at world coordinates (x, y).
+
+        In Blender's Z-up convention, x and y span the horizontal ground
+        plane.  The returned value is the terrain height (Z).
+        """
+        row_f, col_f = self._world_to_grid(x, y)
         return self._bilinear(self.height_grid, row_f, col_f)
 
-    def get_gradient(self, x: float, z: float) -> Tuple[float, float]:
-        """Return (dh/dx, dh/dz) gradient vector at world (x, z)."""
-        row_f, col_f = self._world_to_grid(x, z)
+    def get_gradient(self, x: float, y: float) -> Tuple[float, float]:
+        """Return (dh/dx, dh/dy) gradient vector at world (x, y)."""
+        row_f, col_f = self._world_to_grid(x, y)
         gx = self._bilinear(self.gradient_x, row_f, col_f)
-        gz = self._bilinear(self.gradient_z, row_f, col_f)
-        return (gx, gz)
+        gy = self._bilinear(self.gradient_z, row_f, col_f)
+        return (gx, gy)
 
-    def get_slope(self, x: float, z: float) -> float:
-        """Return slope magnitude (>= 0) at world (x, z)."""
-        gx, gz = self.get_gradient(x, z)
-        return float(np.sqrt(gx * gx + gz * gz))
+    def get_slope(self, x: float, y: float) -> float:
+        """Return slope magnitude (>= 0) at world (x, y)."""
+        gx, gy = self.get_gradient(x, y)
+        return float(np.sqrt(gx * gx + gy * gy))
 
     # ------------------------------------------------------------------
     # Serialization
@@ -141,7 +175,7 @@ class BakedTerrain:
             arrays[f"mat_{k}"] = v
 
         # Metadata as JSON bytes
-        meta_bytes = json.dumps(self.metadata, sort_keys=True).encode("utf-8")
+        meta_bytes = json.dumps(self.metadata, sort_keys=True, cls=_NumpyEncoder).encode("utf-8")
         arrays["_metadata_json"] = np.frombuffer(meta_bytes, dtype=np.uint8)
 
         np.savez_compressed(path, **arrays)

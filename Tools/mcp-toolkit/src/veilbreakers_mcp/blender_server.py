@@ -2958,6 +2958,15 @@ async def asset_pipeline(
         terrain_name = f"{map_name}_Terrain"
         if "terrain_generated" not in steps_completed:
             try:
+                # Fix H1: route through TerrainPassController for contract
+                # enforcement (macro_world -> structural_masks -> erosion ->
+                # validation_minimal).  Legacy path remains as fallback.
+                # Fix L2: pass object_location so the terrain mesh is placed
+                # at the correct world-space position matching terrain_location.
+                _terrain_loc_3d = (
+                    (terrain_location[0], terrain_location[1], 0.0)
+                    if terrain_location != (0.0, 0.0) else (0.0, 0.0, 0.0)
+                )
                 await blender.send_command("env_generate_terrain", {
                     "name": terrain_name,
                     "terrain_type": terrain_cfg.get("preset", "hills"),
@@ -2967,6 +2976,8 @@ async def asset_pipeline(
                     "seed": map_seed,
                     "erosion": "hydraulic" if terrain_cfg.get("erosion", True) else "none",
                     "erosion_iterations": terrain_cfg.get("erosion_iterations", 5000),
+                    "use_controller": True,
+                    "object_location": list(_terrain_loc_3d),
                 })
                 steps_completed.append("terrain_generated")
                 created_objects.append(terrain_name)
