@@ -721,7 +721,65 @@ All mapped to Phase 10 tasks 10.9-10.34 in EXECUTION_PLAN.md. Key additions:
 - [Bridson Poisson Disk (SIGGRAPH 2007)](https://www.cs.ubc.ca/~rbridson/docs/bridson-siggraph07-poissondisk.pdf)
 - [GPU Gems 3: Vegetation Animation in Crysis](https://developer.nvidia.com/gpugems/gpugems3/part-iii-rendering/chapter-16)
 
-## 16. Sources (continued)
+## 16. AAA Waterfalls, Rivers & Water Bodies Deep Dive (2026-04-12)
+
+### 16.1 Waterfall Mesh Generation (AAA Standard)
+AAA studios do NOT use fluid sim. They use **multi-layer mesh + shader fakery:**
+- **Primary body:** 2-4 overlapping transparent sheets following spline from lip to basin
+- **Flow-map shader:** 2 phase-offset texture samples blended with triangle wave (Valve 2010)
+- **Foam mask:** Voronoi/noise clipped by threshold, scrolls faster than base
+- **Particle spray:** Billboard particles at base impact and obstacle contacts only
+- **Mist volume:** Volumetric cube or large transparent sprite particles
+- **Splash disc:** Radial mesh at impact point with ripple animation
+- **VeilBreakers implementation:** Tapered prism (3D volume) + 2 inner ribbon sheets for flow shader. Vertex colors: R=speed, G=foam, B=thickness
+
+### 16.2 River Mesh Generation
+- **Spline-based:** Width from Leopold & Maddock: `width = 0.5 * flow_accum^0.5`
+- **Depth:** `depth = 0.2 * flow_accum^0.4`
+- **Bank erosion:** Lower heightmap along path, smooth transition at edges
+- **Flowmap:** RG = flow direction (from spline tangent), B = foam intensity
+- **Animated UV:** Two phase-offset samples eliminate seam artifacts (Valve technique)
+
+### 16.3 Lake Detection (Priority Flood)
+- Barnes et al. 2014: O(n) depression filling using priority queue from border cells
+- Cells below fill level = lake. Connected component extraction for individual lakes
+- Water surface = flat plane at fill level with Gerstner wave displacement
+
+### 16.4 Shore Treatment (SDF-Based Foam)
+- Distance from water pixel to nearest shore → foam function
+- 0-1m: fully wet (darken albedo 0.6, increase smoothness)
+- 1-3m: transition zone
+- 3m+: dry terrain
+- Wave-phase animation: foam retreats and advances with sine function
+
+### 16.5 Ocean Rendering
+- **Gerstner waves (4 summed):** Standard real-time approach, sufficient for dark fantasy
+- **FFT ocean (Tessendorf):** Overkill unless ocean-focused game
+- **Foam from wave breaking:** Jacobian determinant < 0 = surface folded = breaking wave
+- **Unity URP:** Screen-Space Planar Reflection for lakes, Reflection Probe fallback for distant water
+
+### 16.6 Underwater Dark Fantasy
+- Murky visibility: exponential fog density 0.005-0.02, max vis 15-30m
+- Color: desaturated teal/green-brown, low contrast
+- Caustics: animated projected Voronoi texture, depth-attenuated
+- God rays: volumetric light scattering as custom URP RendererFeature
+- Dark fantasy: red/orange caustics near lava water, creature silhouettes in fog
+
+### 16.7 Key A* River Bug Fix
+Current `abs(height_diff)` at line 764 makes uphill=downhill cost. Fix: asymmetric penalty — uphill 10x more expensive, downhill 10x cheaper. This is ROOT CAUSE of straight-line rivers.
+
+### 16.8 Sources
+- [Hugh Malan: Rendering Water in Horizon Forbidden West (SIGGRAPH 2022)](https://advances.realtimerendering.com/s2022/SIGGRAPH2022-Advances-Water-Malan.pdf)
+- [GPU Gems Ch.1: Gerstner Waves](https://developer.nvidia.com/gpugems/gpugems/part-i-natural-effects/chapter-1-effective-water-simulation-physical-models)
+- [Valve Flow Map Water (2010)](http://graphicsrunner.blogspot.com/2010/08/water-using-flow-maps.html)
+- [Nick McDonald: Meandering Rivers (2023)](https://nickmcd.me/2023/12/12/meandering-rivers-in-particle-based-hydraulic-erosion-simulations/)
+- [Arnklit/Waterways: Godot river generator](https://github.com/Arnklit/Waterways)
+- [Robert Hodgin: Meander](https://roberthodgin.com/project/meander)
+- [Tessendorf: Simulating Ocean Water (2004)](https://people.computing.clemson.edu/~jtessen/reports/papers_files/coursenotes2004.pdf)
+- [Catlike Coding: Waves Tutorial](https://catlikecoding.com/unity/tutorials/flow/waves/)
+- [Daniel Ilett: Stylised Water in URP](https://danielilett.com/2020-04-05-tut5-3-urp-stylised-water/)
+
+## 17. Sources (continued)
 
 - runevision, [Fast and Gorgeous Erosion Filter](https://blog.runevision.com/2026/03/fast-and-gorgeous-erosion-filter.html) — the video/article this synthesis is built on.
 - runevision, [LayerProcGen](https://runevision.github.io/LayerProcGen/) — chunk-parallel generation library, companion to the filter.
