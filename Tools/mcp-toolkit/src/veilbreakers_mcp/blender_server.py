@@ -5016,6 +5016,8 @@ async def blender_environment(
         "add_storytelling_props",
         "sculpt_terrain",
         "generate_multi_biome_world",
+        "generate_weathering_timeline",
+        "edit_hero_feature",
     ],
     # Common params
     name: str | None = None,
@@ -5065,6 +5067,11 @@ async def blender_environment(
     operation: str | None = None,
     falloff: str = "smooth",
     heightmap: list[list[float]] | None = None,
+    # generate_weathering_timeline params (Bundle Q)
+    duration_hours: float | None = None,
+    # edit_hero_feature params (Bundle M)
+    feature_id: str | None = None,
+    mutations: list[dict] | None = None,
     # generate_multi_biome_world params
     biome_count: int | None = None,
     biomes: list[str] | None = None,
@@ -5304,6 +5311,24 @@ async def blender_environment(
             "Game-readiness check: use blender_mesh action=game_check",
         ]
         return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "generate_weathering_timeline":
+        params = {}
+        if duration_hours is not None:
+            params["duration_hours"] = duration_hours
+        if seed is not None:
+            params["seed"] = seed
+        result = await blender.send_command("terrain_generate_weathering_timeline", params)
+        return result
+
+    elif action == "edit_hero_feature":
+        params = {}
+        if feature_id is not None:
+            params["feature_id"] = feature_id
+        if mutations is not None:
+            params["mutations"] = mutations
+        result = await blender.send_command("terrain_edit_hero_feature", params)
+        return result
 
     return "Unknown action"
 
