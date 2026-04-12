@@ -285,7 +285,12 @@ def test_pass_wind_erosion_runs():
     h_before = stack.height.copy()
     result = pass_wind_erosion(state, None)
     assert result.status == "ok"
-    assert not np.array_equal(stack.height, h_before)
+    # Phase 52: wind_erosion now produces a delta channel, not direct height write
+    delta = stack.get("wind_erosion_delta")
+    assert delta is not None, "wind_erosion_delta channel must be produced"
+    assert np.any(delta != 0.0), "delta should be non-zero with intensity > 0"
+    # Height should NOT have changed (integrator applies the delta later)
+    np.testing.assert_array_equal(stack.height, h_before)
 
 
 # ---------------------------------------------------------------------------
