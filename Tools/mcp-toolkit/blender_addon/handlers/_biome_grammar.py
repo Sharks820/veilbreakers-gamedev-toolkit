@@ -277,6 +277,59 @@ def _generate_corruption_map(
     return np.clip(noise * scale, 0.0, 1.0)
 
 
+def _box_filter_2d(arr: np.ndarray, radius: int) -> np.ndarray:
+    """Simple 2D box (mean) filter using cumulative sums. No scipy needed."""
+    if radius <= 0:
+        return arr.copy()
+    h, w = arr.shape
+    size = 2 * radius + 1
+    # Pad with edge values
+    padded = np.pad(arr, radius, mode="edge")
+    # Cumulative sum approach for fast uniform filter
+    cs = np.cumsum(np.cumsum(padded, axis=0), axis=1)
+    # Compute box means using the integral image
+    result = np.empty_like(arr)
+    for y in range(h):
+        for x in range(w):
+            y2, x2 = y + size - 1, x + size - 1
+            total = cs[y2, x2]
+            if y > 0:
+                total -= cs[y - 1, x2]
+            if x > 0:
+                total -= cs[y2, x - 1]
+            if y > 0 and x > 0:
+                total += cs[y - 1, x - 1]
+            result[y, x] = total / (size * size)
+    return result
+
+
+def _distance_from_mask(mask: np.ndarray) -> np.ndarray:
+    """Approximate Euclidean distance transform using iterative passes.
+
+    For each True cell in *mask*, returns approximate distance to nearest
+    False cell. Pure numpy, no scipy dependency.
+    """
+    h, w = mask.shape
+    dist = np.full((h, w), h + w, dtype=np.float64)
+    dist[~mask] = 0.0
+
+    # Forward pass
+    for y in range(h):
+        for x in range(w):
+            if y > 0:
+                dist[y, x] = min(dist[y, x], dist[y - 1, x] + 1.0)
+            if x > 0:
+                dist[y, x] = min(dist[y, x], dist[y, x - 1] + 1.0)
+    # Backward pass
+    for y in range(h - 1, -1, -1):
+        for x in range(w - 1, -1, -1):
+            if y < h - 1:
+                dist[y, x] = min(dist[y, x], dist[y + 1, x] + 1.0)
+            if x < w - 1:
+                dist[y, x] = min(dist[y, x], dist[y, x + 1] + 1.0)
+    return dist
+
+
 # ===========================================================================
 # Geology Feature Generators  (Clusters L-P gap fills)
 #
@@ -331,7 +384,7 @@ def apply_periglacial_patterns(
     heave = min_dist * frost_heave_scale * intensity
 
     # Scale by elevation — stronger at high points (permafrost zone)
-    elev_mask = (heightmap - heightmap.min()) / max(heightmap.ptp(), 1e-6)
+    elev_mask = (heightmap - heightmap.min()) / max((heightmap.max() - heightmap.min()), 1e-6)
     elev_mask = np.clip(elev_mask * 2.0, 0.0, 1.0)  # top half gets full effect
 
     return heightmap + heave * elev_mask
@@ -370,13 +423,13 @@ def apply_desert_pavement(
 
     # Pavement forms on flat, low areas
     flat_mask = 1.0 - np.clip(slope / max(slope.max(), 1e-6) * 4.0, 0.0, 1.0)
-    elev_norm = (heightmap - heightmap.min()) / max(heightmap.ptp(), 1e-6)
+    elev_norm = (heightmap - heightmap.min()) / max((heightmap.max() - heightmap.min()), 1e-6)
     low_mask = 1.0 - np.clip(elev_norm * 2.0, 0.0, 1.0)
     pavement_mask = np.clip(flat_mask * low_mask * intensity, 0.0, 1.0)
 
     # Smooth heightmap in pavement zones (wind-deflation flattening)
-    from scipy.ndimage import uniform_filter
-    smoothed = uniform_filter(heightmap.astype(np.float64), size=smoothing_radius * 2 + 1)
+    # Pure-numpy box filter (no scipy dependency)
+    smoothed = _box_filter_2d(heightmap.astype(np.float64), smoothing_radius)
     result = heightmap * (1.0 - pavement_mask) + smoothed * pavement_mask
 
     return result, pavement_mask
@@ -404,7 +457,7 @@ def compute_spring_line_mask(
     h, w = heightmap.shape
     rng = np.random.RandomState(seed)
 
-    elev_norm = (heightmap - heightmap.min()) / max(heightmap.ptp(), 1e-6)
+    elev_norm = (heightmap - heightmap.min()) / max((heightmap.max() - heightmap.min()), 1e-6)
 
     # Compute slope — springs emerge on slopes, not flats or cliffs
     gy, gx = np.gradient(heightmap)
@@ -528,7 +581,7 @@ def apply_hot_spring_features(
 
     for _ in range(num_springs):
         # Place springs in mid-elevation zones
-        elev_norm = (heightmap - heightmap.min()) / max(heightmap.ptp(), 1e-6)
+        elev_norm = (heightmap - heightmap.min()) / max((heightmap.max() - heightmap.min()), 1e-6)
         mid_mask = np.exp(-((elev_norm - 0.4) ** 2) / 0.05)
         flat_mask = mid_mask.ravel()
         prob = flat_mask / max(flat_mask.sum(), 1e-12)
@@ -593,9 +646,8 @@ def apply_reef_platform(
     if not underwater.any() or not above.any():
         return result  # no coastline
 
-    # Distance from shore (for underwater cells only)
-    from scipy.ndimage import distance_transform_edt
-    shore_dist = distance_transform_edt(underwater)
+    # Distance from shore (for underwater cells only) — pure numpy
+    shore_dist = _distance_from_mask(underwater)
 
     # Reef band: narrow strip near coast
     reef_mask = np.clip(1.0 - np.abs(shore_dist - reef_width * 0.5) / (reef_width * 0.5), 0.0, 1.0)
