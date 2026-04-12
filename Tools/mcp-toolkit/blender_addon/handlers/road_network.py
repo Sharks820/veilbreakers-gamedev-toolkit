@@ -373,6 +373,68 @@ def _detect_bridges(
 
 
 # ---------------------------------------------------------------------------
+# Heightmap sampling
+# ---------------------------------------------------------------------------
+
+
+def sample_heightmap_z(
+    heightmap: list[list[float]],
+    x: float,
+    y: float,
+    *,
+    origin_x: float = 0.0,
+    origin_y: float = 0.0,
+    cell_size: float = 1.0,
+) -> float:
+    """Bilinear-interpolated height sample from a 2D heightmap grid.
+
+    Parameters
+    ----------
+    heightmap : 2D list of floats (rows x cols)
+        Grid-aligned height values. Row index maps to Y, col index to X.
+    x, y : world-space coordinates to sample.
+    origin_x, origin_y : world-space origin of the heightmap grid corner.
+    cell_size : distance between grid cells (uniform square grid).
+
+    Returns the interpolated Z height, or 0.0 if the heightmap is empty.
+    Coordinates outside the grid are clamped to the nearest edge.
+    """
+    if not heightmap or not heightmap[0]:
+        return 0.0
+
+    rows = len(heightmap)
+    cols = len(heightmap[0])
+
+    # Continuous grid coordinates
+    gc = (x - origin_x) / cell_size
+    gr = (y - origin_y) / cell_size
+
+    # Clamp to valid range
+    gc = max(0.0, min(gc, cols - 1.0))
+    gr = max(0.0, min(gr, rows - 1.0))
+
+    c0 = int(gc)
+    r0 = int(gr)
+    c1 = min(c0 + 1, cols - 1)
+    r1 = min(r0 + 1, rows - 1)
+
+    fc = gc - c0
+    fr = gr - r0
+
+    h00 = heightmap[r0][c0]
+    h10 = heightmap[r0][c1]
+    h01 = heightmap[r1][c0]
+    h11 = heightmap[r1][c1]
+
+    return (
+        h00 * (1 - fc) * (1 - fr)
+        + h10 * fc * (1 - fr)
+        + h01 * (1 - fc) * fr
+        + h11 * fc * fr
+    )
+
+
+# ---------------------------------------------------------------------------
 # Road mesh spec generation
 # ---------------------------------------------------------------------------
 
@@ -381,8 +443,16 @@ def _road_segment_mesh_spec(
     end: Vec3,
     width: float,
     resolution: int = 4,
+    heightmap: list[list[float]] | None = None,
+    heightmap_origin: tuple[float, float] | None = None,
+    heightmap_cell_size: float = 1.0,
 ) -> dict[str, Any]:
     """Generate a mesh spec for a road segment as a flat strip.
+
+    When *heightmap* is provided each vertex samples the terrain height
+    via bilinear interpolation so the road conforms to the ground surface.
+    A small offset (+0.05 m) keeps the road above the terrain to avoid
+    z-fighting.
 
     Returns a dict with vertices and faces forming a flat quad strip
     along the road direction.
@@ -398,6 +468,9 @@ def _road_segment_mesh_spec(
     ny = dx / length
     hw = width / 2.0
 
+    ox = heightmap_origin[0] if heightmap_origin else 0.0
+    oy = heightmap_origin[1] if heightmap_origin else 0.0
+
     vertices: list[Vec3] = []
     faces: list[tuple[int, int, int, int]] = []
 
@@ -407,9 +480,18 @@ def _road_segment_mesh_spec(
         py = start[1] + dy * t
         pz = start[2] + (end[2] - start[2]) * t
 
-        # Left and right edge vertices
-        vertices.append((px + nx * hw, py + ny * hw, pz))
-        vertices.append((px - nx * hw, py - ny * hw, pz))
+        for side in (1, -1):
+            vx = px + nx * hw * side
+            vy = py + ny * hw * side
+            if heightmap is not None:
+                vz = sample_heightmap_z(
+                    heightmap, vx, vy,
+                    origin_x=ox, origin_y=oy,
+                    cell_size=heightmap_cell_size,
+                ) + 0.05
+            else:
+                vz = pz
+            vertices.append((vx, vy, vz))
 
     # Create quad faces
     for i in range(resolution):
@@ -430,8 +512,15 @@ def _road_segment_mesh_spec_with_curbs(
     curb_height: float = 0.15,
     gutter_width: float = 0.3,
     resolution: int = 4,
+    heightmap: list[list[float]] | None = None,
+    heightmap_origin: tuple[float, float] | None = None,
+    heightmap_cell_size: float = 1.0,
 ) -> dict[str, Any]:
     """Generate a mesh spec for a road segment with raised curb geometry.
+
+    When *heightmap* is provided, the base Z of each vertex row is sampled
+    from the terrain via bilinear interpolation (centre-line sample) so the
+    road follows the ground.  Curb offsets are then applied on top.
 
     Cross-section layout (6 vertex columns per row, indexed left-to-right):
       col 0: outer-left gutter    X = -(width/2 + gutter_width),  Z = 0
@@ -489,6 +578,9 @@ def _road_segment_mesh_spec_with_curbs(
     # Total span for V normalisation in road_surface UV
     total_span = 2.0 * (hw + gutter_width)
 
+    ox = heightmap_origin[0] if heightmap_origin else 0.0
+    oy = heightmap_origin[1] if heightmap_origin else 0.0
+
     for row in range(resolution + 1):
         t = row / resolution
         px = start[0] + dx * t
@@ -496,10 +588,20 @@ def _road_segment_mesh_spec_with_curbs(
         pz = start[2] + (end[2] - start[2]) * t
         u = t  # UV along road direction
 
+        # Sample terrain height at road centre for this row
+        if heightmap is not None:
+            base_z = sample_heightmap_z(
+                heightmap, px, py,
+                origin_x=ox, origin_y=oy,
+                cell_size=heightmap_cell_size,
+            ) + 0.05
+        else:
+            base_z = pz
+
         for col_xoff, col_z in col_offsets:
             wx = px + nx * col_xoff
             wy = py + ny * col_xoff
-            wz = pz + col_z
+            wz = base_z + col_z
             vertices.append((wx, wy, wz))
 
     # Build quads between consecutive rows
@@ -563,12 +665,18 @@ def compute_road_network(
     terrain_heightmap: list[list[float]] | None = None,
     water_level: float = 0.0,
     seed: int = 42,
+    heightmap_origin: tuple[float, float] | None = None,
+    heightmap_cell_size: float = 1.0,
 ) -> dict[str, Any]:
     """Generate a connected road network between waypoints.
 
     Uses MST to ensure all waypoints are connected. Classifies road
     segments by importance, detects intersections, places bridges over
     water crossings, and generates switchbacks on steep slopes.
+
+    When *terrain_heightmap* is provided alongside *heightmap_origin* and
+    *heightmap_cell_size*, road mesh vertices are sampled from the terrain
+    so they conform to the ground surface.
 
     Parameters
     ----------
@@ -581,6 +689,10 @@ def compute_road_network(
         Z height of water. Roads below this get bridges.
     seed : int
         Random seed for switchback jitter.
+    heightmap_origin : tuple of (x, y), optional
+        World-space origin of the heightmap grid.
+    heightmap_cell_size : float
+        Distance between heightmap grid cells.
 
     Returns
     -------
@@ -590,6 +702,7 @@ def compute_road_network(
         - "bridges": list of bridge dicts
         - "switchbacks": list of switchback position lists
         - "mesh_specs": list of mesh spec dicts for each segment
+        - "merged_mesh": dict with combined vertices/faces (if segments exist)
         - "waypoint_count": int
         - "total_length": float
     """
@@ -674,19 +787,30 @@ def compute_road_network(
         heightmap=terrain_heightmap,
     )
 
-    # Step 5: Generate mesh specs
+    # Step 5: Generate mesh specs (with terrain-following when heightmap given)
     # Main roads and cobblestone streets get full curb geometry;
     # paths and trails use the simpler flat strip.
     _curb_road_types = {"main", "cobblestone"}
+    hm_kwargs: dict[str, Any] = {}
+    if terrain_heightmap is not None:
+        hm_kwargs = {
+            "heightmap": terrain_heightmap,
+            "heightmap_origin": heightmap_origin,
+            "heightmap_cell_size": heightmap_cell_size,
+        }
+
     mesh_specs: list[dict[str, Any]] = []
     for start, end, width, road_type in segments:
         if road_type in _curb_road_types:
-            spec = _road_segment_mesh_spec_with_curbs(start, end, width)
+            spec = _road_segment_mesh_spec_with_curbs(start, end, width, **hm_kwargs)
         else:
-            spec = _road_segment_mesh_spec(start, end, width)
+            spec = _road_segment_mesh_spec(start, end, width, **hm_kwargs)
         spec["road_type"] = road_type
         spec["width"] = width
         mesh_specs.append(spec)
+
+    # Step 6: Merge all segment mesh specs into a single combined mesh
+    merged = merge_road_mesh_specs(mesh_specs)
 
     return {
         "segments": segments,
@@ -694,6 +818,52 @@ def compute_road_network(
         "bridges": bridges,
         "switchbacks": switchbacks,
         "mesh_specs": mesh_specs,
+        "merged_mesh": merged,
         "waypoint_count": len(waypoints),
         "total_length": total_length,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Mesh merging
+# ---------------------------------------------------------------------------
+
+
+def merge_road_mesh_specs(specs: list[dict[str, Any]]) -> dict[str, Any]:
+    """Combine multiple road mesh specs into a single vertex/face buffer.
+
+    Face indices are offset so they reference the correct vertices in the
+    merged buffer.  Per-face material indices are assigned based on the
+    ``road_type`` key in each spec (``main`` = 0, ``path`` = 1,
+    ``trail`` = 2, others = 3).
+
+    Returns a dict with:
+        - ``vertices``: flat list of Vec3
+        - ``faces``: flat list of index tuples
+        - ``material_indices``: per-face int
+        - ``segment_count``: number of specs merged
+    """
+    _type_to_mat = {"main": 0, "cobblestone": 0, "path": 1, "trail": 2}
+    all_verts: list[Vec3] = []
+    all_faces: list[tuple[int, ...]] = []
+    all_mat_indices: list[int] = []
+
+    for spec in specs:
+        verts = spec.get("vertices", [])
+        faces = spec.get("faces", [])
+        if not verts or not faces:
+            continue
+        offset = len(all_verts)
+        all_verts.extend(verts)
+        road_type = spec.get("road_type", "path")
+        mat_idx = _type_to_mat.get(road_type, 3)
+        for face in faces:
+            all_faces.append(tuple(idx + offset for idx in face))
+            all_mat_indices.append(mat_idx)
+
+    return {
+        "vertices": all_verts,
+        "faces": all_faces,
+        "material_indices": all_mat_indices,
+        "segment_count": len(specs),
     }
