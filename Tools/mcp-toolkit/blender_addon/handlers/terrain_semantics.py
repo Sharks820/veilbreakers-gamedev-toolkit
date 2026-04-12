@@ -17,6 +17,7 @@ from __future__ import annotations
 import enum
 import hashlib
 import json
+import types
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import (
@@ -25,6 +26,7 @@ from typing import (
     Dict,
     FrozenSet,
     List,
+    Mapping,
     Optional,
     Set,
     Tuple,
@@ -684,7 +686,9 @@ class HeroFeatureSpec:
     silhouette_vantages: Tuple[Tuple[float, float, float], ...] = ()
     exclusion_radius: float = 0.0
     budget: Optional[HeroFeatureBudget] = None
-    parameters: Dict[str, Any] = field(default_factory=dict)
+    parameters: Mapping[str, Any] = field(
+        default_factory=lambda: types.MappingProxyType({})
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -765,7 +769,9 @@ class TerrainIntentState:
     morphology_templates: Tuple[str, ...] = ()
     noise_profile: str = "dark_fantasy_default"
     erosion_profile: str = "temperate"
-    composition_hints: Dict[str, Any] = field(default_factory=dict)  # REVIEW-IGNORE PY-COR-17: frozen+mutable is safe here — callers treat as read-only, intent_hash() uses sorted items
+    composition_hints: Mapping[str, Any] = field(
+        default_factory=lambda: types.MappingProxyType({})
+    )
 
     def with_scene_read(self, scene_read: TerrainSceneRead) -> "TerrainIntentState":
         """Return a copy of this intent with scene_read attached."""

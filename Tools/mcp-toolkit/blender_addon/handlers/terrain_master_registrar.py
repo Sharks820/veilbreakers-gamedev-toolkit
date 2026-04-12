@@ -35,7 +35,10 @@ Bundle inventory (complete A–O):
 
 from __future__ import annotations
 
+import logging
 from typing import Callable, List
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Bundle registrar lookup — one import per bundle
@@ -51,8 +54,22 @@ def _safe_import_registrar(module_path: str, attr: str) -> Callable[[], None] | 
     try:
         module = __import__(module_path, fromlist=[attr])
         fn = getattr(module, attr, None)
+        if fn is not None and not callable(fn):
+            logger.warning(
+                "Bundle registrar %s.%s exists but is not callable (type=%s)",
+                module_path, attr, type(fn).__name__,
+            )
+            return None
         return fn if callable(fn) else None
-    except Exception:
+    except ImportError:
+        # Expected when a bundle module is absent (worktree rebuild, etc.)
+        logger.debug("Bundle module %s not found — skipping", module_path)
+        return None
+    except Exception as exc:
+        # Unexpected error — log at warning so it's visible in Blender console
+        logger.warning(
+            "Failed to import bundle registrar %s.%s: %r", module_path, attr, exc
+        )
         return None
 
 
