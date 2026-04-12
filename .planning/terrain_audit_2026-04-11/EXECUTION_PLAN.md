@@ -68,7 +68,7 @@ VERIFICATION GATE:
 | 52 | 4 parallel | A: pass_coastline. B: pass_karst. C: pass_wind_erosion. D: pass_glacial | Each owns exactly one pass file. AST lint rule is sequential after |
 | 53 | 2 waves | Wave 1: BakedTerrain dataclass + DAG output. Wave 2 (3 parallel): compose_terrain_node, compose_map, legacy removal | Wave 2 consumes Wave 1's contract |
 | 54 | 3 parallel | A: seam_guard fix + blend_weight (blender_server.py seam section). B: TerrainNodeRegistry (new file). C: cross-tile validator + edge tests | A owns blender_server seam lines, B owns new file, C owns test files |
-| 55 | **5 sub-phases in parallel** | **6A** (Scatter): 6.1-6.2, 6.5-6.7, 6.20-6.27, 6.49-6.58, 6.127-6.137. **6B** (Rivers/Water): 6.3, 6.8-6.9, 6.59-6.76. **6C** (Roads/Cliffs/Morphology): 6.77-6.88, 6.107-6.118, 6.125-6.126. **6D** (Handler bugs+Socket+Wiring): 6.28-6.48, 6.90-6.106. **6E** (Caves deep-dive): 6.119-6.124 | Each sub-phase owns distinct files; 6D is independent of terrain pipeline |
+| 55 | **5 sub-phases in parallel** | **6A** (Scatter): 6.1-6.2, 6.5-6.7, 6.20-6.27, 6.49-6.58, 6.127-6.137. **6B** (Rivers/Water): 6.3, 6.8-6.9, 6.59-6.76, 6.138-6.146. **6C** (Roads/Cliffs/Morphology): 6.77-6.88, 6.107-6.118, 6.125-6.126. **6D** (Handler bugs+Socket+Wiring): 6.28-6.48, 6.90-6.106. **6E** (Caves deep-dive): 6.119-6.124 | Each sub-phase owns distinct files; 6D is independent of terrain pipeline |
 | 56 | 2 parallel | A: Blender material pipeline (terrain_materials*.py). B: Unity shader (shader_templates.py + scene_templates.py) | **Unity shader (Agent B) can START after Phase 4** — does not depend on Phases 5-6 |
 | 57 | 3 parallel | A: AdvancedTerrainErosion UPM + erosion tool. B: terrain LOD+holes+collision. C: trees+NavMesh+mask export | **Tasks 8.1-8.4 can START after Phase 4** — basic Unity integration independent of Blender pipeline |
 | 58 | 5 parallel | Each agent gets ~5 independent fixes with non-overlapping files + generator upgrade tasks split into groups of 5 templates | Maximum parallelism, minimal risk |
@@ -484,6 +484,15 @@ R15J wiring gaps (32 functions with zero production callers)
 - 6.74: Add water curtain mesh to generate_waterfall with: plunge-pool erosion depression (height delta fed to integrator), splash shelves at lip and pool edge, mist-wet material darkening zone (radius proportional to waterfall height). Currently cliff rock with zero falling water geometry (NEW-R8-13)
 - 6.75: Implement river 3D geometry — spline mesh + flowmap bake, Arnklit Waterways pattern (F114, GAP-003)
 - 6.76: Implement natural arch geometry at cliff-river intersections (F125)
+- 6.138: Implement multi-layer mesh waterfall — 2-4 overlapping transparent sheets following spline from lip to basin, each offset slightly for depth parallax. NOT a single surface. Sheets share flow-map UV but have phase-offset scroll for layered motion (BEST_PRACTICES #16.1)
+- 6.139: Implement tapered prism + inner ribbon waterfall geometry — outer mesh is tapered 3D prism (thick at lip, thin at basin, rounded front face), 2 inner ribbon sheets for flow shader. Vertex colors encode R=speed, G=foam, B=thickness per VeilBreakers requirement (BEST_PRACTICES #16.1)
+- 6.140: Add mist/spray particle emitter position metadata to waterfall output — emit positions at base impact point, obstacle contact points, and lip edge. Export as metadata array (world_pos, radius, intensity) for Unity particle system placement (BEST_PRACTICES #16.1)
+- 6.141: Add splash disc radial mesh at waterfall impact point — flat radial mesh with animated ripple displacement, alpha fade at edges. Placed at basin water surface where waterfall hits (BEST_PRACTICES #16.1)
+- 6.142: Implement multi-tier cascading waterfalls with intermediate pools — detect multiple elevation drops along waterfall path, generate separate waterfall segments with flat pool surfaces between tiers. Each tier gets own lip, curtain mesh, and splash geometry (BEST_PRACTICES #16.1)
+- 6.143: Add waterfall sound zone metadata output — export 4 concentric zones per waterfall: impact (0-3m, loud crash), near (3-10m, roar), mid (10-30m, ambient rush), far (30-80m, distant rumble). Zone radii scale with waterfall height. Export as metadata for Unity audio system (BEST_PRACTICES #16.1)
+- 6.144: Implement Leopold & Maddock river width formula — width = 0.5 * flow_accum^0.5, depth = 0.2 * flow_accum^0.4. Replace any ad-hoc width derivation in river mesh generation (task 6.3) with these empirical hydraulic geometry equations (BEST_PRACTICES #16.2)
+- 6.145: Implement lake extraction via connected component flood fill — after priority flood depression filling (6.112), extract individual lakes as connected components of cells below fill level. Each lake gets unique ID, surface area, volume, shore polygon. Feed to handle_create_water for per-lake mesh generation (BEST_PRACTICES #16.3)
+- 6.146: Add Gerstner wave displacement for lake surfaces — sum 4 Gerstner waves with different amplitudes/wavelengths/directions on flat lake plane. Amplitude scales with lake surface area (small lakes = subtle, large lakes = visible waves). Blender preview via shape keys or modifier; export wave params for Unity shader (BEST_PRACTICES #16.3, #16.5)
 
 ### Tasks — Road + terrain features:
 - 6.77: Wire road_network mesh_specs to Blender handler — create actual road mesh objects (NEW-R8-06)
@@ -565,6 +574,15 @@ R15J wiring gaps (32 functions with zero production callers)
 - [ ] Forest structure has canopy/understory/shrub/ground layers (6.135)
 - [ ] Multi-pass exclusion zones prevent scatter in buildings/roads/cliffs/water (6.136)
 - [ ] Per-instance color/scale/rotation variation eliminates clone appearance (6.137)
+- [ ] Waterfalls use 2-4 overlapping transparent sheets, not single surface (6.138)
+- [ ] Waterfall geometry is tapered prism + inner ribbon sheets with vertex color encoding (6.139)
+- [ ] Mist/spray emitter positions exported as metadata per waterfall (6.140)
+- [ ] Splash disc radial mesh present at waterfall impact points (6.141)
+- [ ] Multi-tier waterfalls have intermediate pools between elevation drops (6.142)
+- [ ] Waterfall sound zone metadata (impact/near/mid/far) exported per waterfall (6.143)
+- [ ] River width uses Leopold & Maddock formula: width = 0.5 * flow_accum^0.5 (6.144)
+- [ ] Lakes extracted as individual connected components with unique IDs (6.145)
+- [ ] Lake surfaces have Gerstner wave displacement (4 summed waves) (6.146)
 
 ---
 
@@ -656,6 +674,10 @@ RGAP-001 through RGAP-033 (33 rendering gaps)
 - 7.J1: Add water-terrain intersection foam/darkening shader at shorelines (RGAP-027)
 - 7.J2: Add decal projection shader for roads/paths/scorch marks on terrain — Unity: URP Decal Projector, Blender: preview geometry above surface (RGAP-028)
 - 7.J3: Add runtime terrain deformation shader — footprints/impacts via displacement (RGAP-029)
+- 7.J4: Add waterfall flow-map shader — 2 phase-offset texture samples blended with triangle wave (Valve 2010 technique). Scrolling UV along spline tangent, phase offset = 0.5 cycle between samples to eliminate pulsing. Works on multi-layer waterfall sheets from 6.138 (BEST_PRACTICES #16.1)
+- 7.J5: Add waterfall foam mask shader — Voronoi/noise pattern clipped by threshold, scrolls faster than base flow texture. Foam intensity driven by vertex color G channel. Blends additively over flow-map base (BEST_PRACTICES #16.1)
+- 7.J6: Add waterfall LOD system — near (< 30m): full multi-layer mesh + particles + splash disc, mid (30-80m): single sheet + simplified shader, far (> 80m): billboard sprite with scrolling texture. LOD transitions cross-fade over 5m (BEST_PRACTICES #16.1)
+- 7.J7: Add river LOD system — near (< 50m): full spline mesh + animated flow-map shader, mid (50-150m): projected decal with scrolling normal map, far (> 150m): terrain texture tint only. LOD transitions via alpha cross-fade (BEST_PRACTICES #16.2)
 
 ### Cluster K: Minimap (RGAP-031)
 - 7.K1: Add terrain minimap render shader — top-down material-aware render (RGAP-031)
@@ -680,6 +702,10 @@ RGAP-001 through RGAP-033 (33 rendering gaps)
 - [ ] Zero F034-F049 material bugs remain
 - [ ] Zero F600-F621 deep material bugs remain
 - [ ] All 33 RGAP items addressed
+- [ ] Waterfall flow-map shader uses 2 phase-offset samples with triangle wave blend (7.J4)
+- [ ] Waterfall foam mask shader scrolls Voronoi/noise faster than base flow (7.J5)
+- [ ] Waterfall LOD: full mesh near, single sheet mid, billboard far (7.J6)
+- [ ] River LOD: spline mesh near, decal mid, terrain tint far (7.J7)
 
 ---
 
@@ -782,6 +808,9 @@ GAP-028 (terrain decals), GAP-029 (runtime deformation), GAP-031 (minimap)
 - 8.G1: Export baked flowmap textures — pack RG=flow direction, B=foam intensity from analytical gradient + flow accumulation. Reference: Arnklit/Waterways
 - 8.G2: Implement terrain hole workflow for caves — Paint Holes API punches through heightfield, rock meshes hide aliased edges, NavMesh respects holes, dual-layer heightmap drives automatic hole placement
 - 8.G3: Add terrain collision optimization — PhysX heightfield collider with resolution matching physics needs (lower than render), separate collision mesh for dynamic vs static
+- 8.G4: Add Screen-Space Planar Reflection for Unity URP lakes — URP RendererFeature that renders reflected scene onto water plane. Use for lakes and calm river sections. Reflection Probe fallback for distant water bodies where SSR is too expensive (BEST_PRACTICES #16.5)
+- 8.G5: Implement dark fantasy underwater rendering — URP Volume override: exponential fog density 0.005-0.02, max visibility 15-30m, desaturated teal/green-brown color, low contrast. Animated Voronoi caustics projected texture (depth-attenuated). Volumetric god rays via custom URP RendererFeature (light scattering). Dark fantasy variant: red/orange caustics near lava water, creature silhouettes in fog distance (BEST_PRACTICES #16.6)
+- 8.G6: Implement underwater volume trigger + post-processing override — BoxCollider trigger volume at water surface. On player enter: swap to underwater Volume profile (fog, color grading, caustics), enable underwater particle effects (bubbles, floating debris), muffle audio. On exit: restore surface profile. Handle partial submersion (camera at waterline) with split-screen effect (BEST_PRACTICES #16.6)
 
 ### Acceptance:
 - [ ] Blender heightmap exports with correct axis swap, endianness, and resolution validation (F050-F052)
@@ -805,6 +834,9 @@ GAP-028 (terrain decals), GAP-029 (runtime deformation), GAP-031 (minimap)
 - [ ] Zero F050-F063 export bugs remain
 - [ ] Zero F188-F203 C# consumer bugs remain
 - [ ] Zero F360-F381 compound tool bugs remain
+- [ ] Screen-Space Planar Reflection working for URP lake water surfaces (8.G4)
+- [ ] Underwater rendering: murky fog, caustics, god rays functional in URP (8.G5)
+- [ ] Underwater volume trigger swaps post-processing on player submersion (8.G6)
 
 ---
 
