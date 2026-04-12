@@ -184,6 +184,7 @@ from .environment import (
     handle_create_water,
     handle_export_heightmap,
     handle_generate_multi_biome_world,
+    compose_terrain_node,
 )
 from .worldbuilding import (
     handle_generate_building,
@@ -997,6 +998,7 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "env_generate_terrain": handle_generate_terrain,
     "env_generate_terrain_tile": handle_generate_terrain_tile,
     "env_generate_world_terrain": handle_generate_world_terrain,  # DEPRECATED: use env_generate_terrain_tile per-tile workflow instead
+    "env_compose_terrain_node": compose_terrain_node,
     "env_run_terrain_pass": handle_run_terrain_pass,
     "env_stitch_terrain_edges": handle_stitch_terrain_edges,
     "env_paint_terrain": handle_paint_terrain,
