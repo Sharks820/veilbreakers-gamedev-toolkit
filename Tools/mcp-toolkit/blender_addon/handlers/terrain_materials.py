@@ -2278,14 +2278,197 @@ def compute_world_splatmap_weights(
     return result
 
 
+def _build_pbr_layer_nodes(
+    tree: Any,
+    links: Any,
+    layer_params: dict[str, Any],
+    layer_name: str,
+    y_offset: int,
+    *,
+    pbr_textures: dict[str, str] | None = None,
+) -> tuple[Any, Any]:
+    """Build a full PBR node chain for one terrain layer.
+
+    Creates:
+      - Principled BSDF with all palette params
+      - Noise texture for procedural detail/height
+      - Roughness variation overlay (noise modulates base roughness)
+      - Bump node for micro-detail normals
+      - Optional PBR image texture inputs (albedo, roughness, normal, height)
+        when ``pbr_textures`` provides paths
+
+    Returns:
+        (bsdf_node, height_output_node) — the height output feeds HeightBlend.
+    """
+    lp = layer_params
+    x_base = -900
+
+    # -- Coordinate input for texture mapping --
+    tex_coord = _add_node(tree, "ShaderNodeTexCoord", x_base - 200, y_offset, f"TexCoord {layer_name}")
+
+    # -- Noise for procedural detail + height blend source --
+    noise = _add_node(tree, "ShaderNodeTexNoise", x_base, y_offset - 100, f"Noise {layer_name}")
+    noise.inputs["Scale"].default_value = lp["detail_scale"]
+    noise.inputs["Detail"].default_value = 10.0
+    noise.inputs["Roughness"].default_value = 0.6
+    noise.inputs["Distortion"].default_value = 0.2
+    links.new(tex_coord.outputs["Object"], noise.inputs["Vector"])
+
+    # -- Second noise octave for roughness variation --
+    rough_noise = _add_node(tree, "ShaderNodeTexNoise", x_base, y_offset - 250, f"RoughNoise {layer_name}")
+    rough_noise.inputs["Scale"].default_value = lp["detail_scale"] * 2.5
+    rough_noise.inputs["Detail"].default_value = 4.0
+    links.new(tex_coord.outputs["Object"], rough_noise.inputs["Vector"])
+
+    # -- Roughness = base_roughness +/- variation via noise --
+    rough_var = lp.get("roughness_variation", 0.1)
+    rough_remap = _add_node(tree, "ShaderNodeMapRange", x_base + 200, y_offset - 250, f"RoughRemap {layer_name}")
+    rough_remap.inputs["From Min"].default_value = 0.0
+    rough_remap.inputs["From Max"].default_value = 1.0
+    rough_remap.inputs["To Min"].default_value = max(0.0, lp["roughness"] - rough_var)
+    rough_remap.inputs["To Max"].default_value = min(1.0, lp["roughness"] + rough_var)
+    links.new(rough_noise.outputs["Fac"], rough_remap.inputs["Value"])
+
+    # -- Principled BSDF --
+    bsdf = _add_node(tree, "ShaderNodeBsdfPrincipled", x_base + 500, y_offset, f"Layer: {layer_name}")
+    bsdf.inputs["Base Color"].default_value = lp["base_color"]
+    bsdf.inputs["Metallic"].default_value = lp["metallic"]
+
+    # Connect roughness variation
+    links.new(rough_remap.outputs["Result"], bsdf.inputs["Roughness"])
+
+    # Emission
+    ec = lp.get("emission_color")
+    es = lp.get("emission_strength", 0.0)
+    if ec and es > 0:
+        ei = _get_bsdf_input(bsdf, "Emission Color")
+        if ei is not None:
+            ei.default_value = ec
+        esi = bsdf.inputs.get("Emission Strength")
+        if esi is not None:
+            esi.default_value = es
+
+    # Subsurface
+    sw = lp.get("subsurface_weight")
+    sc = lp.get("subsurface_color")
+    if sw and sw > 0:
+        si = _get_bsdf_input(bsdf, "Subsurface Weight")
+        if si is not None:
+            si.default_value = sw
+        if sc:
+            sci = bsdf.inputs.get("Subsurface Color")
+            if sci is not None:
+                sci.default_value = sc
+
+    # Alpha
+    alpha_val = lp.get("alpha")
+    if alpha_val is not None and alpha_val < 1.0:
+        ai = bsdf.inputs.get("Alpha")
+        if ai is not None:
+            ai.default_value = alpha_val
+
+    # -- Bump from noise height --
+    bump = _add_node(tree, "ShaderNodeBump", x_base + 350, y_offset - 100, f"Bump {layer_name}")
+    bump.inputs["Strength"].default_value = lp["normal_strength"]
+    bump.inputs["Distance"].default_value = 0.02
+    links.new(noise.outputs["Fac"], bump.inputs["Height"])
+    links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+
+    # -- PBR image texture overrides (when available) --
+    height_source = noise  # Default: noise Fac output for HeightBlend
+    if pbr_textures:
+        _wire_pbr_image(tree, links, bsdf, bump, tex_coord,
+                        pbr_textures, layer_name, y_offset, x_base)
+        # If a height texture was provided, use it as height source
+        ht_path = pbr_textures.get("height")
+        if ht_path:
+            ht_img = bpy.data.images.get(ht_path) or bpy.data.images.load(ht_path)
+            ht_node = _add_node(tree, "ShaderNodeTexImage", x_base + 100, y_offset - 400, f"HeightTex {layer_name}")
+            ht_node.image = ht_img
+            ht_node.projection = "FLAT"
+            links.new(tex_coord.outputs["UV"], ht_node.inputs["Vector"])
+            height_source = ht_node
+
+    return bsdf, height_source
+
+
+def _wire_pbr_image(
+    tree: Any,
+    links: Any,
+    bsdf: Any,
+    bump: Any,
+    tex_coord: Any,
+    pbr_textures: dict[str, str],
+    layer_name: str,
+    y_offset: int,
+    x_base: int,
+) -> None:
+    """Wire PBR image textures (albedo, roughness, normal) into an existing layer.
+
+    Only wires textures whose paths exist in ``pbr_textures``.
+    """
+    # Albedo
+    albedo_path = pbr_textures.get("albedo")
+    if albedo_path:
+        img = bpy.data.images.get(albedo_path) or bpy.data.images.load(albedo_path)
+        tex = _add_node(tree, "ShaderNodeTexImage", x_base - 100, y_offset + 100, f"Albedo {layer_name}")
+        tex.image = img
+        tex.projection = "FLAT"
+        links.new(tex_coord.outputs["UV"], tex.inputs["Vector"])
+        links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+
+    # Roughness map
+    rough_path = pbr_textures.get("roughness")
+    if rough_path:
+        img = bpy.data.images.get(rough_path) or bpy.data.images.load(rough_path)
+        img.colorspace_settings.name = "Non-Color"
+        tex = _add_node(tree, "ShaderNodeTexImage", x_base - 100, y_offset - 150, f"RoughTex {layer_name}")
+        tex.image = img
+        tex.projection = "FLAT"
+        links.new(tex_coord.outputs["UV"], tex.inputs["Vector"])
+        links.new(tex.outputs["Color"], bsdf.inputs["Roughness"])
+
+    # Normal map
+    normal_path = pbr_textures.get("normal")
+    if normal_path:
+        img = bpy.data.images.get(normal_path) or bpy.data.images.load(normal_path)
+        img.colorspace_settings.name = "Non-Color"
+        tex = _add_node(tree, "ShaderNodeTexImage", x_base - 100, y_offset - 350, f"NormTex {layer_name}")
+        tex.image = img
+        tex.projection = "FLAT"
+        links.new(tex_coord.outputs["UV"], tex.inputs["Vector"])
+        nmap = _add_node(tree, "ShaderNodeNormalMap", x_base + 100, y_offset - 350, f"NormMap {layer_name}")
+        links.new(tex.outputs["Color"], nmap.inputs["Color"])
+        # Chain: normal map -> bump (bump uses normal map as base)
+        links.new(nmap.outputs["Normal"], bump.inputs["Normal"])
+
+
 def create_biome_terrain_material(
     biome_name: str,
     object_name: str | None = None,
     season: str | None = None,
+    *,
+    pbr_textures: dict[str, dict[str, str]] | None = None,
+    enable_displacement: bool = False,
 ) -> Any:
-    """Create a multi-layer terrain material with vertex-color splatmap blending.
+    """Create a multi-layer PBR terrain material with splatmap blending.
 
-    Uses BIOME_PALETTES_V2 for per-layer material definitions.
+    Uses BIOME_PALETTES_V2 for per-layer material definitions. Each layer
+    gets a full PBR node chain (Base Color, Roughness with variation overlay,
+    Normal/Bump, optional image textures). Layers are blended via HeightBlend
+    groups driven by the vertex-color splatmap.
+
+    Args:
+        biome_name: Biome palette key from BIOME_PALETTES_V2.
+        object_name: Optional Blender object to assign and paint splatmap on.
+        season: Optional season variant (e.g. "summer", "winter").
+        pbr_textures: Optional dict mapping layer name -> dict of texture paths:
+            {"ground": {"albedo": "path.png", "roughness": "path.png",
+                        "normal": "path.png", "height": "path.png"}, ...}
+        enable_displacement: If True, add a displacement output node.
+
+    Returns:
+        The created/updated bpy.types.Material.
     """
     if bpy is None:
         raise RuntimeError("create_biome_terrain_material() requires bpy")
@@ -2310,94 +2493,102 @@ def create_biome_terrain_material(
     nodes = tree.nodes
     links = tree.links
     nodes.clear()
-    output = _add_node(tree, "ShaderNodeOutputMaterial", 1200, 0, "Output")
-    vcol_node = _add_node(tree, "ShaderNodeVertexColor", -800, -600, "Splatmap")
+
+    output = _add_node(tree, "ShaderNodeOutputMaterial", 1400, 0, "Output")
+
+    # -- Splatmap vertex color input --
+    vcol_node = _add_node(tree, "ShaderNodeVertexColor", -1100, -600, "Splatmap")
     vcol_node.layer_name = "VB_TerrainSplatmap"
-    separate = _add_node(tree, "ShaderNodeSeparateColor", -600, -600, "Split")
+    separate = _add_node(tree, "ShaderNodeSeparateColor", -900, -600, "Split")
     separate.mode = "RGB"
     links.new(vcol_node.outputs["Color"], separate.inputs["Color"])
+
+    # -- Build PBR layer chains --
     layer_names = ["ground", "slope", "cliff", "special"]
     layer_bsdfs: list[Any] = []
-    noise_nodes: list[Any] = []
+    height_sources: list[Any] = []
+
     for i, ln in enumerate(layer_names):
         lp = palette[ln]
-        y = 400 - i * 300
-        bsdf = _add_node(tree, "ShaderNodeBsdfPrincipled", -200, y, f"Layer: {ln}")
-        bsdf.inputs["Base Color"].default_value = lp["base_color"]
-        bsdf.inputs["Roughness"].default_value = lp["roughness"]
-        bsdf.inputs["Metallic"].default_value = lp["metallic"]
-        ec = lp.get("emission_color")
-        es = lp.get("emission_strength", 0.0)
-        if ec and es > 0:
-            ei = _get_bsdf_input(bsdf, "Emission Color")
-            if ei is not None:
-                ei.default_value = ec
-            esi = bsdf.inputs.get("Emission Strength")
-            if esi is not None:
-                esi.default_value = es
-        sw = lp.get("subsurface_weight")
-        sc = lp.get("subsurface_color")
-        if sw and sw > 0:
-            si = _get_bsdf_input(bsdf, "Subsurface Weight")
-            if si is not None:
-                si.default_value = sw
-            if sc:
-                sci = bsdf.inputs.get("Subsurface Color")
-                if sci is not None:
-                    sci.default_value = sc
-        noise = _add_node(tree, "ShaderNodeTexNoise", -500, y - 100, f"Noise {ln}")
-        noise.inputs["Scale"].default_value = lp["detail_scale"]
-        noise.inputs["Detail"].default_value = 8.0
-        bump = _add_node(tree, "ShaderNodeBump", -350, y - 100, f"Bump {ln}")
-        bump.inputs["Strength"].default_value = lp["normal_strength"]
-        bump.inputs["Distance"].default_value = 0.02
-        links.new(noise.outputs["Fac"], bump.inputs["Height"])
-        links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
-        layer_bsdfs.append(bsdf)
-        noise_nodes.append(noise)
+        y = 500 - i * 400
+        layer_pbr = (pbr_textures or {}).get(ln)
+        bsdf_node, height_node = _build_pbr_layer_nodes(
+            tree, links, lp, ln, y, pbr_textures=layer_pbr,
+        )
+        layer_bsdfs.append(bsdf_node)
+        height_sources.append(height_node)
 
     # -- HeightBlend: height-based texture transitions between layers --
     height_blend_group = _create_height_blend_group()
 
     # Ground/Slope blend via HeightBlend
-    mix_01 = _add_node(tree, "ShaderNodeMixShader", 200, 300, "Ground/Slope")
+    mix_01 = _add_node(tree, "ShaderNodeMixShader", 400, 300, "Ground/Slope")
     links.new(layer_bsdfs[0].outputs["BSDF"], mix_01.inputs[1])
     links.new(layer_bsdfs[1].outputs["BSDF"], mix_01.inputs[2])
 
-    hb_01 = _add_node(tree, "ShaderNodeGroup", 0, 300, "HB Ground/Slope")
+    hb_01 = _add_node(tree, "ShaderNodeGroup", 200, 300, "HB Ground/Slope")
     hb_01.node_tree = height_blend_group
-    links.new(noise_nodes[0].outputs["Fac"], hb_01.inputs["Height_A"])
-    links.new(noise_nodes[1].outputs["Fac"], hb_01.inputs["Height_B"])
+    links.new(height_sources[0].outputs["Fac"], hb_01.inputs["Height_A"])
+    links.new(height_sources[1].outputs["Fac"], hb_01.inputs["Height_B"])
     links.new(separate.outputs["Green"], hb_01.inputs["Mask"])
     hb_01.inputs["Blend_Contrast"].default_value = 0.6
     links.new(hb_01.outputs["Result"], mix_01.inputs["Fac"])
 
     # Ground-Slope / Cliff blend via HeightBlend
-    mix_02 = _add_node(tree, "ShaderNodeMixShader", 500, 200, "Add Cliff")
+    mix_02 = _add_node(tree, "ShaderNodeMixShader", 700, 200, "Add Cliff")
     links.new(mix_01.outputs["Shader"], mix_02.inputs[1])
     links.new(layer_bsdfs[2].outputs["BSDF"], mix_02.inputs[2])
 
-    hb_02 = _add_node(tree, "ShaderNodeGroup", 300, 200, "HB Mix/Cliff")
+    hb_02 = _add_node(tree, "ShaderNodeGroup", 500, 200, "HB Mix/Cliff")
     hb_02.node_tree = height_blend_group
-    links.new(noise_nodes[1].outputs["Fac"], hb_02.inputs["Height_A"])
-    links.new(noise_nodes[2].outputs["Fac"], hb_02.inputs["Height_B"])
+    links.new(height_sources[1].outputs["Fac"], hb_02.inputs["Height_A"])
+    links.new(height_sources[2].outputs["Fac"], hb_02.inputs["Height_B"])
     links.new(separate.outputs["Blue"], hb_02.inputs["Mask"])
     hb_02.inputs["Blend_Contrast"].default_value = 0.5
     links.new(hb_02.outputs["Result"], mix_02.inputs["Fac"])
 
     # Previous / Special blend via HeightBlend
-    mix_03 = _add_node(tree, "ShaderNodeMixShader", 800, 100, "Add Special")
+    mix_03 = _add_node(tree, "ShaderNodeMixShader", 1000, 100, "Add Special")
     links.new(mix_02.outputs["Shader"], mix_03.inputs[1])
     links.new(layer_bsdfs[3].outputs["BSDF"], mix_03.inputs[2])
 
-    hb_03 = _add_node(tree, "ShaderNodeGroup", 600, 100, "HB Mix/Special")
+    hb_03 = _add_node(tree, "ShaderNodeGroup", 800, 100, "HB Mix/Special")
     hb_03.node_tree = height_blend_group
-    links.new(noise_nodes[2].outputs["Fac"], hb_03.inputs["Height_A"])
-    links.new(noise_nodes[3].outputs["Fac"], hb_03.inputs["Height_B"])
+    links.new(height_sources[2].outputs["Fac"], hb_03.inputs["Height_A"])
+    links.new(height_sources[3].outputs["Fac"], hb_03.inputs["Height_B"])
     links.new(vcol_node.outputs["Alpha"], hb_03.inputs["Mask"])
     hb_03.inputs["Blend_Contrast"].default_value = 0.5
     links.new(hb_03.outputs["Result"], mix_03.inputs["Fac"])
+
+    # Connect final shader to output
     links.new(mix_03.outputs["Shader"], output.inputs["Surface"])
+
+    # -- Displacement output (optional) --
+    if enable_displacement:
+        mat.cycles.displacement_method = "BOTH"
+        disp_node = _add_node(tree, "ShaderNodeDisplacement", 1200, -200, "Displacement")
+        disp_node.inputs["Scale"].default_value = 0.1
+        disp_node.inputs["Midlevel"].default_value = 0.5
+        # Blend height sources using splatmap weights for displacement
+        disp_mix_01 = _add_node(tree, "ShaderNodeMixRGB", 900, -200, "DispMix01")
+        disp_mix_01.blend_type = "MIX"
+        links.new(separate.outputs["Green"], disp_mix_01.inputs["Fac"])
+        links.new(height_sources[0].outputs["Fac"], disp_mix_01.inputs["Color1"])
+        links.new(height_sources[1].outputs["Fac"], disp_mix_01.inputs["Color2"])
+        disp_mix_02 = _add_node(tree, "ShaderNodeMixRGB", 1000, -300, "DispMix02")
+        disp_mix_02.blend_type = "MIX"
+        links.new(separate.outputs["Blue"], disp_mix_02.inputs["Fac"])
+        links.new(disp_mix_01.outputs["Color"], disp_mix_02.inputs["Color1"])
+        links.new(height_sources[2].outputs["Fac"], disp_mix_02.inputs["Color2"])
+        disp_mix_03 = _add_node(tree, "ShaderNodeMixRGB", 1100, -400, "DispMix03")
+        disp_mix_03.blend_type = "MIX"
+        links.new(vcol_node.outputs["Alpha"], disp_mix_03.inputs["Fac"])
+        links.new(disp_mix_02.outputs["Color"], disp_mix_03.inputs["Color1"])
+        links.new(height_sources[3].outputs["Fac"], disp_mix_03.inputs["Color2"])
+        links.new(disp_mix_03.outputs["Color"], disp_node.inputs["Height"])
+        links.new(disp_node.outputs["Displacement"], output.inputs["Displacement"])
+
+    # -- Assign to object and paint splatmap --
     if object_name:
         obj = bpy.data.objects.get(object_name)
         if obj is not None and obj.type == "MESH":

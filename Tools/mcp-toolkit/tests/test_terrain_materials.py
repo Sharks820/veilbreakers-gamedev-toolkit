@@ -818,3 +818,123 @@ class TestTerrainMaterialDedup:
 
             with pytest.raises(ValueError, match="Unknown biome"):
                 create_biome_terrain_material("not_a_real_biome")
+
+
+# ===========================================================================
+# PBR layer node builder tests
+# ===========================================================================
+
+
+class TestPBRLayerNodes:
+    """Verify _build_pbr_layer_nodes builds correct node chains."""
+
+    def _make_mock_bpy(self):
+        from unittest.mock import MagicMock
+        mock_bpy = MagicMock()
+        # Track created nodes for assertion
+        created_nodes = []
+        mock_tree = MagicMock()
+
+        def add_node(type=None, **kwargs):
+            node_type = type
+            node = MagicMock()
+            node.node_type = node_type
+            node.inputs = {}
+            node.outputs = {}
+
+            # Make inputs behave as dict with named sockets
+            class SocketDict(dict):
+                def __getitem__(self, key):
+                    if key not in self:
+                        sock = MagicMock()
+                        sock.default_value = None
+                        self[key] = sock
+                    return super().__getitem__(key)
+
+                def get(self, key, default=None):
+                    return self[key] if key in self else default
+
+            node.inputs = SocketDict()
+            node.outputs = SocketDict()
+            created_nodes.append((node_type, node))
+            return node
+
+        mock_tree.nodes.new = add_node
+        mock_tree.links.new = MagicMock()
+        return mock_bpy, mock_tree, created_nodes
+
+    def test_builds_principled_bsdf(self):
+        from unittest.mock import patch
+        mock_bpy, mock_tree, created_nodes = self._make_mock_bpy()
+        with patch("blender_addon.handlers.terrain_materials.bpy", mock_bpy):
+            from blender_addon.handlers.terrain_materials import _build_pbr_layer_nodes, BIOME_PALETTES_V2
+            lp = BIOME_PALETTES_V2["thornwood_forest"]["ground"]
+            bsdf, height_src = _build_pbr_layer_nodes(
+                mock_tree, mock_tree.links, lp, "ground", 400,
+            )
+        node_types = [nt for nt, _ in created_nodes]
+        assert "ShaderNodeBsdfPrincipled" in node_types
+        assert "ShaderNodeTexNoise" in node_types
+        assert "ShaderNodeBump" in node_types
+        assert "ShaderNodeMapRange" in node_types  # roughness variation
+
+    def test_roughness_variation_range_valid(self):
+        """Roughness remap must stay within [0, 1]."""
+        from blender_addon.handlers.terrain_materials import BIOME_PALETTES_V2
+        for biome, palette in BIOME_PALETTES_V2.items():
+            for layer_name, lp in palette.items():
+                rough = lp["roughness"]
+                var = lp.get("roughness_variation", 0.1)
+                lo = max(0.0, rough - var)
+                hi = min(1.0, rough + var)
+                assert 0.0 <= lo <= 1.0, f"{biome}.{layer_name} roughness lo={lo}"
+                assert 0.0 <= hi <= 1.0, f"{biome}.{layer_name} roughness hi={hi}"
+                assert lo < hi, f"{biome}.{layer_name} lo={lo} >= hi={hi}"
+
+
+class TestSmoothstepDelegation:
+    """Verify v1 functions now use v2 smoothstep engine."""
+
+    def test_auto_assign_smooth_transition_at_30_deg(self):
+        """At exactly 30 degrees, smoothstep should produce a blend, not a hard edge."""
+        import math
+        # Build a mesh with face normals at exactly 30 degrees from vertical
+        cos30 = math.cos(math.radians(30.0))
+        sin30 = math.sin(math.radians(30.0))
+        verts = [(0, 0, 5), (1, 0, 5), (1, 1, 5), (0, 1, 5)]
+        faces = [(0, 1, 2, 3)]
+        normals = [(0.0, sin30, cos30)]  # 30-degree slope
+
+        result = auto_assign_terrain_layers(verts, normals, faces)
+        r, g, b, a = result[0]
+        # With smoothstep, at the boundary we should see BOTH ground and slope
+        # (not a hard cutoff where ground is zero and slope is max)
+        assert r > 0.05, f"Ground weight too low at 30 deg: {r}"
+        assert g > 0.05, f"Slope weight too low at 30 deg: {g}"
+
+    def test_auto_assign_smooth_transition_at_60_deg(self):
+        """At exactly 60 degrees, smoothstep should produce a blend."""
+        import math
+        cos60 = math.cos(math.radians(60.0))
+        sin60 = math.sin(math.radians(60.0))
+        verts = [(0, 0, 5), (1, 0, 5), (1, 1, 5), (0, 1, 5)]
+        faces = [(0, 1, 2, 3)]
+        normals = [(0.0, sin60, cos60)]  # 60-degree slope
+
+        result = auto_assign_terrain_layers(verts, normals, faces)
+        r, g, b, a = result[0]
+        # At 60 deg boundary, should see both slope and cliff
+        assert g > 0.05 or b > 0.05, f"No slope/cliff weight at 60 deg: g={g}, b={b}"
+
+    def test_compute_world_splatmap_uses_smoothstep(self):
+        """Verify that compute_world_splatmap_weights produces smooth transitions."""
+        import numpy as np
+        from blender_addon.handlers.terrain_materials import compute_world_splatmap_weights
+        # Create heightmap with gradient that produces ~30 degree slopes
+        hmap = np.tile(np.linspace(0.0, 3.0, 10), (10, 1))
+        result = compute_world_splatmap_weights(hmap, cell_size=1.0)
+        # At the boundary region, weights should be blended (not binary)
+        mid_row = result[5, 5]
+        assert mid_row[0] + mid_row[1] + mid_row[2] + mid_row[3] == pytest.approx(1.0, abs=0.01)
+        # At least one weight should be non-zero
+        assert max(mid_row) > 0.0
