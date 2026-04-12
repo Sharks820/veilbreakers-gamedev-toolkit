@@ -1,0 +1,21 @@
+blender_addon/handlers\terrain_addon_health.py:148:        pass
+blender_addon/handlers\terrain_assets.py:15:    - Exposes a ``pass_scatter_intelligent`` TerrainPipelineState pass
+blender_addon/handlers\terrain_banded.py:618:            pass
+blender_addon/handlers\terrain_banded.py:622:        pass
+blender_addon/handlers\terrain_checkpoints.py:9:- Autosave toggle after each pass
+blender_addon/handlers\terrain_checkpoints.py:324:    When enabled, wraps ``controller.run_pass`` so every successful pass
+blender_addon/handlers\terrain_checkpoints.py:332:        original = controller.run_pass
+blender_addon/handlers\terrain_checkpoints.py:354:                    pass
+blender_addon/handlers\terrain_master_registrar.py:60:        pass
+blender_addon/handlers\terrain_pipeline.py:11:- Enforce protected-zone policy per pass
+blender_addon/handlers\terrain_pipeline.py:180:            - Channel prerequisites declared by the pass
+blender_addon/handlers\terrain_quality_profiles.py:30:    pass
+blender_addon/handlers\terrain_stratigraphy.py:4:``StratigraphyLayer`` with hardness, thickness, dip, and azimuth. The pass
+blender_addon/handlers\terrain_twelve_step.py:43:def _apply_flatten_zones_stub(world_hmap: np.ndarray, intent: TerrainIntentState) -> np.ndarray:
+blender_addon/handlers\terrain_twelve_step.py:48:def _apply_canyon_river_carves_stub(
+blender_addon/handlers\terrain_twelve_step.py:55:def _detect_cliff_edges_stub(world_hmap: np.ndarray) -> List[Tuple[int, int]]:
+blender_addon/handlers\terrain_twelve_step.py:59:def _detect_cave_candidates_stub(world_hmap: np.ndarray) -> List[Tuple[int, int]]:
+blender_addon/handlers\terrain_twelve_step.py:63:def _detect_waterfall_lips_stub(world_hmap: np.ndarray) -> List[Tuple[int, int]]:
+blender_addon/handlers\terrain_vegetation_depth.py:282:    ``intent`` is the ``TerrainIntentState`` — used to derive the pass
+blender_addon/handlers\terrain_wildlife_zones.py:81:    # Forward pass
+blender_addon/handlers\terrain_wildlife_zones.py:96:    # Backward pass

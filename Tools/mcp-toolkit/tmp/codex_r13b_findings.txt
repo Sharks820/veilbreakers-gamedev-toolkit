@@ -1,0 +1,23 @@
+HIGH | blender_addon/handlers/terrain_cliffs.py:454 | insert_hero_cliff_meshes is a placeholder that only records side_effect strings, so hero cliffs never get any 3D mesh.
+MEDIUM | blender_addon/handlers/terrain_cliffs.py:123 | ridge_weight never changes the candidate math beyond a boolean gate; every positive value behaves identically, so the documented weighting knob is effectively dead.
+MEDIUM | blender_addon/handlers/terrain_cliffs.py:421 | build_talus_field forces at least one dilation with max(1, apron_cells), so apron_cells=0 still grows talus instead of disabling it.
+HIGH | blender_addon/handlers/terrain_waterfalls.py:656 | pass_waterfalls only writes masks and height deltas; despite the volumetric profile contract, it never generates the required 3D waterfall mesh.
+MEDIUM | blender_addon/handlers/terrain_waterfalls.py:512 | generate_foam_mask claims to cover the plunge path, but it only paints the plunge pool, so the falling water column contributes no foam at all.
+LOW | blender_addon/handlers/terrain_waterfalls.py:216 | detect_waterfall_lip_candidates computes cs and never uses it.
+LOW | blender_addon/handlers/terrain_waterfalls.py:454 | build_outflow_channel computes h and never uses it.
+LOW | blender_addon/handlers/terrain_waterfalls.py:485 | generate_mist_zone computes h and never uses it.
+LOW | blender_addon/handlers/terrain_waterfalls.py:517 | generate_foam_mask computes h and never uses it.
+LOW | blender_addon/handlers/terrain_waterfalls.py:681 | pass_waterfalls instantiates a seeded RNG and immediately discards it, so the derived seed has no effect on the pass body.
+MEDIUM | blender_addon/handlers/terrain_waterfalls.py:599 | validate_waterfall_volumetric never inspects any actual mesh data and only compares drop-derived expected_verts against a threshold, so chains with zero generated geometry can still pass volumetric validation.
+HIGH | blender_addon/handlers/terrain_caves.py:333 | pick_cave_archetype uses Python hash() inside its tie-break jitter, breaking the stated deterministic-seed contract across interpreter runs.
+HIGH | blender_addon/handlers/terrain_caves.py:436 | carve_cave_volume only produces a 2D height delta / mask and never builds any 3D cave chamber mesh, so caves collapse into terrain dents instead of volumetric spaces.
+HIGH | blender_addon/handlers/terrain_caves.py:741 | _find_entrance_candidates documents a fallback scan of cave_candidate but returns scene_read candidates only, so it becomes a no-op when scene data is absent.
+LOW | blender_addon/handlers/terrain_caves.py:579 | scatter_collapse_debris imports derive_pass_seed and never uses it.
+MEDIUM | blender_addon/handlers/terrain_caves.py:846 | pass_caves stores cell_count as the full global cave_candidate sum after masking, so each CaveStructure reports the cumulative mask area instead of its own footprint.
+MEDIUM | blender_addon/handlers/terrain_caves.py:939 | get_cave_entrance_specs converts candidate cells to world positions at cell corners instead of cell centers, shifting generated entrance meshes by half a cell in X/Y.
+MEDIUM | blender_addon/handlers/terrain_features.py:223 | generate_canyon only returns side_caves metadata and never cuts those openings into the canyon mesh.
+HIGH | blender_addon/handlers/terrain_features.py:254 | generate_waterfall never creates any water-sheet mesh; the result is rock, pool, and metadata only, so the actual waterfall is missing.
+MEDIUM | blender_addon/handlers/terrain_features.py:359 | generate_waterfall adds each ledge as only a top and front face, leaving the geometry open-backed and non-manifold instead of a closed 3D step.
+MEDIUM | blender_addon/handlers/terrain_features.py:627 | generate_cliff_face records cave_entrances metadata but never carves entrance holes into the cliff mesh.
+MEDIUM | blender_addon/handlers/terrain_features.py:1497 | generate_sinkhole records bottom-cave metadata only; no cave opening geometry is cut into the sinkhole wall/floor.
+HIGH | blender_addon/handlers/terrain_features.py:1867 | generate_ice_formation uses the stale outer-loop kt value when assigning stalactite quad materials, so every stalactite segment gets the same banding instead of a base-to-tip gradient.
