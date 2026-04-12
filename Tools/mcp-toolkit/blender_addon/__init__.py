@@ -90,7 +90,19 @@ _classes = (
 
 
 def register():
-    global _auto_start_timer
+    global _auto_start_timer, _server
+    # Hot-reload guard: stop any existing server before re-registering.
+    # Blender calls register() again on F3/F5 reload without always calling
+    # unregister() first, leaving the old server socket bound.
+    if _server is not None:
+        try:
+            _server.stop()
+        except Exception as exc:
+            logger.debug("Hot-reload: old server stop failed: %s", exc)
+        _server = None
+    if _auto_start_timer is not None and bpy.app.timers.is_registered(_auto_start_timer):
+        bpy.app.timers.unregister(_auto_start_timer)
+        _auto_start_timer = None
     for cls in _classes:
         bpy.utils.register_class(cls)
     _auto_start_timer = _deferred_auto_start

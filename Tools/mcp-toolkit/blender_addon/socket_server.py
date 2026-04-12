@@ -41,8 +41,23 @@ class BlenderMCPServer:
             try:
                 self._server_socket.close()
             except OSError:
-                pass
+                pass  # Expected when socket already closed during shutdown
             self._server_socket = None
+        # Drain pending commands so waiting threads don't hang forever
+        drained = 0
+        while True:
+            try:
+                _cmd, event, container = self.command_queue.get_nowait()
+                container["response"] = {
+                    "status": "error",
+                    "message": "Server shutting down",
+                }
+                event.set()
+                drained += 1
+            except queue.Empty:
+                break
+        if drained:
+            logger.info("Drained %d pending commands during shutdown", drained)
         if bpy.app.timers.is_registered(self._process_commands):
             bpy.app.timers.unregister(self._process_commands)
         if self.server_thread is not None:
