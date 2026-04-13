@@ -15,6 +15,8 @@ _VALIDATION_PROFILES = {
     "terrain_cliff",
     "terrain_waterfall",
     "terrain_cave",
+    "terrain_river",
+    "terrain_road",
 }
 
 
@@ -134,7 +136,6 @@ def _evaluate_validation_profile(
     bottom_edge = _edge_density(edge_array, bottom)
     center_edge = _edge_density(edge_array, center)
     center_strip_edge = _edge_density(edge_array, center_strip)
-    side_edge = (_edge_density(edge_array, side_left) + _edge_density(edge_array, side_right)) / 2.0
     border_edge = (
         _edge_density(edge_array, border_top)
         + _edge_density(edge_array, border_bottom)
@@ -280,6 +281,83 @@ def _evaluate_validation_profile(
         result["passed"] = len(result["issues"]) == 0 and profile_score >= 60.0
         return result
 
+    if profile == "terrain_river":
+        center_band = _crop_box(width, height, 0.18, 0.28, 0.82, 0.90)
+        lower_center = _crop_box(width, height, 0.22, 0.56, 0.78, 0.96)
+        center_band_gray = _region_array(gray_array, center_band)
+        lower_center_gray = _region_array(gray_array, lower_center)
+        center_band_edge = _edge_density(edge_array, center_band)
+        lower_center_edge = _edge_density(edge_array, lower_center)
+        side_edge = (_edge_density(edge_array, side_left) + _edge_density(edge_array, side_right)) * 0.5
+        center_darkness = _clamp(100.0 - max(0.0, _safe_mean(center_band_gray) - 92.0) * 1.5 + center_band_edge * 2.0)
+        channel_continuity = _clamp(_row_gradient_score(gray_array, center_band) * 3.2 + center_band_edge * 1.8)
+        bank_separation = _clamp(abs(_safe_mean(lower_center_gray) - side_mean) * 1.4 + (lower_center_edge - side_edge) * 1.1 + 50.0)
+        profile_score = (center_darkness * 0.35) + (channel_continuity * 0.35) + (bank_separation * 0.30)
+        result["metrics"] = {
+            "center_darkness": round(center_darkness, 3),
+            "channel_continuity": round(channel_continuity, 3),
+            "bank_separation": round(bank_separation, 3),
+            "center_band_edge_density": round(center_band_edge, 3),
+            "lower_center_edge_density": round(lower_center_edge, 3),
+        }
+        if center_darkness < 46.0:
+            result["issues"].append(
+                f"terrain_river: river channel does not read as a distinct water body (score={center_darkness:.1f})"
+            )
+        if channel_continuity < 20.0:
+            result["issues"].append(
+                f"terrain_river: river flow line is too broken or weak (score={channel_continuity:.1f})"
+            )
+        if bank_separation < 46.0:
+            result["issues"].append(
+                f"terrain_river: river banks and water body do not separate clearly (score={bank_separation:.1f})"
+            )
+        result["score"] = round(profile_score, 3)
+        result["passed"] = len(result["issues"]) == 0 and profile_score >= 58.0
+        return result
+
+    if profile == "terrain_road":
+        lower_band = _crop_box(width, height, 0.08, 0.50, 0.92, 0.96)
+        road_strip = _crop_box(width, height, 0.20, 0.58, 0.80, 0.94)
+        lower_band_gray = _region_array(gray_array, lower_band)
+        road_strip_gray = _region_array(gray_array, road_strip)
+        lower_band_edge = _edge_density(edge_array, lower_band)
+        road_strip_edge = _edge_density(edge_array, road_strip)
+        side_lane_mean = (_safe_mean(_region_array(gray_array, _crop_box(width, height, 0.0, 0.58, 0.18, 0.94)))
+                          + _safe_mean(_region_array(gray_array, _crop_box(width, height, 0.82, 0.58, 1.0, 0.94)))) * 0.5
+        path_read = _clamp(
+            _row_gradient_score(gray_array, road_strip) * 1.6
+            + _col_gradient_score(gray_array, road_strip) * 2.1
+            + road_strip_edge * 1.4
+            + lower_band_edge * 0.9
+        )
+        terrain_integration = _clamp(abs(_safe_mean(road_strip_gray) - side_lane_mean) * 1.2 + lower_band_edge * 1.1 + 35.0)
+        grounding = _clamp(100.0 - abs(_safe_mean(lower_band_gray) - bottom_mean) * 0.9 + road_strip_edge * 1.2)
+        profile_score = (path_read * 0.34) + (terrain_integration * 0.36) + (grounding * 0.30)
+        result["metrics"] = {
+            "path_read": round(path_read, 3),
+            "terrain_integration": round(terrain_integration, 3),
+            "grounding": round(grounding, 3),
+            "road_strip_edge_density": round(road_strip_edge, 3),
+            "lower_band_edge_density": round(lower_band_edge, 3),
+        }
+        subtle_trail_ok = path_read >= 9.0 and terrain_integration >= 42.0 and grounding >= 78.0
+        if path_read < 16.0 and not subtle_trail_ok:
+            result["issues"].append(
+                f"terrain_road: road path is not reading as a deliberate traversal line (score={path_read:.1f})"
+            )
+        if terrain_integration < 40.0:
+            result["issues"].append(
+                f"terrain_road: road cut and shoulders do not separate from surrounding terrain (score={terrain_integration:.1f})"
+            )
+        if grounding < 48.0:
+            result["issues"].append(
+                f"terrain_road: road feels visually detached from the terrain base (score={grounding:.1f})"
+            )
+        result["score"] = round(profile_score, 3)
+        result["passed"] = len(result["issues"]) == 0 and profile_score >= 54.0
+        return result
+
     result["passed"] = False
     result["score"] = 0.0
     result["issues"].append(f"Unknown validation_profile '{validation_profile}'")
@@ -331,6 +409,7 @@ def analyze_render_image(filepath: str, validation_profile: str | None = None) -
 
             color_spread = (std_r + std_g + std_b) / 3.0
             channel_balance = max(mean_r, mean_g, mean_b) - min(mean_r, mean_g, mean_b)
+            terrain_profile = isinstance(validation_profile, str) and validation_profile.startswith("terrain_")
 
             # Dark-fantasy brightness scoring: ideal range 30–80 (not 120).
             # Penalise anything above 80 or below 30, but allow naturally dark scenes.
@@ -363,31 +442,27 @@ def analyze_render_image(filepath: str, validation_profile: str | None = None) -
                 issues.append("Image is too bright")
             if gray_std < 12.0:
                 issues.append("Image contrast is too low")
-            if edge_mean < 8.0:
+            if edge_mean < (4.0 if terrain_profile else 8.0):
                 issues.append("Edge density is too low")
-            if entropy < 1.2:
+            if entropy < (0.9 if terrain_profile else 1.2):
                 issues.append("Image lacks visual variation")
-            if color_spread < 10.0:
+            if color_spread < (2.0 if terrain_profile else 10.0):
                 issues.append("Color variation is too low")
-            if channel_balance < 4.0 and color_spread < 12.0:
+            if not terrain_profile and channel_balance < 4.0 and color_spread < 12.0:
                 issues.append("Image appears nearly monochrome")
 
             # Magenta/missing-texture detection: pink pixels where R>200, G<50, B>200
             magenta_fraction = 0.0
-            try:
-                rgb_arr = np.array(rgb, dtype=np.uint8)
-                magenta_mask = (
-                    (rgb_arr[:, :, 0] > 200)
-                    & (rgb_arr[:, :, 1] < 50)
-                    & (rgb_arr[:, :, 2] > 200)
+            magenta_mask = (
+                (rgb_arr[:, :, 0] > 200)
+                & (rgb_arr[:, :, 1] < 50)
+                & (rgb_arr[:, :, 2] > 200)
+            )
+            magenta_fraction = float(magenta_mask.sum()) / max(magenta_mask.size, 1)
+            if magenta_fraction > 0.001:  # >0.1% of pixels are magenta
+                issues.append(
+                    f"missing_texture_detected ({magenta_fraction * 100:.2f}% magenta pixels)"
                 )
-                magenta_fraction = float(magenta_mask.sum()) / max(magenta_mask.size, 1)
-                if magenta_fraction > 0.001:  # >0.1% of pixels are magenta
-                    issues.append(
-                        f"missing_texture_detected ({magenta_fraction * 100:.2f}% magenta pixels)"
-                    )
-            except Exception:
-                pass
 
             semantic_result = _evaluate_validation_profile(rgb_arr, gray_arr, edge_arr, validation_profile)
             result["metrics"] = {

@@ -165,6 +165,49 @@ def test_map_ruff_severity_demotes_style_noise_but_keeps_real_bugs():
     assert _map_ruff_severity("S603") == "HIGH"
 
 
+def test_run_ruff_surfaces_runtime_finding_when_output_is_malformed(monkeypatch, tmp_path):
+    target = tmp_path / "demo.py"
+    target.write_text("value = 1\n", encoding="utf-8")
+
+    from veilbreakers_mcp import _tool_runner as tool_runner
+
+    monkeypatch.setattr(tool_runner, "_which", lambda cmd: "ruff-bin" if cmd == "ruff" else None)
+    monkeypatch.setattr(tool_runner, "_run", lambda *args, **kwargs: "{not-json")
+
+    findings = tool_runner.run_ruff([str(target)])
+
+    assert findings
+    assert findings[0].rule_id == "RUFF-RUNTIME"
+    assert findings[0].file.endswith("demo.py")
+
+
+def test_scan_project_surfaces_runtime_warning_when_context_engine_init_fails(monkeypatch, tmp_path):
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    file_path = src_dir / "demo.py"
+    file_path.write_text("value = 1\n", encoding="utf-8")
+
+    monkeypatch.setattr(reviewer, "_CONTEXT_ENGINE_AVAILABLE", True)
+
+    class _BrokenContextEngine:
+        def __init__(self, root):
+            raise RuntimeError("context exploded")
+
+    monkeypatch.setattr(reviewer, "ContextEngine", _BrokenContextEngine, raising=False)
+
+    report = reviewer.scan_project(
+        [str(src_dir)],
+        lang="py",
+        review_scope="advisory",
+        build_context=True,
+    )
+
+    assert any(
+        "context_engine_init_failed" in warning
+        for warning in report["runtime_warnings"]
+    )
+
+
 def test_production_scan_hides_style_only_ruff_findings(monkeypatch, tmp_path):
     src_dir = tmp_path / "src" / "veilbreakers_mcp"
     src_dir.mkdir(parents=True)

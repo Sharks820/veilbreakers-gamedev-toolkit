@@ -9,7 +9,7 @@ Provides:
   - compute_biome_assignments: Per-cell biome index from altitude/slope rules
   - carve_river_path: A* river channel carving on heightmap
   - generate_road_path: Weighted A* road with terrain grading
-  - TERRAIN_PRESETS: Parameter dicts for 8 terrain types
+  - TERRAIN_PRESETS: Parameter dicts for 10 terrain types
   - BIOME_RULES: Default dark-fantasy biome rules
 
 Performance notes (2026-03):
@@ -245,6 +245,20 @@ TERRAIN_PRESETS: dict[str, dict[str, Any]] = {
         "amplitude_scale": 0.15,
         "post_process": "smooth",
     },
+    "coastal": {
+        "octaves": 5,
+        "persistence": 0.38,
+        "lacunarity": 2.0,
+        "amplitude_scale": 0.32,
+        "post_process": "smooth",
+    },
+    "swamp": {
+        "octaves": 4,
+        "persistence": 0.28,
+        "lacunarity": 1.9,
+        "amplitude_scale": 0.08,
+        "post_process": "smooth",
+    },
     "chaotic": {
         "octaves": 8,
         "persistence": 0.6,
@@ -402,7 +416,7 @@ def generate_heightmap(
         Random seed for deterministic generation.
     terrain_type : str
         One of TERRAIN_PRESETS keys: mountains, hills, plains, volcanic,
-        canyon, cliffs.
+        canyon, cliffs, flat, coastal, swamp, chaotic.
     warp_strength : float
         Domain warp amplitude (0=off, 0.3-0.8=organic, 1.0+=extreme).
     warp_scale : float
@@ -512,10 +526,12 @@ def _apply_terrain_preset(
                 normalized = (hmap - hmin) / (hmax - hmin)
             else:
                 normalized = np.zeros_like(hmap)
+            power = preset.get("power", 1.5)
+            hmap = np.power(normalized, power)
         else:
-            normalized = np.clip((hmap + 1.0) * 0.5, 0.0, 1.0)
-        power = preset.get("power", 1.5)
-        hmap = np.power(normalized, power)
+            signed = np.clip(hmap, -1.0, 1.0)
+            power = preset.get("power", 1.5)
+            hmap = np.sign(signed) * np.power(np.abs(signed), power)
 
     elif post == "smooth":
         # Gentle smoothing: reduce high-frequency by averaging with neighbors
@@ -573,11 +589,15 @@ def _apply_terrain_preset(
                 normalized = (hmap - hmin) / (hmax - hmin)
             else:
                 normalized = np.zeros_like(hmap)
+            stepped = np.floor(normalized * step_count) / step_count
+            # Blend stepped with original for cliff edges
+            hmap = stepped * 0.7 + normalized * 0.3
         else:
-            normalized = np.clip((hmap + 1.0) * 0.5, 0.0, 1.0)
-        stepped = np.floor(normalized * step_count) / step_count
-        # Blend stepped with original for cliff edges
-        hmap = stepped * 0.7 + normalized * 0.3
+            signed = np.clip(hmap, -1.0, 1.0)
+            abs_signed = np.abs(signed)
+            stepped = np.floor(abs_signed * step_count) / step_count
+            stepped = np.clip(stepped, 0.0, 1.0)
+            hmap = np.sign(signed) * (stepped * 0.7 + abs_signed * 0.3)
 
     return hmap
 

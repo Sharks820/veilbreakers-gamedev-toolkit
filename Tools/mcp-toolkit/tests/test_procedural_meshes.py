@@ -1398,8 +1398,8 @@ class TestRegistry:
             "monster_part", "monster_body", "projectile", "armor",
             "fortification", "infrastructure", "camp",
             "consumable", "crafting_material", "currency", "key_item",
-            "domestic_animals", "forest_animals", "mountain_animals",
-            "swamp_animals", "vermin",
+            "domestic_animal", "forest_animal", "mountain_animal",
+            "swamp_animal", "vermin",
         }
         assert expected.issubset(set(GENERATORS.keys()))
 

@@ -662,7 +662,7 @@ class TestControllerTerrainPath:
         assert result["controller_ok"] is True
         assert result["hero_cliff_overlays"] == 1
 
-    def test_controller_path_threads_cave_candidates_into_pipeline(self):
+    def test_controller_path_threads_cave_candidates_but_defers_cave_pipeline_by_default(self):
         from blender_addon.handlers import environment as env_mod
         from blender_addon.handlers.terrain_semantics import TerrainMaskStack
 
@@ -719,11 +719,72 @@ class TestControllerTerrainPath:
 
         params = captured["params"]
         assert params["scene_read"]["cave_candidates"] == [(6.0, 3.0, 0.0)]
-        assert params["pipeline"] == ["macro_world", "structural_masks", "caves", "integrate_deltas", "cliffs", "validation_minimal"]
+        assert params["pipeline"] == ["macro_world", "structural_masks", "cliffs", "validation_minimal"]
         assert params["world_origin_x"] == pytest.approx(-12.0)
         assert params["world_origin_y"] == pytest.approx(-18.0)
         assert result["cave_candidates"] == [[6.0, 3.0, 0.0]]
         assert result["cave_mask_present"] is False
+        assert result["cave_pipeline_deferred"] is True
+
+    def test_controller_path_can_opt_in_to_cave_pipeline(self):
+        from blender_addon.handlers import environment as env_mod
+        from blender_addon.handlers.terrain_semantics import TerrainMaskStack
+
+        height = np.zeros((3, 3), dtype=np.float64)
+        stack = TerrainMaskStack(
+            tile_size=2,
+            cell_size=1.0,
+            world_origin_x=0.0,
+            world_origin_y=0.0,
+            tile_x=0,
+            tile_y=0,
+            height=height,
+        )
+        controller_execution = {
+            "state": SimpleNamespace(mask_stack=stack),
+            "results": [],
+            "mask_stack": stack,
+            "tile_x": 0,
+            "tile_y": 0,
+        }
+        captured: dict[str, object] = {}
+
+        def _fake_execute(params):
+            captured["params"] = dict(params)
+            return controller_execution
+
+        def _fake_create_mesh(**kwargs):
+            return {
+                "name": kwargs["name"],
+                "vertex_count": int(np.asarray(kwargs["heightmap"]).size),
+                "cliff_overlays": 0,
+                "hero_cliff_overlays": 0,
+            }
+
+        with patch.object(env_mod, "_execute_terrain_pipeline", side_effect=_fake_execute), \
+             patch.object(env_mod, "_create_terrain_mesh_from_heightmap", side_effect=_fake_create_mesh):
+            result = env_mod.handle_generate_terrain(
+                {
+                    "name": "CaveControllerTerrain",
+                    "resolution": 3,
+                    "terrain_type": "mountains",
+                    "erosion": "none",
+                    "seed": 11,
+                    "scale": 32.0,
+                    "height_scale": 6.0,
+                    "use_controller": True,
+                    "controller_apply_caves": True,
+                    "object_location": (4.0, -2.0, 0.0),
+                    "scene_read": {
+                        "reviewer": "pytest",
+                        "cave_candidates": [(6.0, 3.0, 0.0)],
+                    },
+                }
+            )
+
+        params = captured["params"]
+        assert params["pipeline"] == ["macro_world", "structural_masks", "caves", "integrate_deltas", "cliffs", "validation_minimal"]
+        assert result["cave_pipeline_deferred"] is False
 
 
 class TestWorldTerrainGeneration:
@@ -849,6 +910,68 @@ class TestExportHeightRangeResolution:
         result = _resolve_export_height_range({}, hmap)
 
         assert result is None
+
+
+class TestRoadMaskPainting:
+    def test_new_splatmap_stays_zero_outside_road(self):
+        from blender_addon.handlers.environment import _paint_road_mask_on_terrain
+
+        class _Vertex:
+            def __init__(self, x, y, z=0.0):
+                self.co = SimpleNamespace(x=x, y=y, z=z)
+
+        class _Loop:
+            def __init__(self, vertex_index):
+                self.vertex_index = vertex_index
+
+        class _ColorDatum:
+            def __init__(self):
+                self.color = (0.0, 0.0, 0.0, 0.0)
+
+        class _ColorAttr:
+            def __init__(self, count):
+                self.data = [_ColorDatum() for _ in range(count)]
+
+        class _ColorAttributes:
+            def __init__(self):
+                self._attrs = {}
+
+            def get(self, name):
+                return self._attrs.get(name)
+
+            def new(self, name, type, domain):
+                attr = _ColorAttr(4)
+                self._attrs[name] = attr
+                return attr
+
+        class _Mesh:
+            def __init__(self):
+                self.vertices = [
+                    _Vertex(0.0, 0.0),
+                    _Vertex(2.0, 0.0),
+                    _Vertex(100.0, 100.0),
+                    _Vertex(102.0, 100.0),
+                ]
+                self.loops = [_Loop(0), _Loop(1), _Loop(2), _Loop(3)]
+                self.color_attributes = _ColorAttributes()
+
+        terrain_obj = SimpleNamespace(data=_Mesh(), matrix_world=None)
+
+        _paint_road_mask_on_terrain(
+            terrain_obj,
+            [(0.0, 0.0, 0.0), (2.0, 0.0, 0.0)],
+            road_half_width=1.0,
+            shoulder_width=0.5,
+            surface_key="dirt_path",
+        )
+
+        attr = terrain_obj.data.color_attributes.get("VB_TerrainSplatmap")
+        assert attr is not None
+        near_colors = [np.asarray(attr.data[i].color[:4], dtype=np.float32) for i in (0, 1)]
+        far_colors = [np.asarray(attr.data[i].color[:4], dtype=np.float32) for i in (2, 3)]
+
+        assert all(float(color.sum()) > 1e-6 for color in near_colors)
+        assert all(float(color.sum()) <= 1e-6 for color in far_colors)
 
 
 # ---------------------------------------------------------------------------
@@ -995,6 +1118,36 @@ class TestTerrainWorldCoordinateHelpers:
         )
 
         assert path == [(1.0, 2.0, 3.0), (4.0, 5.0, 6.0)]
+
+
+class TestRiverPathSmoothing:
+    """River path smoothing should reduce stair-stepping and stay downhill."""
+
+    def test_smooth_river_path_points_resamples_and_preserves_descent(self):
+        from blender_addon.handlers.environment import _smooth_river_path_points
+
+        path = [
+            (0.0, 0.0, 12.0),
+            (1.0, 0.0, 11.7),
+            (1.0, 1.0, 11.4),
+            (2.0, 1.0, 11.1),
+            (2.0, 2.0, 10.8),
+            (3.0, 2.0, 10.5),
+            (3.0, 3.0, 10.2),
+        ]
+
+        smoothed = _smooth_river_path_points(path, enforce_monotonic_z=True)
+
+        assert smoothed[0] == path[0]
+        assert len(smoothed) <= len(path)
+        assert all(
+            later[2] <= earlier[2] + 1e-9
+            for earlier, later in zip(smoothed, smoothed[1:])
+        )
+        assert any(
+            abs(x - round(x)) > 1e-6 or abs(y - round(y)) > 1e-6
+            for x, y, _ in smoothed[1:-1]
+        ), "Expected smoothed river control points to move off the stair-step grid"
 
 
 # ---------------------------------------------------------------------------

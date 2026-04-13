@@ -285,7 +285,7 @@ def compute_spline_deformation(
     depth: float = 1.0,
     falloff: float = 0.5,
     mode: str = "carve",
-    samples_per_segment: int = 32,
+    samples_per_segment: int = 18,
 ) -> dict[int, float]:
     """Compute terrain vertex Z-displacements along a spline path.
 
@@ -415,6 +415,7 @@ def handle_spline_deform(params: dict) -> dict:
     depth = float(params.get("depth", 1.0))
     falloff = float(params.get("falloff", 0.5))
     mode = params.get("mode", "carve")
+    samples_per_segment = max(4, min(int(params.get("samples_per_segment", 18)), 48))
 
     bm = bmesh.new()
     try:
@@ -423,7 +424,7 @@ def handle_spline_deform(params: dict) -> dict:
 
         positions = [(v.co.x, v.co.y, v.co.z) for v in bm.verts]
         new_heights = compute_spline_deformation(
-            positions, spline_points, width, depth, falloff, mode,
+            positions, spline_points, width, depth, falloff, mode, samples_per_segment,
         )
 
         for idx, new_z in new_heights.items():
@@ -442,6 +443,7 @@ def handle_spline_deform(params: dict) -> dict:
         "width": width,
         "depth": depth,
         "falloff": falloff,
+        "samples_per_segment": samples_per_segment,
     }
 
 
@@ -778,7 +780,7 @@ def handle_terrain_layers(params: dict) -> dict:
             "layers": [
                 {"name": layer.name, "blend_mode": layer.blend_mode,
                  "strength": layer.strength, "shape": list(layer.heights.shape)}
-                for L in layers
+                for layer in layers
             ],
             "total_layers": len(layers),
         }
@@ -1712,4 +1714,4 @@ def handle_terrain_flatten_zone(params: dict) -> dict:
 
     mesh.update()
 
-    return {"status": "ok", "object_name": obj_name, "vertices_modified": len(verts)}
+    return {"status": "success", "object_name": obj_name, "vertices_modified": len(verts)}

@@ -72,6 +72,8 @@ def save_pipeline_checkpoint(
         "created_objects": list(state.get("created_objects", [])),
         "location_results": list(state.get("location_results", [])),
         "interior_results": list(state.get("interior_results", [])),
+        "deferred_river_surfaces": list(state.get("deferred_river_surfaces", []) or []),
+        "deferred_water_body": state.get("deferred_water_body"),
         "params_snapshot": state.get("params_snapshot", {}),
     }
 

@@ -3460,7 +3460,7 @@ def generate_clutter_layout(
 
     for furn in furniture_items:
         ftype = furn["type"]
-        fx, fy, fz = furn["position"]
+        fx, fy, _fz = furn["position"]
         fsx, fsy, fsz = furn["scale"]
         floor_occupied.append((fx, fy, fsx, fsy))
 

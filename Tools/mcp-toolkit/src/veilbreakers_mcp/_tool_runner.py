@@ -38,6 +38,34 @@ class ToolFinding:
     fix: str = ""
 
 
+def _first_target_path(target: str | list[str]) -> str:
+    if isinstance(target, str):
+        return _normalize_tool_path(target)
+    for item in target:
+        normalized = _normalize_tool_path(str(item))
+        if normalized:
+            return normalized
+    return ""
+
+
+def _tool_runtime_failure(
+    *,
+    tool: str,
+    target: str | list[str],
+    exc: Exception,
+    action: str,
+    severity: str = "HIGH",
+) -> ToolFinding:
+    return ToolFinding(
+        tool=tool,
+        rule_id=f"{tool.upper()}-RUNTIME",
+        file=_first_target_path(target),
+        line=0,
+        description=f"{action}: {exc}",
+        severity=severity,
+    )
+
+
 def _normalize_tool_path(path: str, *, base_dir: str | None = None) -> str:
     """Normalize tool output paths for stable cross-tool dedupe."""
     if not path:
@@ -109,8 +137,16 @@ def run_ast_grep(target_dir: str, lang: str = "csharp") -> list[ToolFinding]:
                     description=item.get("message", ""),
                     severity=_map_severity(item.get("severity", "warning")),
                 ))
-    except (json.JSONDecodeError, KeyError):
-        pass
+    except (json.JSONDecodeError, KeyError) as exc:
+        logger.warning("Failed to parse ast-grep output for %s: %s", target_dir, exc)
+        findings.append(
+            _tool_runtime_failure(
+                tool="ast-grep",
+                target=target_dir,
+                exc=exc,
+                action="Failed to parse ast-grep output",
+            )
+        )
 
     return findings
 
@@ -150,8 +186,16 @@ def run_ruff(target_dir: str | list[str]) -> list[ToolFinding]:
                     description=item.get("message", ""),
                     severity=_map_ruff_severity(item.get("code", "")),
                 ))
-    except (json.JSONDecodeError, KeyError):
-        pass
+    except (json.JSONDecodeError, KeyError) as exc:
+        logger.warning("Failed to parse ruff output for %s: %s", targets, exc)
+        findings.append(
+            _tool_runtime_failure(
+                tool="ruff",
+                target=targets,
+                exc=exc,
+                action="Failed to parse ruff output",
+            )
+        )
 
     return findings
 
@@ -281,8 +325,16 @@ def run_opengrep(target_dir: str | list[str], rules_dir: str = "") -> list[ToolF
                 description=item.get("extra", {}).get("message", ""),
                 severity=_map_severity(item.get("extra", {}).get("severity", "warning")),
             ))
-    except (json.JSONDecodeError, KeyError):
-        pass
+    except (json.JSONDecodeError, KeyError) as exc:
+        logger.warning("Failed to parse opengrep output for %s: %s", targets, exc)
+        findings.append(
+            _tool_runtime_failure(
+                tool="opengrep",
+                target=targets,
+                exc=exc,
+                action="Failed to parse opengrep output",
+            )
+        )
 
     return findings
 
@@ -377,14 +429,22 @@ def run_dotnet_analyzers(sln_or_csproj: str) -> list[ToolFinding]:
                     description=msg,
                     severity=_map_severity(level),
                 ))
-    except (json.JSONDecodeError, KeyError, OSError):
-        pass
+    except (json.JSONDecodeError, KeyError, OSError) as exc:
+        logger.warning("Failed to parse dotnet analyzer SARIF for %s: %s", sln_or_csproj, exc)
+        findings.append(
+            _tool_runtime_failure(
+                tool="dotnet-analyzers",
+                target=sln_or_csproj,
+                exc=exc,
+                action="Failed to parse dotnet analyzer SARIF",
+            )
+        )
     finally:
         # Cleanup SARIF file
         try:
             Path(sarif_path).unlink(missing_ok=True)
-        except OSError:
-            pass
+        except OSError as exc:
+            logger.debug("Failed to delete SARIF output %s: %s", sarif_path, exc)
 
     return findings
 
@@ -439,8 +499,8 @@ def run_roslynator(sln_path: str) -> list[ToolFinding]:
     finally:
         try:
             Path(output_path).unlink(missing_ok=True)
-        except OSError:
-            pass
+        except OSError as exc:
+            logger.debug("Failed to delete Roslynator output %s: %s", output_path, exc)
 
     return findings
 

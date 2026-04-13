@@ -1,7 +1,7 @@
 """Tests for animal and wildlife procedural mesh generators.
 
-Validates that every generator in the forest_animals, mountain_animals,
-domestic_animals, vermin, and swamp_animals categories returns valid mesh data:
+Validates that every generator in the forest_animal, mountain_animal,
+domestic_animal, vermin, and swamp_animal categories returns valid mesh data:
 - Non-empty vertex and face lists
 - All face indices reference valid vertices
 - Reasonable vertex/face counts for the animal type
@@ -378,25 +378,25 @@ class TestAnimalRegistry:
     """Test that all animal generators are properly registered."""
 
     def test_forest_animals_category_exists(self):
-        assert "forest_animals" in GENERATORS
+        assert "forest_animal" in GENERATORS
 
     def test_forest_animals_all_registered(self):
         expected = {"deer", "wolf", "fox", "rabbit", "owl", "crow"}
-        assert set(GENERATORS["forest_animals"].keys()) == expected
+        assert set(GENERATORS["forest_animal"].keys()) == expected
 
     def test_mountain_animals_category_exists(self):
-        assert "mountain_animals" in GENERATORS
+        assert "mountain_animal" in GENERATORS
 
     def test_mountain_animals_all_registered(self):
         expected = {"mountain_goat", "eagle", "bear"}
-        assert set(GENERATORS["mountain_animals"].keys()) == expected
+        assert set(GENERATORS["mountain_animal"].keys()) == expected
 
     def test_domestic_animals_category_exists(self):
-        assert "domestic_animals" in GENERATORS
+        assert "domestic_animal" in GENERATORS
 
     def test_domestic_animals_all_registered(self):
         expected = {"horse", "chicken", "dog", "cat"}
-        assert set(GENERATORS["domestic_animals"].keys()) == expected
+        assert set(GENERATORS["domestic_animal"].keys()) == expected
 
     def test_vermin_category_exists(self):
         assert "vermin" in GENERATORS
@@ -406,17 +406,17 @@ class TestAnimalRegistry:
         assert set(GENERATORS["vermin"].keys()) == expected
 
     def test_swamp_animals_category_exists(self):
-        assert "swamp_animals" in GENERATORS
+        assert "swamp_animal" in GENERATORS
 
     def test_swamp_animals_all_registered(self):
         expected = {"frog", "snake_ambient", "turtle"}
-        assert set(GENERATORS["swamp_animals"].keys()) == expected
+        assert set(GENERATORS["swamp_animal"].keys()) == expected
 
     def test_all_registry_entries_callable(self):
         """Every entry in the animal registries should be callable."""
         animal_categories = [
-            "forest_animals", "mountain_animals", "domestic_animals",
-            "vermin", "swamp_animals",
+            "forest_animal", "mountain_animal", "domestic_animal",
+            "vermin", "swamp_animal",
         ]
         for cat in animal_categories:
             assert cat in GENERATORS, f"Category {cat} missing from GENERATORS"
@@ -426,8 +426,8 @@ class TestAnimalRegistry:
     def test_all_registry_entries_produce_valid_mesh(self):
         """Every registered animal generator should produce valid mesh data."""
         animal_categories = [
-            "forest_animals", "mountain_animals", "domestic_animals",
-            "vermin", "swamp_animals",
+            "forest_animal", "mountain_animal", "domestic_animal",
+            "vermin", "swamp_animal",
         ]
         for cat in animal_categories:
             for name, func in GENERATORS[cat].items():

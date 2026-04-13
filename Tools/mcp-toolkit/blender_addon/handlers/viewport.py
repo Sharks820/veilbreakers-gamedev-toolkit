@@ -110,6 +110,16 @@ DARK_FANTASY_LIGHTING_PRESETS = {
         "mist_start": 14.0,
         "mist_depth": 80.0,
     },
+    "terrain_review": {
+        "ambient": 0.045,
+        "world_color": (0.07, 0.08, 0.09, 1.0),
+        "sun": {"energy": 3.55, "azimuth": -46.0, "elevation": 23.0, "color": (0.88, 0.84, 0.76)},
+        "key_energy": 2.45,
+        "fill_energy": 0.42,
+        "rim_energy": 1.55,
+        "mist_start": 38.0,
+        "mist_depth": 170.0,
+    },
     "veil_corrupted": {
         "ambient": 0.02,
         "world_color": (0.015, 0.012, 0.025, 1.0),
@@ -295,6 +305,24 @@ def _scene_focus_target(target_name: str | None = None) -> tuple[tuple[float, fl
 
     target = bpy.data.objects.get(target_name) if target_name else bpy.context.view_layer.objects.active
     if target is not None:
+        bounds_min: Vector | None = None
+        bounds_max: Vector | None = None
+        for corner in getattr(target, "bound_box", ()) or ():
+            world_corner = target.matrix_world @ Vector(corner)
+            bounds_min = world_corner.copy() if bounds_min is None else Vector((
+                min(bounds_min.x, world_corner.x),
+                min(bounds_min.y, world_corner.y),
+                min(bounds_min.z, world_corner.z),
+            ))
+            bounds_max = world_corner.copy() if bounds_max is None else Vector((
+                max(bounds_max.x, world_corner.x),
+                max(bounds_max.y, world_corner.y),
+                max(bounds_max.z, world_corner.z),
+            ))
+        if bounds_min is not None and bounds_max is not None:
+            center = (bounds_min + bounds_max) * 0.5
+            dims = bounds_max - bounds_min
+            return tuple(center), (max(dims.x, 1.0), max(dims.y, 1.0), max(dims.z, 1.0))
         return tuple(target.location), tuple(target.dimensions)
 
     bounds_min: Vector | None = None
@@ -339,6 +367,7 @@ def _save_viewport_state() -> dict:
                         "shading_type": s.type,
                         "use_scene_lights": s.use_scene_lights,
                         "use_scene_world": s.use_scene_world,
+                        "show_overlays": getattr(space.overlay, "show_overlays", True),
                         "studio_light": getattr(s, "studio_light", ""),
                         "studiolight_rotate_z": getattr(
                             s, "studiolight_rotate_z", 0.0
@@ -358,6 +387,8 @@ def _restore_viewport_state(state: dict) -> None:
         s.type = entry["shading_type"]
         s.use_scene_lights = entry["use_scene_lights"]
         s.use_scene_world = entry["use_scene_world"]
+        if hasattr(space, "overlay") and hasattr(space.overlay, "show_overlays"):
+            space.overlay.show_overlays = entry.get("show_overlays", True)
         if hasattr(s, "studio_light"):
             s.studio_light = entry["studio_light"]
         if hasattr(s, "studiolight_rotate_z"):
@@ -442,6 +473,8 @@ def _apply_viewport_shading() -> int:
                     s.type = "MATERIAL"
                     s.use_scene_lights = True
                     s.use_scene_world = False
+                    if hasattr(space, "overlay") and hasattr(space.overlay, "show_overlays"):
+                        space.overlay.show_overlays = False
                     # Use dark HDRI for professional look
                     if hasattr(s, "studio_light"):
                         s.studio_light = BEAUTY_STUDIO_LIGHT
@@ -845,10 +878,9 @@ def handle_auto_frame_camera(params: dict) -> dict:
     focal_length = params.get("focal_length", BEAUTY_FOCAL_LENGTH)
     azimuth = params.get("azimuth", 35.0)
 
+    center, dims = _scene_focus_target(object_name)
     # Calculate distance from object dimensions (accounts for focal length)
-    dims = tuple(target.dimensions)
     distance = compute_camera_distance(dims, focal_length)
-    center = tuple(target.location)
 
     # Position camera
     cam = bpy.data.objects.get(BEAUTY_CAMERA_NAME)
@@ -1083,6 +1115,7 @@ def handle_render_angle(params: dict) -> dict:
     fmt = params.get("format", "PNG").upper()
     filepath = _resolve_output_path(params, "vb_render_angle")
     skip_beauty = bool(params.get("skip_beauty", False))
+    review_profile = str(params.get("review_profile", "")).strip().lower()
     target = params.get("target")
     target_center, target_dims = _scene_focus_target(
         params.get("object_name") or params.get("target_object")
@@ -1094,8 +1127,19 @@ def handle_render_angle(params: dict) -> dict:
         params.get("distance")
         or compute_camera_distance(target_dims, float(params.get("focal_length", BEAUTY_FOCAL_LENGTH)))
     )
+    if review_profile == "terrain":
+        lifted_target = list(target_center)
+        lifted_target[2] += max(float(target_dims[2]) * 0.18, 8.0)
+        target_center = tuple(lifted_target)
+        if pitch < 16.0:
+            pitch = 16.0
+        distance *= 0.70
     center = Vector(target_center)
     camera_position = Vector(compute_light_position(target_center, distance, yaw, pitch))
+    if review_profile == "terrain":
+        min_camera_z = center.z + max(float(target_dims[2]) * 0.22, 16.0)
+        if camera_position.z < min_camera_z:
+            camera_position.z = min_camera_z
 
     viewport_state = None
     eevee_state = None
@@ -1118,6 +1162,21 @@ def handle_render_angle(params: dict) -> dict:
     bpy.context.scene.collection.objects.link(cam)
 
     try:
+        world = old_world
+        if review_profile == "terrain":
+            if world is None:
+                world = bpy.data.worlds.new("_RA_Temp_World")
+                bpy.context.scene.world = world
+                world.use_nodes = True
+                temp_world = world
+            if world.use_nodes and world.node_tree:
+                bg_node = world.node_tree.nodes.get("Background")
+                if bg_node is not None:
+                    old_world_strength = bg_node.inputs["Strength"].default_value
+                    old_world_color = tuple(bg_node.inputs["Color"].default_value)
+                    bg_node.inputs["Strength"].default_value = 0.55
+                    bg_node.inputs["Color"].default_value = (0.44, 0.49, 0.56, 1.0)
+
         if not skip_beauty:
             viewport_state = _save_viewport_state()
             eevee_state = _save_eevee_state()
@@ -1135,7 +1194,6 @@ def handle_render_angle(params: dict) -> dict:
                 light_obj.name = f"_RA_Temp_{preset['name']}"
                 temp_lights.append(light_obj)
 
-            world = old_world
             if world is None:
                 world = bpy.data.worlds.new("_RA_Temp_World")
                 bpy.context.scene.world = world
@@ -1144,10 +1202,13 @@ def handle_render_angle(params: dict) -> dict:
             if world.use_nodes and world.node_tree:
                 bg_node = world.node_tree.nodes.get("Background")
                 if bg_node is not None:
-                    old_world_strength = bg_node.inputs["Strength"].default_value
-                    old_world_color = tuple(bg_node.inputs["Color"].default_value)
-                    bg_node.inputs["Strength"].default_value = 0.05
-                    bg_node.inputs["Color"].default_value = (0.01, 0.01, 0.02, 1.0)
+                    if old_world_strength is None:
+                        old_world_strength = bg_node.inputs["Strength"].default_value
+                    if old_world_color is None:
+                        old_world_color = tuple(bg_node.inputs["Color"].default_value)
+                    if review_profile != "terrain":
+                        bg_node.inputs["Strength"].default_value = 0.05
+                        bg_node.inputs["Color"].default_value = (0.01, 0.01, 0.02, 1.0)
 
         scene.camera = cam
         scene.render.filepath = filepath

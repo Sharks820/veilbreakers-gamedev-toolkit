@@ -158,6 +158,61 @@ def _terrain_cave_fail_image(path: Path) -> None:
     image.save(path)
 
 
+def _terrain_river_pass_image(path: Path) -> None:
+    image = Image.new("RGB", (256, 256), (70, 84, 64))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((0, 0, 255, 255), fill=(76, 90, 70))
+    draw.polygon([(0, 182), (54, 150), (98, 144), (158, 156), (210, 138), (255, 124), (255, 255), (0, 255)], fill=(96, 112, 84))
+    draw.line((26, 150, 76, 164, 120, 154, 176, 168, 234, 148), fill=(126, 142, 110), width=10)
+    draw.line((30, 158, 82, 174, 126, 164, 178, 178, 238, 158), fill=(54, 94, 128), width=22)
+    draw.line((30, 158, 82, 174, 126, 164, 178, 178, 238, 158), fill=(180, 216, 228), width=4)
+    draw.line((34, 144, 74, 156), fill=(182, 176, 148), width=3)
+    draw.line((190, 182, 228, 168), fill=(182, 176, 148), width=3)
+    for x in range(24, 236, 18):
+        draw.line((x, 136, x + 10, 148, x + 2, 164), fill=(158, 150, 124), width=2)
+    for x in range(40, 224, 24):
+        draw.line((x, 172, x + 6, 188, x - 4, 204), fill=(202, 226, 236), width=2)
+    _write_checkerboard(draw, (0, 198, 256, 256), 14, ((88, 104, 78), (104, 120, 92)))
+    image.save(path)
+
+
+def _terrain_river_fail_image(path: Path) -> None:
+    image = Image.new("RGB", (256, 256), (118, 124, 108))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((0, 0, 255, 255), fill=(120, 126, 112))
+    draw.rectangle((18, 176, 238, 220), fill=(132, 144, 118))
+    draw.line((0, 188, 255, 188), fill=(164, 168, 148), width=2)
+    draw.line((0, 212, 255, 212), fill=(148, 154, 132), width=2)
+    image.save(path)
+
+
+def _terrain_road_pass_image(path: Path) -> None:
+    image = Image.new("RGB", (256, 256), (70, 82, 110))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((0, 0, 255, 255), fill=(90, 104, 86))
+    draw.rectangle((0, 0, 255, 80), fill=(86, 102, 126))
+    draw.polygon([(0, 170), (60, 150), (118, 156), (166, 142), (214, 152), (255, 164), (255, 255), (0, 255)], fill=(116, 132, 102))
+    draw.polygon([(42, 246), (78, 178), (114, 144), (152, 142), (198, 176), (224, 246)], fill=(112, 94, 68), outline=(236, 218, 182))
+    draw.line((66, 236, 108, 158, 148, 156, 194, 214), fill=(54, 42, 30), width=8)
+    draw.line((98, 196, 146, 178), fill=(240, 216, 164), width=4)
+    draw.line((84, 210, 124, 186, 166, 202), fill=(244, 228, 196), width=2)
+    for y in range(168, 238, 12):
+        draw.line((76, y, 114, y - 18, 152, y - 16, 190, y + 10), fill=(172, 148, 112), width=2)
+    for y in range(176, 240, 10):
+        draw.line((92, y, 112, y - 10, 138, y - 8, 164, y + 4), fill=(72, 60, 46), width=1)
+    _write_checkerboard(draw, (18, 204, 238, 256), 10, ((112, 126, 102), (68, 78, 64)))
+    image.save(path)
+
+
+def _terrain_road_fail_image(path: Path) -> None:
+    image = Image.new("RGB", (256, 256), (110, 116, 102))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((0, 0, 255, 255), fill=(112, 118, 104))
+    draw.rectangle((28, 182, 228, 226), fill=(118, 126, 108))
+    draw.line((0, 196, 255, 196), fill=(160, 164, 142), width=2)
+    image.save(path)
+
+
 def _write_profile_image(path: Path, profile: str, *, passing: bool) -> None:
     if profile == "terrain_readability":
         (_terrain_readability_pass_image if passing else _terrain_readability_fail_image)(path)
@@ -170,6 +225,12 @@ def _write_profile_image(path: Path, profile: str, *, passing: bool) -> None:
         return
     if profile == "terrain_cave":
         (_terrain_cave_pass_image if passing else _terrain_cave_fail_image)(path)
+        return
+    if profile == "terrain_river":
+        (_terrain_river_pass_image if passing else _terrain_river_fail_image)(path)
+        return
+    if profile == "terrain_road":
+        (_terrain_road_pass_image if passing else _terrain_road_fail_image)(path)
         return
     raise ValueError(f"Unknown profile: {profile}")
 
@@ -221,6 +282,10 @@ def test_validate_render_screens_aggregates_scores(tmp_path):
         ("terrain_waterfall", False),
         ("terrain_cave", True),
         ("terrain_cave", False),
+        ("terrain_river", True),
+        ("terrain_river", False),
+        ("terrain_road", True),
+        ("terrain_road", False),
     ],
 )
 def test_aaa_verify_map_terrain_profiles_surface_semantics(tmp_path, profile, passing):

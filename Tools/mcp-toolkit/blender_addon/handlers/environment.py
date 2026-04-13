@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import math
 import zlib
+from collections import deque
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -78,6 +79,19 @@ _TARGET_RELIEF_COVERAGE: dict[str, float] = {
     "swamp": 0.18,
     "chaotic": 1.00,
 }
+_MAX_RELIEF_BOOST: dict[str, float] = {
+    "mountains": 4.0,
+    "hills": 2.6,
+    "plains": 1.6,
+    "volcanic": 4.0,
+    "canyon": 3.5,
+    "cliffs": 4.2,
+    "flat": 1.4,
+    "coastal": 3.0,
+    "swamp": 2.0,
+    "chaotic": 4.5,
+}
+_SPIKE_PRONE_TERRAIN = frozenset({"mountains", "volcanic", "cliffs", "chaotic"})
 
 
 def _vector_xyz(vec: Any) -> tuple[float, float, float]:
@@ -206,8 +220,56 @@ def _enhance_heightmap_relief(
         return arr
 
     center = 0.0 if low < 0.0 < high else (low + high) * 0.5
-    scale = min(target_span / current_span, 2.0)
+    scale = min(
+        target_span / current_span,
+        _MAX_RELIEF_BOOST.get(terrain_type, 2.0),
+    )
     return (arr - center) * scale + center
+
+
+def _temper_heightmap_spikes(
+    heightmap: np.ndarray,
+    *,
+    terrain_type: str,
+) -> np.ndarray:
+    """Compress isolated needle peaks so mountain terrain reads as landforms, not spikes."""
+    arr = np.asarray(heightmap, dtype=np.float64)
+    if arr.size == 0 or terrain_type not in _SPIKE_PRONE_TERRAIN:
+        return arr
+
+    upper_start = float(np.percentile(arr, 96.0))
+    upper_extreme = float(np.percentile(arr, 99.7))
+    if upper_extreme <= upper_start + 1e-6:
+        return arr
+
+    upper_span = max(upper_extreme - upper_start, 1e-6)
+    padded = np.pad(arr, 1, mode="edge")
+    neighborhood_mean = (
+        padded[0:-2, 0:-2]
+        + padded[0:-2, 1:-1]
+        + padded[0:-2, 2:]
+        + padded[1:-1, 0:-2]
+        + padded[1:-1, 1:-1]
+        + padded[1:-1, 2:]
+        + padded[2:, 0:-2]
+        + padded[2:, 1:-1]
+        + padded[2:, 2:]
+    ) / 9.0
+
+    result = arr.copy()
+    upper_mask = arr > upper_start
+    compressed = upper_start + upper_span * np.tanh((arr - upper_start) / upper_span)
+    result[upper_mask] = compressed[upper_mask]
+
+    spike_mask = arr > float(np.percentile(arr, 99.15))
+    if np.any(spike_mask):
+        result[spike_mask] = (
+            neighborhood_mean[spike_mask] * 0.72
+            + result[spike_mask] * 0.28
+        )
+
+    result = result * 0.88 + neighborhood_mean * 0.12
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -878,6 +940,89 @@ def _resolve_water_path_points(
     ]
 
 
+def _smooth_river_path_points(
+    path_points: list[tuple[float, float, float]],
+    *,
+    smoothing_passes: int = 3,
+    min_spacing_world: float | None = None,
+    enforce_monotonic_z: bool = False,
+) -> list[tuple[float, float, float]]:
+    """Resample a river centerline with spline interpolation."""
+    if len(path_points) < 3:
+        return [(float(x), float(y), float(z)) for x, y, z in path_points]
+
+    points = np.asarray(path_points, dtype=np.float64)
+    raw_xy = points[:, :2]
+    raw_segment_lengths = np.linalg.norm(np.diff(raw_xy, axis=0), axis=1)
+    total_length = float(raw_segment_lengths.sum())
+    if total_length <= 1e-9:
+        return [(float(x), float(y), float(z)) for x, y, z in path_points]
+
+    if min_spacing_world is None:
+        positive_segments = raw_segment_lengths[raw_segment_lengths > 1e-9]
+        if positive_segments.size:
+            inferred_spacing = float(np.median(positive_segments))
+        else:
+            inferred_spacing = total_length / max(len(path_points) - 1, 1)
+        min_spacing_world = max(inferred_spacing * 0.42, 0.35)
+    else:
+        min_spacing_world = max(float(min_spacing_world), 0.35)
+
+    padded = np.vstack((points[0], points, points[-1]))
+    segment_count = len(points) - 1
+    samples_per_segment = max(6, min(20, int(max(total_length / max(segment_count, 1), min_spacing_world) / max(min_spacing_world, 1e-6)) + smoothing_passes * 2))
+
+    dense: list[np.ndarray] = [points[0]]
+    for segment_index in range(1, len(padded) - 2):
+        p0 = padded[segment_index - 1]
+        p1 = padded[segment_index]
+        p2 = padded[segment_index + 1]
+        p3 = padded[segment_index + 2]
+        for step in range(1, samples_per_segment + 1):
+            t = step / samples_per_segment
+            t2 = t * t
+            t3 = t2 * t
+            sample = 0.5 * (
+                (2.0 * p1)
+                + (-p0 + p2) * t
+                + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2
+                + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3
+            )
+            dense.append(sample)
+
+    filtered: list[np.ndarray] = [dense[0]]
+    accumulated = 0.0
+    for sample in dense[1:]:
+        segment_len = float(np.linalg.norm(sample[:2] - filtered[-1][:2]))
+        accumulated += segment_len
+        if accumulated + 1e-9 < float(min_spacing_world):
+            continue
+        filtered.append(sample)
+        accumulated = 0.0
+    if np.linalg.norm(filtered[-1][:2] - points[-1][:2]) > 1e-6:
+        filtered.append(points[-1])
+
+    max_sample_count = max(len(path_points) * 6, 48)
+    if len(filtered) > max_sample_count:
+        selection = np.linspace(0, len(filtered) - 1, max_sample_count)
+        filtered = [filtered[int(round(index))] for index in selection]
+
+    smoothed = np.asarray(filtered, dtype=np.float64)
+    if enforce_monotonic_z and len(smoothed) > 1:
+        min_drop = max(total_length * 1e-5, 1e-4)
+        max_drop = max(0.45, min(float(min_spacing_world) * 0.75, 1.2))
+        for idx in range(1, len(smoothed)):
+            if smoothed[idx, 2] >= smoothed[idx - 1, 2]:
+                smoothed[idx, 2] = smoothed[idx - 1, 2] - min_drop
+            elif smoothed[idx, 2] < smoothed[idx - 1, 2] - max_drop:
+                smoothed[idx, 2] = smoothed[idx - 1, 2] - max_drop
+
+    return [
+        (float(sample[0]), float(sample[1]), float(sample[2]))
+        for sample in smoothed
+    ]
+
+
 def _estimate_tile_height_range(
     terrain_type: str,
     *,
@@ -1220,6 +1365,7 @@ def handle_generate_terrain(params: dict) -> dict:
             "world_origin_y": float(object_location[1]) - float(scale) * 0.5,
         }
         pipeline = ["macro_world", "structural_masks"]
+        controller_apply_caves = bool(params.get("controller_apply_caves", False))
         if erosion in ("hydraulic", "thermal", "both") or cave_candidates:
             controller_scene_read = dict(scene_read_payload or {})
             controller_scene_read.setdefault("timestamp", 0.0)
@@ -1235,7 +1381,7 @@ def handle_generate_terrain(params: dict) -> dict:
                 else "arid" if erosion == "thermal"
                 else "temperate"
             )
-        if cave_candidates:
+        if cave_candidates and controller_apply_caves:
             pipeline.append("caves")
             pipeline.append("integrate_deltas")
         if params.get("cliff_overlays", True):
@@ -1243,7 +1389,26 @@ def handle_generate_terrain(params: dict) -> dict:
         pipeline.append("validation_minimal")
         controller_params["pipeline"] = pipeline
 
-        controller_run = _execute_terrain_pipeline(controller_params)
+        controller_pipeline = list(pipeline)
+        skipped_controller_passes: list[str] = []
+        while True:
+            active_params = dict(controller_params)
+            active_params["pipeline"] = controller_pipeline
+            try:
+                controller_run = _execute_terrain_pipeline(active_params)
+                break
+            except Exception as exc:
+                exc_text = str(exc)
+                if "Pass not registered:" not in exc_text:
+                    raise
+                missing_pass = exc_text.split("Pass not registered:", 1)[1].strip().strip("'\"")
+                if missing_pass not in controller_pipeline:
+                    raise
+                controller_pipeline = [p for p in controller_pipeline if p != missing_pass]
+                skipped_controller_passes.append(missing_pass)
+                if not controller_pipeline:
+                    raise
+        cave_pipeline_fallback = bool(skipped_controller_passes)
         controller_state = controller_run["state"]
         controller_results = controller_run["results"]
         failed_passes = [
@@ -1270,6 +1435,7 @@ def handle_generate_terrain(params: dict) -> dict:
             controller_state.mask_stack.height_max_m = float(heightmap.max()) if heightmap.size else 0.0
 
         heightmap = _enhance_heightmap_relief(heightmap, terrain_type=terrain_type)
+        heightmap = _temper_heightmap_spikes(heightmap, terrain_type=terrain_type)
 
         terrain_size = scale
         controller_cliff_placements: list[dict[str, Any]] | None = None
@@ -1321,6 +1487,11 @@ def handle_generate_terrain(params: dict) -> dict:
             result["cave_mask_present"] = bool(
                 controller_state.mask_stack.get("cave_candidate") is not None
             )
+            result["cave_pipeline_fallback"] = cave_pipeline_fallback
+            result["cave_pipeline_deferred"] = not controller_apply_caves
+        if skipped_controller_passes:
+            result["controller_skipped_missing_passes"] = skipped_controller_passes
+            result["controller_passes"] = [r.pass_name for r in controller_results]
         if biome_preset is not None:
             result["biome_preset"] = biome_name
             result["scatter_rules"] = biome_preset.get("scatter_rules", [])
@@ -1369,6 +1540,7 @@ def handle_generate_terrain(params: dict) -> dict:
         heightmap = flatten_multiple_zones(heightmap, flatten_zones)
 
     heightmap = _enhance_heightmap_relief(heightmap, terrain_type=terrain_type)
+    heightmap = _temper_heightmap_spikes(heightmap, terrain_type=terrain_type)
 
     # Compute moisture map from flow accumulation (for splatmap painting)
     moisture_map = None
@@ -2258,6 +2430,11 @@ def handle_carve_river(params: dict) -> dict:
 
     source = tuple(params.get("source", [0, 0]))
     destination = tuple(params.get("destination", [0, 0]))
+    waypoint_cells = [
+        tuple(point[:2])
+        for point in (params.get("waypoints") or [])
+        if isinstance(point, (list, tuple)) and len(point) >= 2
+    ]
     width = params.get("width", 2)
     depth = params.get("depth", 0.05)
     seed = params.get("seed", 0)
@@ -2279,15 +2456,39 @@ def handle_carve_river(params: dict) -> dict:
     # the normalized A* solver to avoid corrupting negative-elevation worlds.
     heights = np.array([v.co.z for v in bm.verts], dtype=np.float64)
     heightmap = heights.reshape(rows, cols)
-
-    # Carve river
-    path, carved, _ = _run_height_solver_in_world_space(
-        heightmap,
-        carve_river_path,
-        source=source,
-        dest=destination,
-        width=width, depth=depth, seed=seed,
+    transform = WorldHeightTransform(
+        world_min=float(heightmap.min()) if heightmap.size else 0.0,
+        world_max=float(heightmap.max()) if heightmap.size else 0.0,
     )
+    height_span = max(transform.world_max - transform.world_min, 1e-6)
+    normalized_depth = max(0.0, min(float(depth) / height_span, 0.45))
+
+    routed_cells = [source, *waypoint_cells, destination]
+    working_heightmap = heightmap.copy()
+    full_path: list[tuple[int, int]] = []
+    for segment_index, (segment_source, segment_dest) in enumerate(zip(routed_cells, routed_cells[1:])):
+        segment_path, segment_carved, _ = _run_height_solver_in_world_space(
+            working_heightmap,
+            carve_river_path,
+            source=segment_source,
+            dest=segment_dest,
+            width=width,
+            depth=normalized_depth,
+            seed=seed + segment_index,
+        )
+        working_heightmap = _apply_river_profile_to_heightmap(
+            base_heightmap=working_heightmap,
+            carved_heightmap=segment_carved,
+            path=segment_path,
+            width_cells=float(width),
+            depth_world=float(depth),
+        )
+        if full_path and segment_path and segment_path[0] == full_path[-1]:
+            full_path.extend(segment_path[1:])
+        else:
+            full_path.extend(segment_path)
+    path = full_path
+    carved = working_heightmap
 
     # Apply back to mesh
     carved_flat = carved.flatten()
@@ -2302,29 +2503,45 @@ def handle_carve_river(params: dict) -> dict:
     terrain_height = obj.dimensions.y if obj.dimensions.y > 0 else terrain_width
     terrain_origin_x = obj.location.x
     terrain_origin_y = obj.location.y
-    path_points = [
-        (
-            *_terrain_grid_to_world_xy(
-                row,
-                col,
-                rows=rows,
-                cols=cols,
-                terrain_width=terrain_width,
-                terrain_height=terrain_height,
-                terrain_origin_x=terrain_origin_x,
-                terrain_origin_y=terrain_origin_y,
-            ),
-            float(carved[row, col]),
+    surface_levels = _derive_river_surface_levels(
+        base_heightmap=heightmap,
+        carved_heightmap=carved,
+        path=path,
+        depth_world=float(depth),
+    )
+    path_points = []
+    bed_points = []
+    for level, (row, col) in zip(surface_levels, path):
+        world_x, world_y = _terrain_grid_to_world_xy(
+            row,
+            col,
+            rows=rows,
+            cols=cols,
+            terrain_width=terrain_width,
+            terrain_height=terrain_height,
+            terrain_origin_x=terrain_origin_x,
+            terrain_origin_y=terrain_origin_y,
         )
-        for row, col in path
-    ]
+        bed_points.append([world_x, world_y, float(carved[row, col])])
+        path_points.append([world_x, world_y, float(level)])
+
+    path_points = _smooth_river_path_points(
+        [tuple(point) for point in path_points],
+        enforce_monotonic_z=True,
+    )
+    bed_points = _smooth_river_path_points(
+        [tuple(point) for point in bed_points],
+        enforce_monotonic_z=False,
+    )
 
     return {
         "name": terrain_name,
         "path_length": len(path),
         "depth": depth,
         "path_cells": [list(cell) for cell in path],
-        "path_points": [list(point) for point in path_points],
+        "path_points": path_points,
+        "bed_points": bed_points,
+        "waypoint_count": len(waypoint_cells),
     }
 
 
@@ -2418,6 +2635,137 @@ def _apply_road_profile_to_heightmap(
                 result[rr, cc] = result[rr, cc] * (1.0 - blend) + target * blend
 
     return result
+
+
+def _apply_river_profile_to_heightmap(
+    *,
+    base_heightmap: np.ndarray,
+    carved_heightmap: np.ndarray,
+    path: list[tuple[int, int]],
+    width_cells: float,
+    depth_world: float,
+    bank_width_cells: float | None = None,
+) -> np.ndarray:
+    """Shape a readable channel with actual banks around the solved river path."""
+    result = np.minimum(
+        np.asarray(base_heightmap, dtype=np.float64),
+        np.asarray(carved_heightmap, dtype=np.float64),
+    ).copy()
+    if len(path) < 2:
+        return result
+
+    channel_half_width = max(float(width_cells) * 0.5, 1.0)
+    bank_width = max(
+        float(bank_width_cells) if bank_width_cells is not None else channel_half_width * 1.85,
+        2.0,
+    )
+    outer_radius = channel_half_width + bank_width
+    center_depth = max(float(depth_world), channel_half_width * 0.55, 0.9)
+    thalweg_half_width = max(channel_half_width * 0.42, 0.75)
+
+    for (r0, c0), (r1, c1) in zip(path, path[1:]):
+        bank_h0 = float(base_heightmap[r0, c0])
+        bank_h1 = float(base_heightmap[r1, c1])
+        r_min = max(0, int(math.floor(min(r0, r1) - outer_radius)))
+        r_max = min(result.shape[0] - 1, int(math.ceil(max(r0, r1) + outer_radius)))
+        c_min = max(0, int(math.floor(min(c0, c1) - outer_radius)))
+        c_max = min(result.shape[1] - 1, int(math.ceil(max(c0, c1) + outer_radius)))
+
+        for rr in range(r_min, r_max + 1):
+            for cc in range(c_min, c_max + 1):
+                dist, t = _point_segment_distance_2d(
+                    float(rr),
+                    float(cc),
+                    float(r0),
+                    float(c0),
+                    float(r1),
+                    float(c1),
+                )
+                if dist > outer_radius:
+                    continue
+
+                bank_height = bank_h0 + (bank_h1 - bank_h0) * t
+                if dist <= channel_half_width:
+                    inner_t = dist / max(channel_half_width, 1e-6)
+                    target = bank_height - center_depth * (1.0 - _smootherstep(inner_t))
+                    if dist <= thalweg_half_width:
+                        thalweg_t = dist / max(thalweg_half_width, 1e-6)
+                        target -= center_depth * 0.22 * (1.0 - _smootherstep(thalweg_t))
+                else:
+                    outer_t = (dist - channel_half_width) / max(bank_width, 1e-6)
+                    target = bank_height - center_depth * 0.34 * (1.0 - _smootherstep(outer_t))
+
+                result[rr, cc] = min(result[rr, cc], target)
+
+    padded = np.pad(result, 1, mode="edge")
+    neighborhood_mean = (
+        padded[0:-2, 0:-2]
+        + padded[0:-2, 1:-1]
+        + padded[0:-2, 2:]
+        + padded[1:-1, 0:-2]
+        + padded[1:-1, 1:-1]
+        + padded[1:-1, 2:]
+        + padded[2:, 0:-2]
+        + padded[2:, 1:-1]
+        + padded[2:, 2:]
+    ) / 9.0
+    for (r0, c0), (r1, c1) in zip(path, path[1:]):
+        r_min = max(0, int(math.floor(min(r0, r1) - outer_radius)))
+        r_max = min(result.shape[0] - 1, int(math.ceil(max(r0, r1) + outer_radius)))
+        c_min = max(0, int(math.floor(min(c0, c1) - outer_radius)))
+        c_max = min(result.shape[1] - 1, int(math.ceil(max(c0, c1) + outer_radius)))
+        for rr in range(r_min, r_max + 1):
+            for cc in range(c_min, c_max + 1):
+                dist, _t = _point_segment_distance_2d(
+                    float(rr),
+                    float(cc),
+                    float(r0),
+                    float(c0),
+                    float(r1),
+                    float(c1),
+                )
+                if dist > outer_radius or dist <= channel_half_width * 0.42:
+                    continue
+                bank_t = (dist - channel_half_width * 0.42) / max(outer_radius - channel_half_width * 0.42, 1e-6)
+                smooth_weight = 0.10 + 0.22 * (1.0 - _smootherstep(bank_t))
+                result[rr, cc] = (
+                    result[rr, cc] * (1.0 - smooth_weight)
+                    + neighborhood_mean[rr, cc] * smooth_weight
+                )
+
+    return result
+
+
+def _derive_river_surface_levels(
+    *,
+    base_heightmap: np.ndarray,
+    carved_heightmap: np.ndarray,
+    path: list[tuple[int, int]],
+    depth_world: float,
+) -> list[float]:
+    """Return a monotonic downhill water-surface profile for a carved river."""
+    if not path:
+        return []
+
+    minimum_cover = max(float(depth_world) * 0.42, 0.12)
+    candidates = []
+    for row, col in path:
+        base_height = float(base_heightmap[row, col])
+        bed_height = float(carved_heightmap[row, col])
+        channel_depth = max(base_height - bed_height, 0.0)
+        surface_height = bed_height + max(channel_depth * 0.72, minimum_cover)
+        candidates.append(surface_height)
+
+    levels = list(candidates)
+    min_drop_per_step = max(float(depth_world) * 0.004, 0.001)
+    max_drop_per_step = max(0.45, min(float(depth_world) * 0.18, 1.2))
+    for idx in range(1, len(levels)):
+        max_allowed = levels[idx - 1] - min_drop_per_step
+        min_allowed = levels[idx - 1] - max_drop_per_step
+        levels[idx] = min(levels[idx], max_allowed)
+        levels[idx] = max(levels[idx], min_allowed)
+
+    return levels
 
 
 def _sample_path_indices(
@@ -2528,12 +2876,97 @@ def _collect_bridge_spans(
     return resolved
 
 
+def _ensure_grounded_road_material(material_name: str, road_material_key: str) -> Any:
+    """Return a simple non-speckled road material suited for terrain review."""
+    mat = bpy.data.materials.get(material_name)
+    if mat is None:
+        mat = bpy.data.materials.new(name=material_name)
+    mat.use_nodes = True
+    if hasattr(mat, "blend_method"):
+        mat.blend_method = "OPAQUE"
+    if hasattr(mat, "shadow_method"):
+        mat.shadow_method = "OPAQUE"
+
+    presets = {
+        "mud": {
+            "base_color": (0.11, 0.08, 0.06, 1.0),
+            "roughness": 0.58,
+            "specular": 0.42,
+            "bump_strength": 0.014,
+            "noise_scale": 2.8,
+        },
+        "trail": {
+            "base_color": (0.13, 0.11, 0.09, 1.0),
+            "roughness": 0.94,
+            "specular": 0.03,
+            "bump_strength": 0.0,
+            "noise_scale": 0.0,
+        },
+        "dirt": {
+            "base_color": (0.16, 0.13, 0.10, 1.0),
+            "roughness": 0.91,
+            "specular": 0.06,
+            "bump_strength": 0.0,
+            "noise_scale": 0.0,
+        },
+    }
+    preset = presets.get(road_material_key, presets["dirt"])
+
+    if mat.node_tree:
+        nodes = mat.node_tree.nodes
+        links = mat.node_tree.links
+        nodes.clear()
+
+        output = nodes.new("ShaderNodeOutputMaterial")
+        output.location = (320, 0)
+        bsdf = nodes.new("ShaderNodeBsdfPrincipled")
+        bsdf.location = (80, 0)
+        links.new(bsdf.outputs["BSDF"], output.inputs["Surface"])
+
+        base_color = bsdf.inputs.get("Base Color")
+        if base_color is not None:
+            base_color.default_value = preset["base_color"]
+        roughness = bsdf.inputs.get("Roughness")
+        if roughness is not None:
+            roughness.default_value = preset["roughness"]
+        specular = bsdf.inputs.get("Specular IOR Level") or bsdf.inputs.get("Specular")
+        if specular is not None:
+            specular.default_value = preset["specular"]
+
+        if preset["noise_scale"] > 0.0 and preset["bump_strength"] > 0.0:
+            texcoord = nodes.new("ShaderNodeTexCoord")
+            texcoord.location = (-760, -120)
+            mapping = nodes.new("ShaderNodeMapping")
+            mapping.location = (-560, -120)
+            mapping.inputs["Scale"].default_value = (0.9, 3.2, 1.0)
+            links.new(texcoord.outputs["Object"], mapping.inputs["Vector"])
+
+            noise = nodes.new("ShaderNodeTexNoise")
+            noise.location = (-340, -120)
+            noise.inputs["Scale"].default_value = preset["noise_scale"]
+            noise.inputs["Detail"].default_value = 0.65
+            noise.inputs["Roughness"].default_value = 0.18
+            links.new(mapping.outputs["Vector"], noise.inputs["Vector"])
+
+            bump = nodes.new("ShaderNodeBump")
+            bump.location = (-100, -140)
+            bump.inputs["Strength"].default_value = preset["bump_strength"]
+            bump.inputs["Distance"].default_value = 0.01
+            links.new(noise.outputs["Fac"], bump.inputs["Height"])
+            normal_input = bsdf.inputs.get("Normal")
+            if normal_input is not None:
+                links.new(bump.outputs["Normal"], normal_input)
+
+    return mat
+
+
 def _paint_road_mask_on_terrain(
     terrain_obj: Any,
     path_world: list[tuple[float, float, float]],
     *,
     road_half_width: float,
     shoulder_width: float,
+    surface_key: str = "dirt",
 ) -> None:
     """Paint the canonical terrain splatmap layer so roads read in preview/export."""
     mesh = getattr(terrain_obj, "data", None)
@@ -2551,13 +2984,75 @@ def _paint_road_mask_on_terrain(
         return
 
     total_radius = max(road_half_width + shoulder_width, 1e-6)
-    base_color = np.asarray((0.60, 0.20, 0.15, 0.05), dtype=np.float32)
-    target_color = np.asarray((0.10, 0.10, 0.76, 0.04), dtype=np.float32)
+    zero_color = np.asarray((0.0, 0.0, 0.0, 0.0), dtype=np.float32)
+    surface = str(surface_key or "dirt").strip().lower()
+    target_palette = {
+        "trail": (0.90, 0.07, 0.02, 0.01),
+        "path": (0.90, 0.07, 0.02, 0.01),
+        "dirt": (0.86, 0.10, 0.03, 0.01),
+        "dirt_path": (0.88, 0.08, 0.03, 0.01),
+        "mud": (0.34, 0.10, 0.01, 0.55),
+        "muddy": (0.34, 0.10, 0.01, 0.55),
+        "gravel": (0.26, 0.54, 0.14, 0.06),
+        "stone": (0.22, 0.58, 0.16, 0.04),
+        "cobblestone_floor": (0.20, 0.60, 0.16, 0.04),
+        "cobblestone": (0.20, 0.60, 0.16, 0.04),
+    }
+    target_color = np.asarray(target_palette.get(surface, target_palette["dirt"]), dtype=np.float32)
     matrix_world = getattr(terrain_obj, "matrix_world", None)
 
     if created_attr:
         for loop_idx in range(len(mesh.loops)):
-            attr.data[loop_idx].color = tuple(base_color)
+            attr.data[loop_idx].color = tuple(zero_color)
+
+    def _blend_loop_color(loop_idx: int, mask: float) -> None:
+        if mask <= 0.0:
+            return
+        existing = np.asarray(attr.data[loop_idx].color[:4], dtype=np.float32)
+        if not np.isfinite(existing).all() or float(existing.sum()) <= 1e-6:
+            existing = zero_color.copy()
+        mixed = existing * (1.0 - mask) + target_color * mask
+        total = float(mixed.sum())
+        if total > 1e-6:
+            mixed /= total
+        attr.data[loop_idx].color = tuple(float(v) for v in mixed)
+
+    polygons = getattr(mesh, "polygons", None)
+    if polygons:
+        for poly in polygons:
+            loop_indices = list(getattr(poly, "loop_indices", []) or [])
+            vertex_indices = list(getattr(poly, "vertices", []) or [])
+            if not loop_indices or not vertex_indices:
+                continue
+            center_x = 0.0
+            center_y = 0.0
+            for vertex_index in vertex_indices:
+                vertex = mesh.vertices[vertex_index].co
+                if matrix_world is not None:
+                    try:
+                        world_pos = matrix_world @ vertex
+                        center_x += float(world_pos.x)
+                        center_y += float(world_pos.y)
+                    except Exception:
+                        center_x += float(vertex.x)
+                        center_y += float(vertex.y)
+                else:
+                    center_x += float(vertex.x)
+                    center_y += float(vertex.y)
+            center_x /= max(len(vertex_indices), 1)
+            center_y /= max(len(vertex_indices), 1)
+            min_dist = float("inf")
+            for (ax, ay, _az), (bx, by, _bz) in zip(path_world, path_world[1:]):
+                dist, _ = _point_segment_distance_2d(center_x, center_y, ax, ay, bx, by)
+                if dist < min_dist:
+                    min_dist = dist
+            if min_dist > total_radius * 1.12:
+                continue
+            poly_mask = 1.0 - _smootherstep(min_dist / max(total_radius * 1.08, 1e-6))
+            if poly_mask <= 0.0:
+                continue
+            for loop_idx in loop_indices:
+                _blend_loop_color(loop_idx, poly_mask * 0.78)
 
     for loop_idx, loop in enumerate(mesh.loops):
         vertex = mesh.vertices[loop.vertex_index].co
@@ -2582,14 +3077,7 @@ def _paint_road_mask_on_terrain(
             continue
 
         mask = 1.0 - _smootherstep(min_dist / total_radius)
-        existing = np.asarray(attr.data[loop_idx].color[:4], dtype=np.float32)
-        if not np.isfinite(existing).all() or float(existing.sum()) <= 1e-6:
-            existing = base_color.copy()
-        mixed = existing * (1.0 - mask) + target_color * mask
-        total = float(mixed.sum())
-        if total > 1e-6:
-            mixed /= total
-        attr.data[loop_idx].color = tuple(float(v) for v in mixed)
+        _blend_loop_color(loop_idx, mask)
 
 
 def _build_road_strip_geometry(
@@ -2771,8 +3259,8 @@ def handle_generate_road(params: dict) -> dict:
     road_material_key = {
         "dirt": "dirt",
         "dirt_path": "dirt",
-        "trail": "dirt",
-        "path": "dirt",
+        "trail": "trail",
+        "path": "trail",
         "mud": "mud",
         "muddy": "mud",
         "gravel": "cobblestone_floor",
@@ -2815,8 +3303,17 @@ def handle_generate_road(params: dict) -> dict:
 
     water_level_raw = params.get("water_level")
     water_level = float(water_level_raw) if water_level_raw is not None else None
+    terrain_only_surfaces = {"trail", "path", "dirt_path", "dirt"}
+    low_profile_surfaces = set(terrain_only_surfaces)
+    allow_bridges = bool(params.get("allow_bridges", requested_surface not in terrain_only_surfaces))
     crown_height_m = max(cell_size * 0.04, 0.03)
     ditch_depth_m = max(cell_size * 0.10, 0.08)
+    if requested_surface in terrain_only_surfaces:
+        crown_height_m *= 0.35
+        ditch_depth_m *= 0.28
+    elif requested_surface in low_profile_surfaces:
+        crown_height_m *= 0.62
+        ditch_depth_m *= 0.55
     shoulder_width_cells = max(1.5, width * 0.65)
     graded = _apply_road_profile_to_heightmap(
         graded,
@@ -2863,7 +3360,7 @@ def handle_generate_road(params: dict) -> dict:
                 terrain_origin_x=terrain_origin_x,
                 terrain_origin_y=terrain_origin_y,
             ),
-            float(graded[row, col]) + 0.03,
+            float(graded[row, col]) + (0.01 if requested_surface in low_profile_surfaces else 0.03),
         )
         for row, col in path
     ]
@@ -2872,13 +3369,14 @@ def handle_generate_road(params: dict) -> dict:
         full_path_world,
         road_half_width=road_half_width,
         shoulder_width=shoulder_width_world,
+        surface_key=requested_surface,
     )
 
     bridge_spans = _collect_bridge_spans(
         path,
         base_heightmap=heightmap,
         graded_heightmap=graded,
-        water_level=water_level,
+        water_level=water_level if allow_bridges else None,
         width_m=road_width_world,
         rows=rows,
         cols=cols,
@@ -2897,9 +3395,27 @@ def handle_generate_road(params: dict) -> dict:
 
     sampled_indices = _sample_path_indices(
         path,
-        min_spacing_cells=max(width * 0.75, 2.0),
+        min_spacing_cells=(
+            max(width * 0.35, 1.0)
+            if requested_surface in low_profile_surfaces
+            else max(width * 0.75, 2.0)
+        ),
         forced_indices=forced_indices,
     )
+
+    if requested_surface in terrain_only_surfaces and not bool(params.get("force_mesh_overlay", False)):
+        return {
+            "name": terrain_name,
+            "road_mesh_name": None,
+            "path_length": len(path),
+            "width": width,
+            "road_width_m": road_width_world,
+            "road_vertex_count": 0,
+            "surface": requested_surface,
+            "surface_mode": "terrain_only",
+            "bridge_count": 0,
+            "bridge_object_names": [],
+        }
 
     chunks: list[list[int]] = []
     current_chunk: list[int] = []
@@ -2956,30 +3472,11 @@ def handle_generate_road(params: dict) -> dict:
                 if hasattr(mpi, "identity"):
                     mpi.identity()
 
-    # Apply terrain-appropriate road material
-    from .procedural_materials import create_procedural_material
-    try:
-        road_mat = create_procedural_material(road_mesh_name, road_material_key)
-        if road_mat:
-            road_mesh_data.materials.append(road_mat)
-    except Exception:
-        road_mat = bpy.data.materials.new(name=f"Road_{road_material_key.title()}")
-        road_mat.use_nodes = True
-        if road_mat.node_tree:
-            bsdf = road_mat.node_tree.nodes.get("Principled BSDF")
-            if bsdf:
-                bc = bsdf.inputs.get("Base Color")
-                if bc:
-                    if road_material_key == "mud":
-                        bc.default_value = (0.14, 0.09, 0.06, 1.0)
-                    elif road_material_key == "dirt":
-                        bc.default_value = (0.20, 0.14, 0.09, 1.0)
-                    else:
-                        bc.default_value = (0.25, 0.22, 0.18, 1.0)
-                rgh = bsdf.inputs.get("Roughness")
-                if rgh:
-                    rgh.default_value = 0.65 if road_material_key == "mud" else 0.88 if road_material_key == "dirt" else 0.85
-        road_mesh_data.materials.append(road_mat)
+    road_mat = _ensure_grounded_road_material(
+        f"Road_{road_material_key.title()}",
+        road_material_key,
+    )
+    road_mesh_data.materials.append(road_mat)
 
     bridge_object_names: list[str] = []
     if bridge_spans:
@@ -3016,7 +3513,12 @@ def handle_generate_road(params: dict) -> dict:
     }
 
 
-def _ensure_water_material(material_name: str, *, preview_fast: bool) -> Any:
+def _ensure_water_material(
+    material_name: str,
+    *,
+    preview_fast: bool,
+    surface_only: bool = False,
+) -> Any:
     """Create or update the canonical water material."""
     mat = bpy.data.materials.get(material_name)
     if mat is None:
@@ -3024,9 +3526,24 @@ def _ensure_water_material(material_name: str, *, preview_fast: bool) -> Any:
     mat.use_nodes = True
     mat.use_backface_culling = False
     if hasattr(mat, "blend_method"):
-        mat.blend_method = "OPAQUE" if preview_fast else "BLEND"
+        mat.blend_method = "OPAQUE" if surface_only else "BLEND"
     if hasattr(mat, "shadow_method"):
         mat.shadow_method = "NONE"
+    if hasattr(mat, "use_transparent_shadow"):
+        mat.use_transparent_shadow = False if surface_only else True
+    if hasattr(mat, "show_transparent_back"):
+        mat.show_transparent_back = False if surface_only else True
+    if hasattr(mat, "use_transparency_overlap"):
+        mat.use_transparency_overlap = False if surface_only else True
+    if hasattr(mat, "surface_render_method") and surface_only:
+        try:
+            mat.surface_render_method = "DITHERED"
+        except Exception:
+            pass
+    if hasattr(mat, "use_screen_refraction"):
+        mat.use_screen_refraction = not surface_only
+    if hasattr(mat, "refraction_depth"):
+        mat.refraction_depth = 0.0 if surface_only else 0.8
     if mat.node_tree:
         nodes = mat.node_tree.nodes
         links = mat.node_tree.links
@@ -3034,43 +3551,206 @@ def _ensure_water_material(material_name: str, *, preview_fast: bool) -> Any:
         output = nodes.new("ShaderNodeOutputMaterial")
         output.location = (360, 0)
         bsdf = nodes.new("ShaderNodeBsdfPrincipled")
-        bsdf.location = (120, 0)
+        bsdf.location = (160, 0)
         links.new(bsdf.outputs["BSDF"], output.inputs["Surface"])
 
         base_color = bsdf.inputs.get("Base Color")
         if base_color:
-            base_color.default_value = (0.019, 0.055, 0.043, 1.0)
+            if surface_only:
+                base_color.default_value = (0.30, 0.63, 0.72, 1.0)
+            else:
+                base_color.default_value = (0.12, 0.27, 0.26, 1.0)
+
+        try:
+            vcol = nodes.new("ShaderNodeVertexColor")
+            vcol.location = (-920, 0)
+            vcol.layer_name = "flow_vc"
+
+            separate = nodes.new("ShaderNodeSeparateColor")
+            separate.location = (-700, 0)
+            separate.mode = "RGB"
+            vcol_color = vcol.outputs.get("Color") if hasattr(vcol, "outputs") else None
+            separate_color = separate.inputs.get("Color") if hasattr(separate, "inputs") else None
+            if vcol_color is not None and separate_color is not None:
+                links.new(vcol_color, separate_color)
+
+            foam_ramp = nodes.new("ShaderNodeValToRGB")
+            foam_ramp.location = (-480, -180)
+            if hasattr(foam_ramp, "color_ramp"):
+                foam_ramp.color_ramp.elements[0].position = 0.42
+                foam_ramp.color_ramp.elements[0].color = (0.0, 0.0, 0.0, 1.0)
+                foam_ramp.color_ramp.elements[1].position = 0.82
+                foam_ramp.color_ramp.elements[1].color = (1.0, 1.0, 1.0, 1.0)
+            vcol_alpha = vcol.outputs.get("Alpha") if hasattr(vcol, "outputs") else None
+            foam_fac = foam_ramp.inputs.get("Fac") if hasattr(foam_ramp, "inputs") else None
+            if vcol_alpha is not None and foam_fac is not None:
+                links.new(vcol_alpha, foam_fac)
+
+            deep_color = nodes.new("ShaderNodeRGB")
+            deep_color.location = (-480, 140)
+            deep_color.outputs["Color"].default_value = (
+                (0.18, 0.42, 0.50, 1.0)
+                if surface_only
+                else (0.05, 0.16, 0.20, 1.0)
+            )
+            shallow_color = nodes.new("ShaderNodeRGB")
+            shallow_color.location = (-480, 60)
+            shallow_color.outputs["Color"].default_value = (
+                (0.36, 0.72, 0.80, 1.0)
+                if surface_only
+                else (0.15, 0.33, 0.31, 1.0)
+            )
+            foam_color = nodes.new("ShaderNodeRGB")
+            foam_color.location = (-480, -20)
+            foam_color.outputs["Color"].default_value = (
+                (0.90, 0.94, 0.93, 1.0)
+                if surface_only
+                else (0.82, 0.86, 0.84, 1.0)
+            )
+
+            shallow_mix = nodes.new("ShaderNodeMixRGB")
+            shallow_mix.location = (-220, 100)
+            shallow_mix.blend_type = "MIX"
+            shallow_mix.inputs["Fac"].default_value = 0.0
+            separate_red = separate.outputs.get("Red") if hasattr(separate, "outputs") else None
+            shallow_fac = shallow_mix.inputs.get("Fac") if hasattr(shallow_mix, "inputs") else None
+            if separate_red is not None and shallow_fac is not None:
+                # The red flow_vc channel is authored as a shallow-water cue.
+                links.new(separate_red, shallow_fac)
+            if shallow_mix.inputs.get("Color1") is not None:
+                links.new(deep_color.outputs["Color"], shallow_mix.inputs["Color1"])
+            if shallow_mix.inputs.get("Color2") is not None:
+                links.new(shallow_color.outputs["Color"], shallow_mix.inputs["Color2"])
+
+            foam_mix = nodes.new("ShaderNodeMixRGB")
+            foam_mix.location = (0, 40)
+            foam_mix.blend_type = "MIX"
+            foam_color_socket = foam_ramp.outputs.get("Color") if hasattr(foam_ramp, "outputs") else None
+            if foam_color_socket is not None and foam_mix.inputs.get("Fac") is not None:
+                links.new(foam_color_socket, foam_mix.inputs["Fac"])
+            if shallow_mix.outputs.get("Color") is not None and foam_mix.inputs.get("Color1") is not None:
+                links.new(shallow_mix.outputs["Color"], foam_mix.inputs["Color1"])
+            if foam_mix.inputs.get("Color2") is not None:
+                links.new(foam_color.outputs["Color"], foam_mix.inputs["Color2"])
+
+            if base_color and foam_mix.outputs.get("Color") is not None:
+                links.new(foam_mix.outputs["Color"], base_color)
+        except Exception:
+            # Test stubs expose a smaller node API surface; keep the readable
+            # fallback tint instead of failing material creation outright.
+            pass
         rough = bsdf.inputs.get("Roughness")
         if rough:
-            rough.default_value = 0.16 if preview_fast else 0.06
+            if surface_only:
+                rough.default_value = 0.10 if preview_fast else 0.13
+            else:
+                rough.default_value = 0.035 if preview_fast else 0.05
         ior = bsdf.inputs.get("IOR")
         if ior:
-            ior.default_value = 1.333
+            ior.default_value = 1.12 if surface_only else 1.333
         alpha = bsdf.inputs.get("Alpha")
         if alpha:
-            alpha.default_value = 1.0 if preview_fast else 0.68
+            if surface_only:
+                alpha.default_value = 1.0
+            else:
+                alpha.default_value = 0.78 if preview_fast else 0.72
         trans = bsdf.inputs.get("Transmission Weight") or bsdf.inputs.get("Transmission")
         if trans:
-            trans.default_value = 0.0 if preview_fast else 0.2
+            if surface_only:
+                trans.default_value = 0.0
+            else:
+                trans.default_value = 0.78 if preview_fast else 0.90
         spec = bsdf.inputs.get("Specular IOR Level") or bsdf.inputs.get("Specular")
         if spec:
-            spec.default_value = 0.5
+            spec.default_value = 0.46 if surface_only else 0.55
 
-        if not preview_fast:
-            noise_tex = nodes.new("ShaderNodeTexNoise")
-            noise_tex.location = (-320, 40)
-            noise_tex.inputs["Scale"].default_value = 18.0
-            noise_tex.inputs["Detail"].default_value = 4.0
-            noise_tex.inputs["Roughness"].default_value = 0.4
-            bump_node = nodes.new("ShaderNodeBump")
-            bump_node.location = (-80, -120)
-            bump_node.inputs["Strength"].default_value = 0.04
-            bump_node.inputs["Distance"].default_value = 0.01
-            links.new(noise_tex.outputs["Fac"], bump_node.inputs["Height"])
-            normal_input = bsdf.inputs.get("Normal")
-            if normal_input:
-                links.new(bump_node.outputs["Normal"], normal_input)
+        if not surface_only:
+            try:
+                absorption = nodes.new("ShaderNodeVolumeAbsorption")
+                absorption.location = (150, -180)
+                absorption.inputs["Color"].default_value = (0.03, 0.09, 0.11, 1.0)
+                absorption.inputs["Density"].default_value = 0.08 if preview_fast else 0.12
+                if output.inputs.get("Volume") is not None:
+                    links.new(absorption.outputs["Volume"], output.inputs["Volume"])
+            except Exception:
+                pass
+
+        if surface_only:
+            try:
+                emission = nodes.new("ShaderNodeEmission")
+                emission.location = (160, -150)
+                emission.inputs["Color"].default_value = (0.10, 0.24, 0.30, 1.0)
+                emission.inputs["Strength"].default_value = 0.35 if preview_fast else 0.28
+                add_shader = nodes.new("ShaderNodeAddShader")
+                add_shader.location = (320, -40)
+                links.new(bsdf.outputs["BSDF"], add_shader.inputs[0])
+                links.new(emission.outputs["Emission"], add_shader.inputs[1])
+                links.new(add_shader.outputs["Shader"], output.inputs["Surface"])
+            except Exception:
+                pass
+
+        noise_tex = nodes.new("ShaderNodeTexNoise")
+        noise_tex.location = (-220, -220)
+        if surface_only:
+            noise_tex.inputs["Scale"].default_value = 7.0 if preview_fast else 10.0
+        else:
+            noise_tex.inputs["Scale"].default_value = 11.0 if preview_fast else 18.0
+        noise_tex.inputs["Detail"].default_value = 3.2
+        noise_tex.inputs["Roughness"].default_value = 0.36
+        bump_node = nodes.new("ShaderNodeBump")
+        bump_node.location = (20, -200)
+        if surface_only:
+            bump_node.inputs["Strength"].default_value = 0.004 if preview_fast else 0.007
+        else:
+            bump_node.inputs["Strength"].default_value = 0.012 if preview_fast else 0.022
+        bump_node.inputs["Distance"].default_value = 0.008
+        links.new(noise_tex.outputs["Fac"], bump_node.inputs["Height"])
+        normal_input = bsdf.inputs.get("Normal")
+        if normal_input:
+            links.new(bump_node.outputs["Normal"], normal_input)
     return mat
+
+
+def _apply_water_object_settings(obj: Any, *, surface_only: bool) -> None:
+    """Disable shadow-heavy viewport behavior on live water objects."""
+    if obj is None:
+        return
+    try:
+        obj.display_type = "TEXTURED"
+    except Exception:
+        pass
+    for attr, value in (
+        ("visible_shadow", False),
+        ("is_shadow_catcher", False),
+    ):
+        if hasattr(obj, attr):
+            try:
+                setattr(obj, attr, value)
+            except Exception:
+                pass
+    cycles_visibility = getattr(obj, "cycles_visibility", None)
+    if cycles_visibility is not None and hasattr(cycles_visibility, "shadow"):
+        try:
+            cycles_visibility.shadow = False
+        except Exception:
+            pass
+    if surface_only:
+        try:
+            obj.color = (1.0, 1.0, 1.0, 1.0)
+        except Exception:
+            pass
+
+
+def _boundary_edges_from_faces(faces: list[tuple[int, ...]]) -> list[tuple[int, int]]:
+    """Return boundary edges for a manifold-ish quad/tri face list."""
+    edge_counts: dict[tuple[int, int], int] = {}
+    for face in faces:
+        if len(face) < 2:
+            continue
+        for start, end in zip(face, (*face[1:], face[0])):
+            key = (min(start, end), max(start, end))
+            edge_counts[key] = edge_counts.get(key, 0) + 1
+    return [edge for edge, count in edge_counts.items() if count == 1]
 
 
 def _build_level_water_surface_from_terrain(
@@ -3080,6 +3760,10 @@ def _build_level_water_surface_from_terrain(
     water_level: float,
     material_name: str,
     preview_fast: bool,
+    mask_center: tuple[float, float] | None = None,
+    mask_radius: float | None = None,
+    mask_aspect_y: float = 1.0,
+    surface_only: bool = False,
 ) -> dict[str, Any]:
     """Create a level water surface that follows the submerged terrain footprint."""
     terrain_mesh = getattr(terrain_obj, "data", None)
@@ -3100,10 +3784,78 @@ def _build_level_water_surface_from_terrain(
     heights = np.asarray([point[2] for point in world_points], dtype=np.float64).reshape(rows, cols)
     water_level_f = float(water_level)
     shoreline_eps = 0.02
+    bounded_mask = (
+        mask_center is not None
+        and mask_radius is not None
+        and float(mask_radius) > 0.0
+    )
+    mask_center_x = float(mask_center[0]) if bounded_mask else 0.0
+    mask_center_y = float(mask_center[1]) if bounded_mask else 0.0
+    mask_radius_f = float(mask_radius) if bounded_mask else 0.0
+    mask_aspect = max(float(mask_aspect_y), 0.25)
+    component_cells: np.ndarray | None = None
+
+    if bounded_mask:
+        allowed_cells = np.zeros((rows, cols), dtype=bool)
+        seed_row = 0
+        seed_col = 0
+        best_seed_dist = float("inf")
+        wet_cells = heights <= water_level_f + shoreline_eps
+        for row in range(rows):
+            for col in range(cols):
+                wx, wy, _wz = world_points[row * cols + col]
+                dist_to_center = math.hypot(
+                    wx - mask_center_x,
+                    (wy - mask_center_y) / mask_aspect,
+                )
+                if dist_to_center <= mask_radius_f * 1.18:
+                    allowed_cells[row, col] = True
+                    if wet_cells[row, col] and dist_to_center < best_seed_dist:
+                        seed_row = row
+                        seed_col = col
+                        best_seed_dist = dist_to_center
+
+        if best_seed_dist < float("inf"):
+            component_cells = np.zeros((rows, cols), dtype=bool)
+            queue = deque([(seed_row, seed_col)])
+            component_cells[seed_row, seed_col] = True
+            while queue:
+                row, col = queue.popleft()
+                for row_off in (-1, 0, 1):
+                    for col_off in (-1, 0, 1):
+                        if row_off == 0 and col_off == 0:
+                            continue
+                        rr = row + row_off
+                        cc = col + col_off
+                        if rr < 0 or rr >= rows or cc < 0 or cc >= cols:
+                            continue
+                        if component_cells[rr, cc]:
+                            continue
+                        if not allowed_cells[rr, cc] or not wet_cells[rr, cc]:
+                            continue
+                        component_cells[rr, cc] = True
+                        queue.append((rr, cc))
 
     kept_quads: list[tuple[int, int]] = []
     for row in range(rows - 1):
         for col in range(cols - 1):
+            quad_indices = (
+                row * cols + col,
+                row * cols + col + 1,
+                (row + 1) * cols + col,
+                (row + 1) * cols + col + 1,
+            )
+            if component_cells is not None:
+                if int(np.count_nonzero(component_cells[row:row + 2, col:col + 2])) < 2:
+                    continue
+            elif bounded_mask:
+                quad_center_x = sum(world_points[idx][0] for idx in quad_indices) / 4.0
+                quad_center_y = sum(world_points[idx][1] for idx in quad_indices) / 4.0
+                if math.hypot(
+                    quad_center_x - mask_center_x,
+                    (quad_center_y - mask_center_y) / mask_aspect,
+                ) > mask_radius_f:
+                    continue
             quad = heights[row:row + 2, col:col + 2]
             wet_count = int(np.count_nonzero(quad <= water_level_f + shoreline_eps))
             if wet_count >= 2 or float(np.mean(quad)) <= water_level_f:
@@ -3155,12 +3907,43 @@ def _build_level_water_surface_from_terrain(
     flow_layer = bm.loops.layers.float_color.new("flow_vc")
 
     uv_tile = 4.0
-    bm_verts: dict[int, Any] = {}
+    top_verts: dict[int, Any] = {}
+    bottom_verts: dict[int, Any] = {}
+    depth_samples = np.asarray(
+        [
+            max(water_level_f - world_points[index][2], 0.0)
+            for index in sorted(used_vertex_indices)
+        ],
+        dtype=np.float64,
+    )
+    max_visual_depth = 7.5 if bounded_mask else 5.0
+    if bounded_mask and mask_radius_f > 0.0:
+        max_visual_depth = max(4.8, min(mask_radius_f * 0.55, 14.0))
+    water_depth = max(
+        1.8,
+        min(
+            float(np.percentile(depth_samples, 92.0)) + 0.8 if depth_samples.size else 1.8,
+            max_visual_depth,
+        ),
+    )
     for index in sorted(used_vertex_indices):
-        wx, wy, _wz = world_points[index]
-        bm_verts[index] = bm.verts.new((wx, wy, water_level_f))
+        wx, wy, terrain_z = world_points[index]
+        local_depth = max(water_level_f - terrain_z, 0.0)
+        shore_factor = _shore_factor(index)
+        target_depth = max(
+            local_depth + 0.45,
+            water_depth * (0.28 + shore_factor * 0.72),
+            0.85,
+        )
+        bottom_z = min(water_level_f - target_depth, terrain_z - 0.22)
+        shoreline_drop = max(0.0, 0.88 - shore_factor) * min(max(water_depth * 0.035, 0.03), 0.16)
+        surface_z = water_level_f - shoreline_drop
+        top_verts[index] = bm.verts.new((wx, wy, surface_z))
+        if not surface_only:
+            bottom_verts[index] = bm.verts.new((wx, wy, bottom_z))
 
     shoreline_faces = 0
+    top_faces: list[tuple[int, int, int, int]] = []
     for row, col in kept_quads:
         quad_indices = [
             row * cols + col,
@@ -3168,8 +3951,9 @@ def _build_level_water_surface_from_terrain(
             (row + 1) * cols + col + 1,
             (row + 1) * cols + col,
         ]
+        top_faces.append(tuple(quad_indices))
         try:
-            face = bm.faces.new([bm_verts[idx] for idx in quad_indices])
+            face = bm.faces.new([top_verts[idx] for idx in quad_indices])
         except ValueError:
             continue
         shore_factors = [_shore_factor(idx) for idx in quad_indices]
@@ -3177,9 +3961,45 @@ def _build_level_water_surface_from_terrain(
             shoreline_faces += 1
         for loop, idx, shore_factor in zip(face.loops, quad_indices, shore_factors):
             wx, wy, _wz = world_points[idx]
-            foam = 1.0 if shore_factor < 0.999 else 0.0
-            loop[flow_layer] = (0.08 if preview_fast else 0.05, 0.5, 0.5, foam)
+            shallow_fac = 1.0 - shore_factor
+            foam = max(0.0, min(1.0, (shallow_fac - 0.24) / 0.28))
+            loop[flow_layer] = (shallow_fac, 0.5, 0.5, foam)
             loop[uv_layer].uv = (wx / uv_tile, wy / uv_tile)
+
+    if not surface_only:
+        for quad_indices in top_faces:
+            try:
+                face = bm.faces.new([
+                    bottom_verts[quad_indices[0]],
+                    bottom_verts[quad_indices[3]],
+                    bottom_verts[quad_indices[2]],
+                    bottom_verts[quad_indices[1]],
+                ])
+            except ValueError:
+                continue
+            for loop, idx in zip(face.loops, (quad_indices[0], quad_indices[3], quad_indices[2], quad_indices[1])):
+                wx, wy, _wz = world_points[idx]
+                loop[flow_layer] = (0.0, 0.5, 0.5, 0.0)
+                loop[uv_layer].uv = (wx / uv_tile, wy / uv_tile)
+
+        for edge_start, edge_end in _boundary_edges_from_faces(top_faces):
+            try:
+                face = bm.faces.new([
+                    top_verts[edge_start],
+                    top_verts[edge_end],
+                    bottom_verts[edge_end],
+                    bottom_verts[edge_start],
+                ])
+            except ValueError:
+                continue
+            for loop, idx, depth_bias in zip(
+                face.loops,
+                (edge_start, edge_end, edge_end, edge_start),
+                (0.55, 0.55, 0.10, 0.10),
+            ):
+                wx, wy, wz = world_points[idx]
+                loop[flow_layer] = (0.0, 0.5, 0.5, 0.0)
+                loop[uv_layer].uv = (wx / uv_tile, (wy / uv_tile) + depth_bias + max(water_level_f - wz, 0.0) * 0.08)
 
     bm.to_mesh(mesh)
     total_tris = sum(len(poly.vertices) - 2 for poly in mesh.polygons)
@@ -3190,8 +4010,20 @@ def _build_level_water_surface_from_terrain(
 
     obj = bpy.data.objects.new(name, mesh)
     obj.location = (0.0, 0.0, 0.0)
+    try:
+        obj["vb_water_depth"] = float(water_depth)
+        obj["vb_water_surface_only"] = bool(surface_only)
+    except Exception:
+        pass
     bpy.context.collection.objects.link(obj)
-    mesh.materials.append(_ensure_water_material(material_name, preview_fast=preview_fast))
+    _apply_water_object_settings(obj, surface_only=surface_only)
+    mesh.materials.append(
+        _ensure_water_material(
+            material_name,
+            preview_fast=preview_fast,
+            surface_only=surface_only,
+        )
+    )
 
     return {
         "name": obj.name,
@@ -3206,6 +4038,8 @@ def _build_level_water_surface_from_terrain(
         "preview_fast": preview_fast,
         "surface_mode": "terrain_mask",
         "shoreline_face_count": shoreline_faces,
+        "water_depth": water_depth,
+        "has_volume_geometry": not surface_only,
     }
 
 
@@ -3247,10 +4081,19 @@ def handle_create_water(params: dict) -> dict:
     width_raw = params.get("width")
     width = float(width_raw) if width_raw is not None else 8.0
     fallback_depth = float(params.get("depth", 100.0))
-    material_name = params.get("material_name", "Water_Material")
+    material_name = params.get("material_name")
     path_points_raw = params.get("path_points")
-    cross_sections = max(8, min(16, int(params.get("cross_sections", 12))))
+    cross_sections = max(10, min(18, int(params.get("cross_sections", 14))))
     preview_fast = bool(params.get("preview_fast", True))
+    surface_only = bool(params.get("surface_only", False))
+    if not material_name:
+        material_name = "Water_Surface_Material" if surface_only else "Water_Material"
+    mask_center_raw = params.get("mask_center")
+    mask_center = None
+    if isinstance(mask_center_raw, (list, tuple)) and len(mask_center_raw) >= 2:
+        mask_center = (float(mask_center_raw[0]), float(mask_center_raw[1]))
+    mask_radius = params.get("mask_radius")
+    mask_aspect_y = float(params.get("mask_aspect_y", 1.0))
 
     # If terrain specified, use its Z for water level snapping
     terrain_origin_x = 0.0
@@ -3272,6 +4115,10 @@ def handle_create_water(params: dict) -> dict:
                     water_level=float(water_level),
                     material_name=material_name,
                     preview_fast=preview_fast,
+                    mask_center=mask_center,
+                    mask_radius=float(mask_radius) if mask_radius is not None else None,
+                    mask_aspect_y=mask_aspect_y,
+                    surface_only=surface_only,
                 )
             except ValueError as exc:
                 logger.warning("Falling back to rectangular water surface: %s", exc)
@@ -3286,6 +4133,14 @@ def handle_create_water(params: dict) -> dict:
         fallback_depth=fallback_depth,
         water_level=water_level,
     )
+    preserve_path_shape = bool(params.get("preserve_path_shape", False))
+    if path_points_raw is not None and len(path) >= 3 and not preserve_path_shape:
+        path = _smooth_river_path_points(
+            path,
+            smoothing_passes=4,
+            min_spacing_world=max(width * 0.22, 0.75),
+            enforce_monotonic_z=True,
+        )
     if preview_fast and len(path) > 6:
         cross_sections = min(cross_sections, 3)
 
@@ -3334,12 +4189,11 @@ def handle_create_water(params: dict) -> dict:
         )
         cumulative_length.append(cumulative_length[-1] + seg_len)
 
-    # Ring of vertices per path point
-    rings: list[list] = []
+    channel_depth = max(width * 0.32, 2.2)
+    flow_speeds: list[float] = []
+    flow_dirs: list[tuple[float, float]] = []
     for pi, pt in enumerate(path):
         px, py, pz = pt
-
-        # Tangent direction
         if pi == 0:
             nxt = path[1]
             tx = nxt[0] - px
@@ -3353,10 +4207,32 @@ def handle_create_water(params: dict) -> dict:
             nxt = path[pi + 1]
             tx = nxt[0] - prv[0]
             ty = nxt[1] - prv[1]
-
         tlen = math.sqrt(tx * tx + ty * ty) or 1.0
         tx /= tlen
         ty /= tlen
+        flow_dirs.append((tx, ty))
+        if pi > 0:
+            prev_pt = path[pi - 1]
+            dz = abs(pz - prev_pt[2])
+            dx_dist = math.sqrt((px - prev_pt[0]) ** 2 + (py - prev_pt[1]) ** 2)
+            slope = dz / max(dx_dist, 0.1)
+            flow_speeds.append(min(1.0, 0.24 + slope * 2.4))
+        else:
+            flow_speeds.append(0.32)
+    if len(flow_speeds) >= 3:
+        smoothed_flow_speeds: list[float] = []
+        for index, speed in enumerate(flow_speeds):
+            prev_speed = flow_speeds[index - 1] if index > 0 else speed
+            next_speed = flow_speeds[index + 1] if index < len(flow_speeds) - 1 else speed
+            smoothed_flow_speeds.append(prev_speed * 0.22 + speed * 0.56 + next_speed * 0.22)
+        flow_speeds = smoothed_flow_speeds
+
+    # Ring of vertices per path point
+    rings: list[list] = []
+    for pi, pt in enumerate(path):
+        px, py, pz = pt
+
+        tx, ty = flow_dirs[pi]
 
         # Perpendicular (cross-section direction)
         perp_x = -ty
@@ -3366,15 +4242,7 @@ def handle_create_water(params: dict) -> dict:
         flow_dir_x = (tx + 1.0) * 0.5
         flow_dir_z = (ty + 1.0) * 0.5
 
-        # Flow speed: terrain-aware based on channel slope
-        if pi > 0:
-            prev_pt = path[pi - 1]
-            dz = abs(pz - prev_pt[2])
-            dx_dist = math.sqrt((px - prev_pt[0]) ** 2 + (py - prev_pt[1]) ** 2)
-            slope = dz / max(dx_dist, 0.1)
-            flow_speed = min(1.0, 0.2 + slope * 3.0)
-        else:
-            flow_speed = 0.3
+        flow_speed = flow_speeds[pi]
 
         # v coordinate for this ring (along flow direction)
         ring_v = cumulative_length[pi] / UV_TILE
@@ -3385,16 +4253,18 @@ def handle_create_water(params: dict) -> dict:
             offset = (t - 0.5) * 2.0  # -1 to +1
             vx = px + perp_x * offset * half_w
             vy = py + perp_y * offset * half_w
-            vz = pz
-
             # Shore depth proxy: 0 at edges, 1 at center
             shore_t = 1.0 - abs(offset)  # 0.0 at shore, 1.0 at centre
+            bank_drop = (1.0 - shore_t) ** 1.55 * min(max(channel_depth * 0.065, 0.05), 0.24)
+            vz = pz - bank_drop
+            bottom_z = vz - max(channel_depth * (0.18 + shore_t * 0.82), 0.24)
 
             # u coordinate across cross-section [0..1]
             ring_u = t
 
-            v = bm.verts.new((vx, vy, vz))
-            ring_verts.append((v, shore_t, flow_speed, flow_dir_x, flow_dir_z, ring_u, ring_v))
+            top_vert = bm.verts.new((vx, vy, vz))
+            bottom_vert = None if surface_only else bm.verts.new((vx, vy, bottom_z))
+            ring_verts.append((top_vert, bottom_vert, shore_t, flow_speed, flow_dir_x, flow_dir_z, ring_u, ring_v))
         rings.append(ring_verts)
 
     # Connect rings into quads
@@ -3402,10 +4272,10 @@ def handle_create_water(params: dict) -> dict:
         ring_a = rings[ri]
         ring_b = rings[ri + 1]
         for ci in range(cross_sections):
-            va, sha, spa, fdxa, fdza, ua, va_uv = ring_a[ci]
-            vb, shb, spb, fdxb, fdzb, ub, vb_uv = ring_a[ci + 1]
-            vc, shc, spc, fdxc, fdzc, uc, vc_uv = ring_b[ci + 1]
-            vd, shd, spd, fdxd, fdzd, ud, vd_uv = ring_b[ci]
+            va, ba, sha, spa, fdxa, fdza, ua, va_uv = ring_a[ci]
+            vb, bb, shb, spb, fdxb, fdzb, ub, vb_uv = ring_a[ci + 1]
+            vc, bc, shc, spc, fdxc, fdzc, uc, vc_uv = ring_b[ci + 1]
+            vd, bd, shd, spd, fdxd, fdzd, ud, vd_uv = ring_b[ci]
             try:
                 face = bm.faces.new([va, vb, vc, vd])
                 # Paint flow vertex colors AND UVs per loop
@@ -3416,12 +4286,83 @@ def handle_create_water(params: dict) -> dict:
                     (shd, spd, fdxd, fdzd, ud, vd_uv),
                 ]
                 for loop, (sh, sp, fdx, fdz, uv_u, uv_v) in zip(face.loops, loop_data):
-                    # Foam: shallow shore (depth<0.2 proxy = shore_t<0.2) or fast flow
-                    foam = 1.0 if (sh < 0.2 or sp > 0.8) else 0.0
-                    loop[flow_layer] = (sp, fdx, fdz, foam)
+                    shallow_fac = 1.0 - sh
+                    turbulence = max(0.0, sp - 0.97) * 0.35
+                    foam = max(0.0, min(1.0, (shallow_fac - 0.36) * 1.95 + turbulence))
+                    loop[flow_layer] = (shallow_fac, fdx, fdz, foam)
                     loop[uv_layer].uv = (uv_u, uv_v)
             except ValueError:
                 pass
+            try:
+                if not surface_only and None not in (ba, bd, bc, bb):
+                    face = bm.faces.new([ba, bd, bc, bb])
+                    for loop, (fdx, fdz, uv_u, uv_v) in zip(
+                        face.loops,
+                        [
+                            (fdxa, fdza, ua, va_uv + 0.65),
+                            (fdxd, fdzd, ud, vd_uv + 0.65),
+                            (fdxc, fdzc, uc, vc_uv + 0.65),
+                            (fdxb, fdzb, ub, vb_uv + 0.65),
+                        ],
+                    ):
+                        loop[flow_layer] = (0.0, fdx, fdz, 0.0)
+                        loop[uv_layer].uv = (uv_u, uv_v)
+            except ValueError:
+                pass
+
+        if not surface_only:
+            left_a_top, left_a_bottom, _sha0, spa0, fdxa0, fdza0, ua0, va0_uv = ring_a[0]
+            left_b_top, left_b_bottom, _shd0, spd0, fdxd0, fdzd0, ud0, vd0_uv = ring_b[0]
+            right_a_top, right_a_bottom, _shb1, spb1, fdxb1, fdzb1, ub1, vb1_uv = ring_a[-1]
+            right_b_top, right_b_bottom, _shc1, spc1, fdxc1, fdzc1, uc1, vc1_uv = ring_b[-1]
+            for face_verts, loop_data in (
+                (
+                    [left_a_top, left_b_top, left_b_bottom, left_a_bottom],
+                    [
+                        (spa0, fdxa0, fdza0, ua0, va0_uv),
+                        (spd0, fdxd0, fdzd0, ud0, vd0_uv),
+                        (0.0, fdxd0, fdzd0, ud0, vd0_uv + 0.55),
+                        (0.0, fdxa0, fdza0, ua0, va0_uv + 0.55),
+                    ],
+                ),
+                (
+                    [right_a_top, right_a_bottom, right_b_bottom, right_b_top],
+                    [
+                        (spb1, fdxb1, fdzb1, ub1, vb1_uv),
+                        (0.0, fdxb1, fdzb1, ub1, vb1_uv + 0.55),
+                        (0.0, fdxc1, fdzc1, uc1, vc1_uv + 0.55),
+                        (spc1, fdxc1, fdzc1, uc1, vc1_uv),
+                    ],
+                ),
+            ):
+                try:
+                    face = bm.faces.new(face_verts)
+                except ValueError:
+                    continue
+                for loop, (sp, fdx, fdz, uv_u, uv_v) in zip(face.loops, loop_data):
+                    loop[flow_layer] = (sp, fdx, fdz, 0.0)
+                    loop[uv_layer].uv = (uv_u, uv_v)
+
+    if rings and not surface_only:
+        start_ring = rings[0]
+        end_ring = rings[-1]
+        for ring, v_offset in ((start_ring, -0.35), (end_ring, 0.35)):
+            face_verts = [item[0] for item in ring] + [item[1] for item in reversed(ring)]
+            loop_data = []
+            for item in ring:
+                _top, _bottom, _shore_t, sp, fdx, fdz, u, v = item
+                loop_data.append((sp, fdx, fdz, u, v))
+            for item in reversed(ring):
+                _top, _bottom, _shore_t, _sp, fdx, fdz, u, v = item
+                loop_data.append((0.0, fdx, fdz, u, v + v_offset))
+            try:
+                face = bm.faces.new(face_verts)
+            except ValueError:
+                face = None
+            if face is not None:
+                for loop, (sp, fdx, fdz, uv_u, uv_v) in zip(face.loops, loop_data):
+                    loop[flow_layer] = (sp, fdx, fdz, 0.0)
+                    loop[uv_layer].uv = (uv_u, uv_v)
 
     bm.to_mesh(mesh)
     _tri_count = sum(1 for p in mesh.polygons if len(p.vertices) == 3)
@@ -3436,12 +4377,24 @@ def handle_create_water(params: dict) -> dict:
     # The spline vertices already encode world-space XY and water Z.
     # Keep the object origin at world zero so the surface is not lifted twice.
     obj.location = (0.0, 0.0, 0.0)
+    try:
+        obj["vb_water_depth"] = float(channel_depth)
+        obj["vb_water_surface_only"] = bool(surface_only)
+    except Exception:
+        pass
     bpy.context.collection.objects.link(obj)
+    _apply_water_object_settings(obj, surface_only=surface_only)
 
     # -----------------------------------------------------------------------
     # AAA water material: sRGB(40,60,50), roughness 0.05, alpha 0.6, IOR 1.33
     # -----------------------------------------------------------------------
-    mesh.materials.append(_ensure_water_material(material_name, preview_fast=preview_fast))
+    mesh.materials.append(
+        _ensure_water_material(
+            material_name,
+            preview_fast=preview_fast,
+            surface_only=surface_only,
+        )
+    )
 
     area = total_length * width if total_length > 0 else width * fallback_depth
 
@@ -3457,6 +4410,162 @@ def handle_create_water(params: dict) -> dict:
         "path_point_count": len(path),
         "preview_fast": preview_fast,
         "surface_mode": "spline",
+        "water_depth": channel_depth,
+        "has_volume_geometry": not surface_only,
+    }
+
+
+def handle_carve_water_basin(params: dict) -> dict:
+    """Carve a shoreline-ready basin into an existing terrain mesh."""
+    terrain_name = params.get("terrain_name")
+    if not terrain_name:
+        raise ValueError("'terrain_name' is required")
+
+    center = params.get("center")
+    if not isinstance(center, (list, tuple)) or len(center) < 2:
+        raise ValueError("'center' must be a 2-item [x, y] sequence")
+
+    water_level = float(params.get("water_level", 0.0))
+    radius = max(float(params.get("radius", 18.0)), 2.0)
+    depth = max(float(params.get("depth", 3.0)), 0.1)
+    shore_width = max(float(params.get("shore_width", radius * 0.45)), 1.0)
+    aspect_y = max(float(params.get("aspect_y", 1.25)), 0.5)
+    containment_rim = bool(params.get("containment_rim", True))
+    containment_rim_height = max(float(params.get("containment_rim_height", max(depth * 0.16, 0.45))), 0.0)
+
+    obj = bpy.data.objects.get(terrain_name)
+    if obj is None:
+        raise ValueError(f"Object not found: {terrain_name}")
+
+    mesh = obj.data
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+    bm.verts.ensure_lookup_table()
+
+    rows, cols = _detect_grid_dims(bm)
+    heights = np.array([v.co.z for v in bm.verts], dtype=np.float64).reshape(rows, cols)
+    terrain_width = obj.dimensions.x if obj.dimensions.x > 0 else 100.0
+    terrain_height = obj.dimensions.y if obj.dimensions.y > 0 else terrain_width
+    cx = float(center[0])
+    cy = float(center[1])
+
+    result = heights.copy()
+    cells_modified = 0
+    beach_rim = max(depth * 0.08, 0.14)
+    outer_radius = radius + shore_width
+    shoreline_radius = max(radius * 0.94, 1.0)
+
+    for row in range(rows):
+        for col in range(cols):
+            wx, wy = _terrain_grid_to_world_xy(
+                row,
+                col,
+                rows=rows,
+                cols=cols,
+                terrain_width=terrain_width,
+                terrain_height=terrain_height,
+                terrain_origin_x=obj.location.x,
+                terrain_origin_y=obj.location.y,
+            )
+            dx = wx - cx
+            dy = (wy - cy) / aspect_y
+            angle = math.atan2(dy, dx if abs(dx) > 1e-9 else 1e-9)
+            shoreline_warp = 1.0 + (
+                0.12 * math.sin(angle * 2.6 + cx * 0.031)
+                + 0.07 * math.sin(angle * 5.4 + cy * 0.043)
+            )
+            shoreline_warp = max(0.72, min(1.28, shoreline_warp))
+            dist = math.hypot(dx, dy) / shoreline_warp
+            if dist > outer_radius:
+                continue
+
+            current = float(result[row, col])
+            if dist <= radius:
+                inner_t = dist / max(radius, 1e-6)
+                basin_curve = 1.0 - _smootherstep(inner_t)
+                target_depth = depth * (0.14 + 0.86 * (basin_curve ** 0.68))
+                if dist >= shoreline_radius:
+                    shoreline_t = (dist - shoreline_radius) / max(radius - shoreline_radius, 1e-6)
+                    target_depth *= 1.0 - 0.72 * _smootherstep(shoreline_t)
+                target = water_level - max(target_depth, max(depth * 0.08, 0.12))
+                carve_weight = 0.96 - 0.44 * _smootherstep(inner_t)
+            else:
+                shoulder_t = (dist - radius) / max(shore_width, 1e-6)
+                target = water_level + beach_rim * (0.12 + 0.88 * _smootherstep(shoulder_t))
+                carve_weight = 0.10 + 0.08 * (1.0 - _smootherstep(shoulder_t))
+
+            if dist <= radius:
+                target_lowered = min(current, target)
+                new_height = current + (target_lowered - current) * carve_weight
+            else:
+                new_height = current
+                if current < target:
+                    new_height = current + (target - current) * carve_weight
+            if containment_rim and dist > radius + shore_width * 0.42:
+                rim_t = (dist - (radius + shore_width * 0.42)) / max(outer_radius - (radius + shore_width * 0.42), 1e-6)
+                rim_raise_weight = 0.08 + 0.06 * _smootherstep(rim_t)
+                rim_target = water_level + containment_rim_height * (0.18 + 0.52 * _smootherstep(rim_t))
+                if current < rim_target:
+                    raised_height = current + (rim_target - current) * rim_raise_weight
+                    new_height = max(new_height, raised_height)
+            if new_height < current - 1e-6:
+                result[row, col] = new_height
+                cells_modified += 1
+            elif new_height > current + 1e-6:
+                result[row, col] = new_height
+
+    padded = np.pad(result, 1, mode="edge")
+    neighborhood_mean = (
+        padded[0:-2, 0:-2]
+        + padded[0:-2, 1:-1]
+        + padded[0:-2, 2:]
+        + padded[1:-1, 0:-2]
+        + padded[1:-1, 1:-1]
+        + padded[1:-1, 2:]
+        + padded[2:, 0:-2]
+        + padded[2:, 1:-1]
+        + padded[2:, 2:]
+    ) / 9.0
+    for row in range(rows):
+        for col in range(cols):
+            wx, wy = _terrain_grid_to_world_xy(
+                row,
+                col,
+                rows=rows,
+                cols=cols,
+                terrain_width=terrain_width,
+                terrain_height=terrain_height,
+                terrain_origin_x=obj.location.x,
+                terrain_origin_y=obj.location.y,
+            )
+            dx = wx - cx
+            dy = (wy - cy) / aspect_y
+            dist = math.hypot(dx, dy)
+            if dist > outer_radius or dist <= radius * 0.14:
+                continue
+            smooth_t = (dist - radius * 0.14) / max(outer_radius - radius * 0.14, 1e-6)
+            smooth_weight = 0.12 + 0.34 * _smootherstep(smooth_t)
+            result[row, col] = (
+                result[row, col] * (1.0 - smooth_weight)
+                + neighborhood_mean[row, col] * smooth_weight
+            )
+
+    flat = result.flatten()
+    for idx, vert in enumerate(bm.verts):
+        vert.co.z = float(flat[idx])
+
+    bm.to_mesh(mesh)
+    bm.free()
+    if hasattr(mesh, "update"):
+        mesh.update()
+
+    return {
+        "name": terrain_name,
+        "water_level": water_level,
+        "radius": radius,
+        "depth": depth,
+        "cells_modified": cells_modified,
+        "min_height": float(result.min()) if result.size else water_level,
     }
 
 

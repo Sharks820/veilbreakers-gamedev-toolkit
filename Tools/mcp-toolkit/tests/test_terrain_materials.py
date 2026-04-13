@@ -32,6 +32,7 @@ from blender_addon.handlers.terrain_materials import (
     VALID_LAYER_NAMES,
     auto_assign_terrain_layers,
     compute_biome_transition,
+    compute_world_splatmap_weights,
 )
 
 
@@ -250,6 +251,28 @@ class TestAutoAssignHeight:
     def test_special_preserves_sum_1(self):
         for r, g, b, a in auto_assign_terrain_layers(HEIGHT_EXTREME_VERTS, HEIGHT_EXTREME_NORMALS, HEIGHT_EXTREME_FACES):
             assert abs(r + g + b + a - 1.0) < 0.01
+
+    def test_mountain_pass_disables_high_altitude_special_banding(self):
+        result = auto_assign_terrain_layers(
+            HEIGHT_EXTREME_VERTS,
+            HEIGHT_EXTREME_NORMALS,
+            HEIGHT_EXTREME_FACES,
+            biome_name="mountain_pass_summer",
+        )
+        for _, _, _, a in result[4:8]:
+            assert a == 0.0
+
+    def test_mountain_pass_world_splatmap_keeps_peaks_out_of_special_channel(self):
+        hmap = [
+            [0.0, 0.0, 0.0],
+            [40.0, 80.0, 100.0],
+            [60.0, 90.0, 100.0],
+        ]
+        weights = compute_world_splatmap_weights(
+            hmap,
+            biome_name="mountain_pass_summer",
+        )
+        assert float(weights[2, 2, 3]) == 0.0
 
 
 # ===========================================================================

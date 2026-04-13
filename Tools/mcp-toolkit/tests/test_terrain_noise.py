@@ -175,6 +175,26 @@ class TestGenerateHeightmap:
         assert hmap.min() >= 0.0
         assert hmap.max() <= 1.0
 
+    def test_mountains_normalize_false_preserves_signed_relief(self):
+        """normalize=False should preserve negative mountain relief."""
+        from blender_addon.handlers._terrain_noise import generate_heightmap
+
+        hmap = generate_heightmap(
+            64, 64, seed=42, terrain_type="mountains", normalize=False
+        )
+        assert hmap.min() < 0.0
+        assert hmap.max() > 0.0
+
+    def test_cliffs_normalize_false_preserves_signed_relief(self):
+        """normalize=False should preserve negative cliff relief."""
+        from blender_addon.handlers._terrain_noise import generate_heightmap
+
+        hmap = generate_heightmap(
+            64, 64, seed=42, terrain_type="cliffs", normalize=False
+        )
+        assert hmap.min() < 0.0
+        assert hmap.max() > 0.0
+
 
 # ---------------------------------------------------------------------------
 # Terrain presets tests
@@ -184,17 +204,28 @@ class TestGenerateHeightmap:
 class TestTerrainPresets:
     """Test TERRAIN_PRESETS configuration dict."""
 
-    def test_has_eight_terrain_types(self):
-        """TERRAIN_PRESETS has exactly 8 terrain types."""
+    def test_has_ten_terrain_types(self):
+        """TERRAIN_PRESETS has exactly 10 terrain types."""
         from blender_addon.handlers._terrain_noise import TERRAIN_PRESETS
 
-        assert len(TERRAIN_PRESETS) == 8
+        assert len(TERRAIN_PRESETS) == 10
 
     def test_required_terrain_types_present(self):
-        """All 8 required terrain types are present."""
+        """All required terrain types are present."""
         from blender_addon.handlers._terrain_noise import TERRAIN_PRESETS
 
-        required = {"mountains", "hills", "plains", "volcanic", "canyon", "cliffs", "flat", "chaotic"}
+        required = {
+            "mountains",
+            "hills",
+            "plains",
+            "volcanic",
+            "canyon",
+            "cliffs",
+            "flat",
+            "coastal",
+            "swamp",
+            "chaotic",
+        }
         assert required == set(TERRAIN_PRESETS.keys())
 
     def test_each_preset_has_octaves(self):

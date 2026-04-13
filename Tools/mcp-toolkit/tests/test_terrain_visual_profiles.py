@@ -1,6 +1,4 @@
 from __future__ import annotations
-
-import json
 from pathlib import Path
 
 import pytest
@@ -114,6 +112,27 @@ def test_aaa_verify_map_rejects_unknown_profile(tmp_path):
     assert result["failed_angles"] == [0]
     assert result["per_angle"][0]["validation_profile"] == "unknown_profile"
     assert any("Unknown validation_profile" in issue for issue in result["per_angle"][0]["issues"])
+
+
+def test_derive_terrain_validation_profiles_includes_river_and_road():
+    profiles = blender_server._derive_terrain_validation_profiles(
+        map_spec={
+            "terrain": {"preset": "mountains"},
+            "water": {
+                "rivers": [{"source": [0, 0], "destination": [10, 10], "width": 5}],
+            },
+            "roads": [{"waypoints": [[0, 0], [10, 10]], "width": 3}],
+            "locations": [],
+        },
+        terrain_result={"cliff_overlays": 2},
+        object_names=["RiverTown_Road", "RiverTown_River_0"],
+        location_results=[],
+    )
+
+    assert "terrain_readability" in profiles
+    assert "terrain_cliff" in profiles
+    assert "terrain_river" in profiles
+    assert "terrain_road" in profiles
 
 
 @pytest.mark.asyncio

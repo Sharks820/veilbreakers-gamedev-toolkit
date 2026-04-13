@@ -1,4 +1,5 @@
 import json
+import math
 
 import pytest
 from PIL import Image
@@ -529,16 +530,26 @@ async def test_compose_map_creates_river_water_mesh_from_carve_result(monkeypatc
     assert create_water_calls
     assert create_water_calls[0]["name"] == "RiverMap_River_0"
     assert create_water_calls[0]["path_points"][0] == [0.0, -20.0, 1.5]
+    assert create_water_calls[0]["preserve_path_shape"] is True
 
 
 
 @pytest.mark.asyncio
-async def test_compose_map_threads_cave_candidates_into_terrain_and_creates_entrance(monkeypatch):
+async def test_compose_map_threads_cave_candidates_into_terrain_and_returns_terrain_carved_entrance(monkeypatch):
     commands: list[tuple[str, dict]] = []
 
     async def _handler(command, params):
         commands.append((command, dict(params)))
-        if command == "clear_scene":
+        if command in {
+            "clear_scene",
+            "terrain_spline_deform",
+            "terrain_flatten_zone",
+            "material_create_procedural",
+            "modify_object",
+            "env_paint_terrain",
+            "terrain_create_biome_material",
+            "setup_dark_fantasy_lighting",
+        }:
             return {"status": "success"}
         if command == "env_generate_terrain":
             return {
@@ -547,8 +558,6 @@ async def test_compose_map_threads_cave_candidates_into_terrain_and_creates_entr
                 "cliff_overlays": 1,
                 "hero_cliff_overlays": 0,
             }
-        if command == "env_create_cave_entrance":
-            return {"status": "success", "name": params["name"]}
         if command == "world_generate_cave":
             return {"status": "success", "name": params["name"]}
         if command == "auto_frame_camera":
@@ -571,8 +580,8 @@ async def test_compose_map_threads_cave_candidates_into_terrain_and_creates_entr
     async def _fake_position(*args, **kwargs):
         return None
 
-    async def _fake_sample_height(*args, **kwargs):
-        return 6.5
+    async def _fake_sample_height(_blender, _terrain_name, x, y):
+        return 6.0 + 0.12 * float(x)
 
     monkeypatch.setattr(
         blender_server,
@@ -607,14 +616,346 @@ async def test_compose_map_threads_cave_candidates_into_terrain_and_creates_entr
     terrain_calls = [params for command, params in commands if command == "env_generate_terrain"]
     entrance_calls = [params for command, params in commands if command == "env_create_cave_entrance"]
     chamber_calls = [params for command, params in commands if command == "world_generate_cave"]
+    cave_results = [loc for loc in parsed["locations"] if loc.get("type") == "cave"]
 
     assert parsed["status"] == "review_required"
     assert terrain_calls
     assert terrain_calls[0]["scene_read"]["cave_candidates"]
-    assert entrance_calls
-    assert entrance_calls[0]["name"] == "TreasureCave_Entrance"
+    assert not entrance_calls
     assert chamber_calls
     assert chamber_calls[0]["name"] == "TreasureCave_Chamber"
+    assert cave_results
+    assert cave_results[0]["result"]["entrance"]["surface_mode"] == "terrain_carved"
+    assert cave_results[0]["supporting_objects"] == ["TreasureCave_Chamber"]
+
+
+@pytest.mark.asyncio
+async def test_compose_map_biome_paints_before_low_profile_road_and_keeps_trail_terrain_only(monkeypatch):
+    commands: list[tuple[str, dict]] = []
+
+    async def _handler(command, params):
+        commands.append((command, dict(params)))
+        if command in {
+            "clear_scene",
+            "env_paint_terrain",
+            "terrain_create_biome_material",
+            "setup_dark_fantasy_lighting",
+            "auto_frame_camera",
+        }:
+            return {"status": "success"}
+        if command == "env_generate_terrain":
+            return {
+                "status": "success",
+                "name": "RoadBiomeMap_Terrain",
+                "cliff_overlays": 0,
+                "hero_cliff_overlays": 0,
+            }
+        if command == "env_generate_road":
+            return {
+                "status": "success",
+                "name": params["terrain_name"],
+                "surface_mode": "terrain_only",
+                "road_mesh_name": None,
+            }
+        raise AssertionError(f"unexpected command: {command}")
+
+    async def _fake_gate(*args, **kwargs):
+        return {
+            "status": "success",
+            "passed": True,
+            "required_profiles": ["terrain_readability", "terrain_road"],
+            "failed_profiles": [],
+            "issues": [],
+            "capture_errors": [],
+            "screenshots": ["front.png"],
+            "angle_labels": ["front"],
+            "profile_results": [],
+        }
+
+    monkeypatch.setattr(
+        blender_server,
+        "get_blender_connection",
+        lambda: _DummyBlender(_handler),
+    )
+    monkeypatch.setattr(blender_server, "_run_terrain_visual_gate", _fake_gate, raising=False)
+
+    raw = await blender_server.asset_pipeline(
+        action="compose_map",
+        map_spec={
+            "name": "RoadBiomeMap",
+            "seed": 44,
+            "terrain": {
+                "preset": "swamp",
+                "size": 140.0,
+                "resolution": 64,
+                "height_scale": 12.0,
+            },
+            "biome": "thornwood_forest",
+            "roads": [{"waypoints": [[-40, -20], [0, 0], [36, 18]], "width": 2.0, "surface": "trail"}],
+            "props": False,
+        },
+        capture_viewport=False,
+    )
+    parsed = json.loads(raw[0])
+
+    biome_index = next(
+        idx for idx, (command, _) in enumerate(commands)
+        if command == "terrain_create_biome_material"
+    )
+    road_index = next(
+        idx for idx, (command, _) in enumerate(commands)
+        if command == "env_generate_road"
+    )
+    road_call = next(params for command, params in commands if command == "env_generate_road")
+
+    assert parsed["status"] == "review_required"
+    assert biome_index < road_index
+    assert road_call["surface"] == "trail"
+    assert road_call["force_mesh_overlay"] is False
+
+
+@pytest.mark.asyncio
+async def test_compose_map_shapes_hero_cliff_before_water_and_buries_cave_chamber(monkeypatch):
+    commands: list[tuple[str, dict]] = []
+
+    async def _handler(command, params):
+        commands.append((command, dict(params)))
+        if command in {
+            "clear_scene",
+            "env_generate_terrain",
+            "terrain_flatten_zone",
+            "terrain_spline_deform",
+            "env_carve_river",
+            "env_create_water",
+            "env_generate_road",
+            "env_create_cave_entrance",
+            "world_generate_cave",
+            "material_create_procedural",
+            "modify_object",
+            "auto_frame_camera",
+        }:
+            if command == "env_generate_terrain":
+                return {
+                    "status": "success",
+                    "name": "HeroMap_Terrain",
+                    "cliff_overlays": 2,
+                    "hero_cliff_overlays": 1,
+                }
+            if command == "env_carve_river":
+                return {
+                    "status": "success",
+                    "name": "HeroMap_Terrain",
+                    "path_length": 4,
+                    "path_points": [
+                        [10.0, -14.0, 11.0],
+                        [18.0, -6.0, 10.4],
+                        [28.0, 2.0, 9.8],
+                        [40.0, 10.0, 9.0],
+                    ],
+                }
+            if command == "env_create_water":
+                return {"status": "success", "name": params["name"]}
+            if command == "env_generate_road":
+                return {"status": "success", "name": "HeroMap_Road_0"}
+            if command == "env_create_cave_entrance":
+                return {"status": "success", "name": params["name"]}
+            if command == "world_generate_cave":
+                return {"status": "success", "name": params["name"]}
+            return {"status": "success"}
+        raise AssertionError(f"unexpected command: {command}")
+
+    async def _fake_gate(*args, **kwargs):
+        return {
+            "status": "success",
+            "passed": True,
+            "required_profiles": ["terrain_readability", "terrain_cliff", "terrain_river"],
+            "failed_profiles": [],
+            "issues": [],
+            "capture_errors": [],
+            "screenshots": ["front.png"],
+            "angle_labels": ["front"],
+            "profile_results": [],
+        }
+
+    def _fake_plan(_spec):
+        return [
+            {
+                "name": "TreasureCave",
+                "type": "cave",
+                "anchor": (20.0, 10.0),
+                "radius": 18.0,
+                "source": {"type": "cave", "name": "TreasureCave", "grid_size": 28},
+            }
+        ]
+
+    async def _fake_sample_height(_blender, _terrain_name, x, y):
+        return 10.0 + 0.2 * float(x)
+
+    monkeypatch.setattr(
+        blender_server,
+        "get_blender_connection",
+        lambda: _DummyBlender(_handler),
+    )
+    monkeypatch.setattr(blender_server, "_run_terrain_visual_gate", _fake_gate, raising=False)
+    monkeypatch.setattr(blender_server, "_plan_map_location_anchors", _fake_plan, raising=False)
+    monkeypatch.setattr(blender_server, "_sample_terrain_height", _fake_sample_height, raising=False)
+
+    raw = await blender_server.asset_pipeline(
+        action="compose_map",
+        map_spec={
+            "name": "HeroMap",
+            "seed": 21,
+            "terrain": {
+                "preset": "mountains",
+                "size": 160.0,
+                "resolution": 64,
+                "height_scale": 18.0,
+            },
+            "water": {
+                "rivers": [{"source": [10, 10], "destination": [150, 140], "width": 6}],
+                "water_level": 1.0,
+            },
+            "roads": [{"waypoints": [[-60, -42], [-20, -12], [12, 4]], "width": 3}],
+            "locations": [
+                {"type": "cave", "name": "TreasureCave", "grid_size": 28},
+            ],
+            "props": False,
+        },
+        capture_viewport=False,
+    )
+    parsed = json.loads(raw[0])
+
+    raise_index = next(
+        idx for idx, (command, params) in enumerate(commands)
+        if command == "terrain_spline_deform" and params.get("mode") == "raise"
+    )
+    river_index = next(idx for idx, (command, _) in enumerate(commands) if command == "env_carve_river")
+    road_index = next(idx for idx, (command, _) in enumerate(commands) if command == "env_generate_road")
+
+    entrance_calls = [params for command, params in commands if command == "env_create_cave_entrance"]
+    chamber_moves = [params for command, params in commands if command == "modify_object" and params.get("name") == "TreasureCave_Chamber"]
+    cave_results = [loc for loc in parsed["locations"] if loc.get("type") == "cave"]
+
+    assert parsed["status"] == "review_required"
+    assert any(step == "hero_cliff_TreasureCave" for step in parsed["steps_completed"])
+    assert raise_index < river_index < road_index
+    assert not entrance_calls
+    assert chamber_moves
+    chamber_position = chamber_moves[0]["position"]
+    chamber_surface_z = 10.0 + 0.2 * float(chamber_position[0])
+    assert chamber_position[2] <= chamber_surface_z - 5.5
+    assert cave_results
+    assert math.isclose(
+        cave_results[0]["result"]["entrance"]["rotation_z"],
+        math.pi / 2.0,
+        rel_tol=1e-3,
+        abs_tol=1e-3,
+    )
+
+
+@pytest.mark.asyncio
+async def test_compose_map_fails_closed_when_cave_deformation_fails(monkeypatch):
+    commands: list[tuple[str, dict]] = []
+
+    async def _handler(command, params):
+        commands.append((command, dict(params)))
+        if command in {
+            "clear_scene",
+            "terrain_flatten_zone",
+            "material_create_procedural",
+            "modify_object",
+            "env_paint_terrain",
+            "terrain_create_biome_material",
+            "setup_dark_fantasy_lighting",
+        }:
+            return {"status": "success"}
+        if command == "env_generate_terrain":
+            return {
+                "status": "success",
+                "name": "BrokenCave_Terrain",
+                "cliff_overlays": 2,
+                "hero_cliff_overlays": 1,
+            }
+        if command == "terrain_spline_deform":
+            if params.get("mode") == "raise":
+                return {"status": "success"}
+            raise RuntimeError("cave tunnel deformation failed")
+        if command == "auto_frame_camera":
+            return {"status": "success"}
+        raise AssertionError(f"unexpected command: {command}")
+
+    async def _fake_gate(*args, **kwargs):
+        return {
+            "status": "success",
+            "passed": True,
+            "required_profiles": ["terrain_readability", "terrain_cliff"],
+            "failed_profiles": [],
+            "issues": [],
+            "capture_errors": [],
+            "screenshots": ["front.png"],
+            "angle_labels": ["front"],
+            "profile_results": [],
+        }
+
+    def _fake_plan(_spec):
+        return [
+            {
+                "name": "BrokenCave",
+                "type": "cave",
+                "anchor": (16.0, 8.0),
+                "radius": 16.0,
+                "source": {"type": "cave", "name": "BrokenCave", "grid_size": 24},
+            }
+        ]
+
+    async def _fake_sample_height(_blender, _terrain_name, x, y):
+        return 8.0 + 0.15 * float(x)
+
+    monkeypatch.setattr(
+        blender_server,
+        "get_blender_connection",
+        lambda: _DummyBlender(_handler),
+    )
+    monkeypatch.setattr(blender_server, "_run_terrain_visual_gate", _fake_gate, raising=False)
+    monkeypatch.setattr(blender_server, "_plan_map_location_anchors", _fake_plan, raising=False)
+    monkeypatch.setattr(blender_server, "_sample_terrain_height", _fake_sample_height, raising=False)
+
+    raw = await blender_server.asset_pipeline(
+        action="compose_map",
+        map_spec={
+            "name": "BrokenCaveMap",
+            "seed": 22,
+            "terrain": {
+                "preset": "mountains",
+                "size": 160.0,
+                "resolution": 64,
+                "height_scale": 18.0,
+            },
+            "roads": [],
+            "locations": [
+                {"type": "cave", "name": "BrokenCave", "grid_size": 24},
+            ],
+            "props": False,
+        },
+        capture_viewport=False,
+    )
+    parsed = json.loads(raw[0])
+
+    entrance_calls = [params for command, params in commands if command == "env_create_cave_entrance"]
+    chamber_calls = [params for command, params in commands if command == "world_generate_cave"]
+
+    assert parsed["status"] == "review_required"
+    assert any(
+        str(step.get("step", "")).startswith("location_BrokenCave")
+        and (
+            "cave tunnel flatten failed" in str(step.get("error", ""))
+            or "cave tunnel deformation failed" in str(step.get("error", ""))
+        )
+        for step in parsed["steps_failed"]
+    )
+    assert not entrance_calls
+    assert not chamber_calls
+    assert any(command == "terrain_spline_deform" and params.get("mode") == "raise" for command, params in commands)
 
 
 @pytest.mark.asyncio

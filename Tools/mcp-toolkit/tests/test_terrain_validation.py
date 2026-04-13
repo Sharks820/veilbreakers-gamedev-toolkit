@@ -134,6 +134,15 @@ def test_slope_distribution_info_when_missing():
     assert any(i.severity == "info" for i in issues)
 
 
+def test_check_focal_composition_respects_radian_slope_units():
+    from blender_addon.handlers.terrain_validation import check_focal_composition
+
+    stack = _make_stack()
+    stack.slope = np.full(stack.height.shape, np.radians(35.0), dtype=np.float32)
+    issues = check_focal_composition(stack)
+    assert not any("Only 0.0% of terrain is steep" in issue.message for issue in issues)
+
+
 # ---------------------------------------------------------------------------
 # 4. validate_protected_zones_untouched
 # ---------------------------------------------------------------------------

@@ -17,6 +17,7 @@ No Blender / bpy imports. Fully unit-testable outside Blender.
 from __future__ import annotations
 
 import hashlib
+import math
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -698,7 +699,7 @@ def check_focal_composition(
     slope = stack.get("slope")
     if slope is not None:
         slope_arr = np.asarray(slope, dtype=np.float32)
-        steep_ratio = float(np.sum(slope_arr > 30.0)) / max(slope_arr.size, 1)
+        steep_ratio = float(np.sum(slope_arr > math.radians(30.0))) / max(slope_arr.size, 1)
         if steep_ratio < 0.01:
             issues.append(
                 ValidationIssue(

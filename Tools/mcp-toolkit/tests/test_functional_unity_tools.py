@@ -12,7 +12,7 @@ Tools:
     2. unity_vfx      (10 actions)
     3. unity_audio    (10 actions)
     4. unity_ui       (5 actions)
-    5. unity_scene    (8 actions)
+    5. unity_scene    (10 actions)
     6. unity_gameplay (7 actions)
     7. unity_performance (5 actions)
 """
@@ -816,7 +816,7 @@ class TestUnityUI:
 
 
 # ---------------------------------------------------------------------------
-# Tool 5: unity_scene (8 actions)
+# Tool 5: unity_scene (10 actions)
 # ---------------------------------------------------------------------------
 
 from veilbreakers_mcp.shared.unity_templates.scene_templates import (  # noqa: E402
@@ -832,7 +832,7 @@ from veilbreakers_mcp.shared.unity_templates.scene_templates import (  # noqa: E
 
 
 class TestUnityScene:
-    """Tool 5 -- unity_scene: 8 actions."""
+    """Tool 5 -- unity_scene: 10 actions."""
 
     # -- terrain --
 
@@ -884,7 +884,20 @@ class TestUnityScene:
     async def test_setup_tiled_terrain_action(self):
         from veilbreakers_mcp.unity_tools import scene as scene_tool
 
-        with patch.object(scene_tool, "_write_to_unity", return_value="/tmp/VeilBreakers_TiledTerrainSetup.cs"):
+        with patch.object(
+            scene_tool,
+            "_write_scene_script",
+            return_value=json.dumps({
+                "status": "success",
+                "action": "setup_tiled_terrain",
+                "tile_count": 1,
+                "terrain_size": [1000, 600, 1000],
+                "resolution": 513,
+                "bridge_executed": True,
+                "bridge_result": {"status": "success", "executed": True},
+                "execution_result": {"status": "success", "tile_count": 1},
+            }),
+        ):
             result = await scene_tool.unity_scene(
                 action="setup_tiled_terrain",
                 terrain_tiles=[{"heightmap_path": "Assets/Heightmaps/tile_0.raw", "grid_x": 0, "grid_y": 0}],
@@ -896,6 +909,8 @@ class TestUnityScene:
         assert data["status"] == "success"
         assert data["action"] == "setup_tiled_terrain"
         assert data["tile_count"] == 1
+        assert data["bridge_executed"] is True
+        assert data["execution_result"]["tile_count"] == 1
 
     @pytest.mark.asyncio
     async def test_setup_tiled_terrain_action_forwards_parent_and_layers(self):
@@ -916,7 +931,21 @@ class TestUnityScene:
         ]
 
         with patch.object(scene_tool, "generate_tiled_terrain_setup_script", return_value="// generated tiled terrain") as gen_mock, \
-             patch.object(scene_tool, "_write_to_unity", return_value="/tmp/VeilBreakers_TiledTerrainSetup.cs"):
+             patch.object(
+                 scene_tool,
+                 "_write_scene_script",
+                 return_value=json.dumps({
+                     "status": "success",
+                     "action": "setup_tiled_terrain",
+                     "tile_count": 1,
+                     "terrain_size": [512, 200, 512],
+                     "resolution": 257,
+                     "tile_parent_name": "TerrainRoot_Custom",
+                     "bridge_executed": True,
+                     "bridge_result": {"status": "success", "executed": True},
+                     "execution_result": {"status": "success", "tile_count": 1},
+                 }),
+             ):
             result = await scene_tool.unity_scene(
                 action="setup_tiled_terrain",
                 terrain_tiles=tiles,
@@ -931,6 +960,7 @@ class TestUnityScene:
         assert data["tile_count"] == 1
         assert data["terrain_size"] == [512, 200, 512]
         assert data["resolution"] == 257
+        assert data["bridge_executed"] is True
         gen_mock.assert_called_once_with(
             tiles=tiles,
             default_size=(512, 200, 512),
@@ -946,7 +976,21 @@ class TestUnityScene:
         tiles = [{"heightmap_path": "Assets/Heightmaps/tile_0.raw", "grid_x": 0, "grid_y": 0}]
 
         with patch.object(scene_tool, "generate_tiled_terrain_setup_script", return_value="// generated tiled terrain") as gen_mock, \
-             patch.object(scene_tool, "_write_to_unity", return_value="/tmp/VeilBreakers_TiledTerrainSetup.cs"):
+             patch.object(
+                 scene_tool,
+                 "_write_scene_script",
+                 return_value=json.dumps({
+                     "status": "success",
+                     "action": "setup_tiled_terrain",
+                     "tile_count": 1,
+                     "terrain_size": [1000, 600, 1000],
+                     "resolution": 513,
+                     "tile_parent_name": "VB_TerrainRoot",
+                     "bridge_executed": True,
+                     "bridge_result": {"status": "success", "executed": True},
+                     "execution_result": {"status": "success", "tile_count": 1},
+                 }),
+             ):
             result = await scene_tool.unity_scene(
                 action="setup_tiled_terrain",
                 terrain_tiles=tiles,
@@ -955,6 +999,7 @@ class TestUnityScene:
         data = json.loads(result)
         assert data["status"] == "success"
         assert data["terrain_size"] == [1000, 600, 1000]
+        assert data["bridge_executed"] is True
         gen_mock.assert_called_once_with(
             tiles=tiles,
             default_size=(1000, 600, 1000),
@@ -967,7 +1012,7 @@ class TestUnityScene:
     async def test_setup_tiled_terrain_action_write_error_returns_error(self):
         from veilbreakers_mcp.unity_tools import scene as scene_tool
 
-        with patch.object(scene_tool, "_write_to_unity", side_effect=ValueError("unsafe path")):
+        with patch.object(scene_tool, "_write_scene_script", side_effect=ValueError("unsafe path")):
             result = await scene_tool.unity_scene(
                 action="setup_tiled_terrain",
                 terrain_tiles=[{"heightmap_path": "Assets/Heightmaps/tile_0.raw", "grid_x": 0, "grid_y": 0}],
@@ -989,7 +1034,21 @@ class TestUnityScene:
             {"texture_path": "Assets/Textures/snow.png", "tiling": 12.0},
         ]
 
-        with patch.object(scene_tool, "_write_to_unity", return_value="/tmp/VeilBreakers_TerrainSetup.cs"):
+        with patch.object(
+            scene_tool,
+            "_write_scene_script",
+            return_value=json.dumps({
+                "status": "success",
+                "action": "setup_terrain",
+                "heightmap_path": "Assets/Heightmaps/test.raw",
+                "alphamap_path": "Assets/Heightmaps/test_alphamap.raw",
+                "terrain_size": [1000, 600, 1000],
+                "resolution": 513,
+                "bridge_executed": True,
+                "bridge_result": {"status": "success", "executed": True},
+                "execution_result": {"status": "success", "terrain_name": "VB_Terrain"},
+            }),
+        ):
             result = await scene_tool.unity_scene(
                 action="setup_terrain",
                 heightmap_path="Assets/Heightmaps/test.raw",
@@ -1002,6 +1061,7 @@ class TestUnityScene:
         data = json.loads(result)
         assert data["status"] == "success"
         assert data["action"] == "setup_terrain"
+        assert data["bridge_executed"] is True
 
     # -- object scatter --
 

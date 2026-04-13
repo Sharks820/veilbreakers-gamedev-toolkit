@@ -125,23 +125,25 @@ def _register_all_terrain_passes_impl(
     register_default_passes()
     loaded.append("A")
 
+    package_root = __package__ or "blender_addon.handlers"
+
     registrars: list[tuple[str, str, str]] = [
-        ("B-cliffs", "blender_addon.handlers.terrain_cliffs", "register_bundle_b_passes"),
-        ("B-materials", "blender_addon.handlers.terrain_materials_v2", "register_bundle_b_material_passes"),
-        ("C", "blender_addon.handlers.terrain_waterfalls", "register_bundle_c_passes"),
-        ("D", "blender_addon.handlers.terrain_validation", "register_bundle_d_passes"),
-        ("E", "blender_addon.handlers.terrain_assets", "register_bundle_e_passes"),
-        ("F", "blender_addon.handlers.terrain_caves", "register_bundle_f_passes"),
-        ("G", "blender_addon.handlers.terrain_banded", "register_bundle_g_passes"),
-        ("H-saliency", "blender_addon.handlers.terrain_saliency", "register_saliency_pass"),
-        ("H-framing", "blender_addon.handlers.terrain_framing", "register_framing_pass"),
-        ("I", "blender_addon.handlers.terrain_geology_validator", "register_bundle_i_passes"),
-        ("I-integrator", "blender_addon.handlers.terrain_delta_integrator", "register_integrator_pass"),
-        ("J", "blender_addon.handlers.terrain_bundle_j", "register_bundle_j_passes"),
-        ("K", "blender_addon.handlers.terrain_bundle_k", "register_bundle_k_passes"),
-        ("L", "blender_addon.handlers.terrain_bundle_l", "register_bundle_l_passes"),
-        ("N", "blender_addon.handlers.terrain_bundle_n", "register_bundle_n_passes"),
-        ("O", "blender_addon.handlers.terrain_bundle_o", "register_bundle_o_passes"),
+        ("B-cliffs", f"{package_root}.terrain_cliffs", "register_bundle_b_passes"),
+        ("B-materials", f"{package_root}.terrain_materials_v2", "register_bundle_b_material_passes"),
+        ("C", f"{package_root}.terrain_waterfalls", "register_bundle_c_passes"),
+        ("D", f"{package_root}.terrain_validation", "register_bundle_d_passes"),
+        ("E", f"{package_root}.terrain_assets", "register_bundle_e_passes"),
+        ("F", f"{package_root}.terrain_caves", "register_bundle_f_passes"),
+        ("G", f"{package_root}.terrain_banded", "register_bundle_g_passes"),
+        ("H-saliency", f"{package_root}.terrain_saliency", "register_saliency_pass"),
+        ("H-framing", f"{package_root}.terrain_framing", "register_framing_pass"),
+        ("I", f"{package_root}.terrain_geology_validator", "register_bundle_i_passes"),
+        ("I-integrator", f"{package_root}.terrain_delta_integrator", "register_integrator_pass"),
+        ("J", f"{package_root}.terrain_bundle_j", "register_bundle_j_passes"),
+        ("K", f"{package_root}.terrain_bundle_k", "register_bundle_k_passes"),
+        ("L", f"{package_root}.terrain_bundle_l", "register_bundle_l_passes"),
+        ("N", f"{package_root}.terrain_bundle_n", "register_bundle_n_passes"),
+        ("O", f"{package_root}.terrain_bundle_o", "register_bundle_o_passes"),
     ]
 
     for label, module_path, attr in registrars:

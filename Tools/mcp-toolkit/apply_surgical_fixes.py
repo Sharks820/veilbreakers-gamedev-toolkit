@@ -23,7 +23,7 @@ def fix_file(filename, errors):
                 # Use regex to find the variable assignment
                 # Since it can be `a, varname, c = ...` or `varname = ...`, 
                 # we just replace the word boundary varname.
-                # However, this could be tricky. A safer way is to append `# noqa: F841` 
+                # However, this could be tricky. A safer fallback would be to append a noqa F841 marker
                 # OR prefix it with `_`
                 lines[row] = re.sub(r'\b' + re.escape(varname) + r'\b', f'_{varname}', line, count=1)
         elif code == 'E741':

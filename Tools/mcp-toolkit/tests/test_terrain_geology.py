@@ -267,6 +267,16 @@ def test_apply_wind_erosion_intensity_zero_noop():
     assert np.allclose(delta, 0.0)
 
 
+def test_apply_wind_erosion_does_not_wrap_opposite_edges():
+    from blender_addon.handlers.terrain_wind_erosion import apply_wind_erosion
+
+    stack = _build_stack(heights="flat")
+    stack.height[:, 0] = 0.0
+    stack.height[:, -1] = 100.0
+    delta = apply_wind_erosion(stack, prevailing_dir_rad=0.0, intensity=1.0)
+    assert float(np.abs(delta[:, 0]).max()) < 10.0
+
+
 def test_generate_dunes_nonzero_and_deterministic():
     from blender_addon.handlers.terrain_wind_erosion import generate_dunes
 

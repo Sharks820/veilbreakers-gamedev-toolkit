@@ -9,6 +9,8 @@ from pathlib import Path
 from collections import deque
 from typing import Literal, Any
 
+import numpy as np
+
 from mcp.server.fastmcp import FastMCP, Image
 from veilbreakers_mcp.shared.blender_client import BlenderConnection, BlenderCommandError
 from veilbreakers_mcp.shared.config import Settings
@@ -150,7 +152,7 @@ _AAA_CAMERA_ANGLES: list[tuple[int, int, str]] = [
     (135, 30, "nw_45"),
     (225, 30, "sw_45"),
     (315, 30, "se_45"),
-    (0, 5, "ground_level"),
+    (0, 18, "ground_level"),
 ]
 
 
@@ -289,6 +291,814 @@ def _derive_terrain_validation_profiles(
     return profiles
 
 
+def _blend_path_points_to_terminal_water_level(
+    path_points: list[list[float]] | list[tuple[float, float, float]],
+    terminal_water_level: float | None,
+) -> list[list[float]]:
+    """Blend the downstream tail of a river surface to a target terminal level."""
+    points = [
+        [float(pt[0]), float(pt[1]), float(pt[2])]
+        for pt in (path_points or [])
+        if isinstance(pt, (list, tuple)) and len(pt) >= 3
+    ]
+    if terminal_water_level is None or len(points) < 2:
+        return points
+
+    target_level = float(terminal_water_level)
+    start_idx = max(0, len(points) - max(6, int(len(points) * 0.42)))
+    tail_start_level = float(points[start_idx][2])
+    for idx in range(start_idx, len(points)):
+        blend_t = (idx - start_idx) / max(len(points) - 1 - start_idx, 1)
+        blended_level = tail_start_level * (1.0 - blend_t) + target_level * blend_t
+        points[idx][2] = min(float(points[idx][2]), blended_level)
+    points[-1][2] = min(float(points[-1][2]), target_level)
+    return points
+
+
+def _chaikin_smooth_path_points(
+    path_points: list[list[float]] | list[tuple[float, float, float]],
+    *,
+    passes: int = 1,
+    max_points: int | None = 28,
+) -> list[list[float]]:
+    """Smooth a polyline without changing its endpoints.
+
+    This keeps river surfaces from reading as grid-zigzags after terrain carve
+    pathfinding, while still letting the caller preserve the overall path shape.
+    """
+    points = [
+        [float(pt[0]), float(pt[1]), float(pt[2])]
+        for pt in (path_points or [])
+        if isinstance(pt, (list, tuple)) and len(pt) >= 3
+    ]
+    if len(points) < 3:
+        return points
+    passes = max(0, int(passes))
+    for _ in range(passes):
+        refined = [points[0]]
+        for start, end in zip(points, points[1:]):
+            q = [
+                start[0] * 0.75 + end[0] * 0.25,
+                start[1] * 0.75 + end[1] * 0.25,
+                start[2] * 0.75 + end[2] * 0.25,
+            ]
+            r = [
+                start[0] * 0.25 + end[0] * 0.75,
+                start[1] * 0.25 + end[1] * 0.75,
+                start[2] * 0.25 + end[2] * 0.75,
+            ]
+            refined.extend((q, r))
+        refined.append(points[-1])
+        points = refined
+    if max_points is not None and max_points >= 2 and len(points) > max_points:
+        sample_count = max(2, int(max_points))
+        keep_indices = {
+            int(round(i * (len(points) - 1) / max(sample_count - 1, 1)))
+            for i in range(sample_count)
+        }
+        points = [points[idx] for idx in sorted(keep_indices)]
+    return points
+
+
+def _map_point_to_world_xy(
+    position: list[float] | tuple[float, ...],
+    *,
+    terrain_size: float,
+    terrain_location: tuple[float, float] | None = None,
+) -> tuple[float, float]:
+    """Convert a map-spec point into Blender world XY."""
+    x = float(position[0])
+    y = float(position[1])
+    origin_x, origin_y = terrain_location or (0.0, 0.0)
+    x -= origin_x
+    y -= origin_y
+    x, y = _normalize_map_point((x, y), terrain_size)
+    return x + origin_x, y + origin_y
+
+
+def _clamp_world_xy(
+    x: float,
+    y: float,
+    *,
+    terrain_size: float,
+    terrain_location: tuple[float, float] | None = None,
+    margin: float = 0.0,
+) -> tuple[float, float]:
+    """Clamp a world point inside the terrain bounds with a safety margin."""
+    origin_x, origin_y = terrain_location or (0.0, 0.0)
+    half = terrain_size * 0.5
+    clamped_x = max(origin_x - half + margin, min(origin_x + half - margin, float(x)))
+    clamped_y = max(origin_y - half + margin, min(origin_y + half - margin, float(y)))
+    return clamped_x, clamped_y
+
+
+def _offset_polyline_world(
+    points: list[tuple[float, float]],
+    *,
+    offset_distance: float,
+    terrain_size: float,
+    terrain_location: tuple[float, float] | None = None,
+    margin: float = 0.0,
+) -> list[list[float]]:
+    """Offset an XY polyline to one side while preserving endpoints order."""
+    if len(points) < 2:
+        return [[float(pt[0]), float(pt[1]), 0.0] for pt in points]
+
+    offset_points: list[list[float]] = []
+    for index, (px, py) in enumerate(points):
+        if index == 0:
+            ax, ay = points[0]
+            bx, by = points[1]
+        elif index == len(points) - 1:
+            ax, ay = points[index - 1]
+            bx, by = points[index]
+        else:
+            ax, ay = points[index - 1]
+            bx, by = points[index + 1]
+        dx = bx - ax
+        dy = by - ay
+        length = max(math.hypot(dx, dy), 1e-6)
+        perp_x = -dy / length
+        perp_y = dx / length
+        ox = px + perp_x * offset_distance
+        oy = py + perp_y * offset_distance
+        ox, oy = _clamp_world_xy(
+            ox,
+            oy,
+            terrain_size=terrain_size,
+            terrain_location=terrain_location,
+            margin=margin,
+        )
+        offset_points.append([ox, oy, 0.0])
+    return offset_points
+
+
+async def _sample_terrain_relief_direction(
+    blender: BlenderConnection,
+    terrain_name: str,
+    *,
+    x: float,
+    y: float,
+    terrain_size: float,
+    terrain_location: tuple[float, float] | None = None,
+    sample_radius: float,
+    direction_count: int = 8,
+) -> dict[str, float]:
+    """Estimate the steepest downhill direction around a terrain point."""
+    center_z = await _sample_terrain_height(blender, terrain_name, x, y)
+    best_drop = -1e9
+    best_dir = (0.0, 1.0)
+    for direction_index in range(max(direction_count, 4)):
+        angle = (math.tau * direction_index) / max(direction_count, 1)
+        dx = math.cos(angle) * sample_radius
+        dy = math.sin(angle) * sample_radius
+        sample_x, sample_y = _clamp_world_xy(
+            x + dx,
+            y + dy,
+            terrain_size=terrain_size,
+            terrain_location=terrain_location,
+            margin=max(sample_radius * 0.4, 4.0),
+        )
+        sample_z = await _sample_terrain_height(blender, terrain_name, sample_x, sample_y)
+        drop = center_z - sample_z
+        if drop > best_drop:
+            best_drop = drop
+            best_dir = (sample_x - x, sample_y - y)
+
+    dir_len = max(math.hypot(best_dir[0], best_dir[1]), 1e-6)
+    outward_x = best_dir[0] / dir_len
+    outward_y = best_dir[1] / dir_len
+
+    if best_drop < 0.35:
+        origin_x, origin_y = terrain_location or (0.0, 0.0)
+        fallback_x = x - origin_x
+        fallback_y = y - origin_y
+        fallback_len = math.hypot(fallback_x, fallback_y)
+        if fallback_len > 1e-6:
+            outward_x = fallback_x / fallback_len
+            outward_y = fallback_y / fallback_len
+
+    return {
+        "x": float(x),
+        "y": float(y),
+        "z": float(center_z),
+        "outward_x": float(outward_x),
+        "outward_y": float(outward_y),
+        "slope_drop": float(best_drop),
+    }
+
+
+async def _retarget_cave_anchor_to_relief(
+    blender: BlenderConnection,
+    terrain_name: str,
+    *,
+    anchor_x: float,
+    anchor_y: float,
+    terrain_size: float,
+    terrain_location: tuple[float, float] | None = None,
+    search_radius: float,
+    sample_radius: float,
+) -> dict[str, float]:
+    """Move a cave anchor onto a nearby stronger cliff/slope signal."""
+    best: dict[str, float] | None = None
+    ring = search_radius * 0.68
+    outer_ring = search_radius * 0.96
+    candidate_offsets = [
+        (0.0, 0.0),
+        (ring, 0.0),
+        (-ring, 0.0),
+        (0.0, ring),
+        (0.0, -ring),
+        (ring * 0.72, ring * 0.72),
+        (ring * 0.72, -ring * 0.72),
+        (-ring * 0.72, ring * 0.72),
+        (-ring * 0.72, -ring * 0.72),
+        (outer_ring, 0.0),
+        (-outer_ring, 0.0),
+        (0.0, outer_ring),
+        (0.0, -outer_ring),
+        (outer_ring * 0.70, outer_ring * 0.70),
+        (outer_ring * 0.70, -outer_ring * 0.70),
+        (-outer_ring * 0.70, outer_ring * 0.70),
+        (-outer_ring * 0.70, -outer_ring * 0.70),
+    ]
+    for offset_x, offset_y in candidate_offsets:
+        candidate_x, candidate_y = _clamp_world_xy(
+            anchor_x + offset_x,
+            anchor_y + offset_y,
+            terrain_size=terrain_size,
+            terrain_location=terrain_location,
+            margin=max(search_radius * 0.45, 8.0),
+        )
+        relief = await _sample_terrain_relief_direction(
+            blender,
+            terrain_name,
+            x=candidate_x,
+            y=candidate_y,
+            terrain_size=terrain_size,
+            terrain_location=terrain_location,
+            sample_radius=sample_radius,
+        )
+        radial = math.hypot(
+            candidate_x - (terrain_location or (0.0, 0.0))[0],
+            candidate_y - (terrain_location or (0.0, 0.0))[1],
+        )
+        anchor_distance = math.hypot(candidate_x - anchor_x, candidate_y - anchor_y)
+        slope_drop = float(relief["slope_drop"])
+        ideal_drop = max(sample_radius * 0.42, 3.6)
+        slope_score = min(slope_drop, ideal_drop) * 2.2 - max(slope_drop - ideal_drop, 0.0) * 1.3
+        outward_x = float(relief["outward_x"])
+        outward_y = float(relief["outward_y"])
+        side_x = -outward_y
+        side_y = outward_x
+        outside_probe = await _sample_terrain_height(
+            blender,
+            terrain_name,
+            candidate_x + outward_x * sample_radius * 0.82,
+            candidate_y + outward_y * sample_radius * 0.82,
+        )
+        inside_probe = await _sample_terrain_height(
+            blender,
+            terrain_name,
+            candidate_x - outward_x * sample_radius * 0.56,
+            candidate_y - outward_y * sample_radius * 0.56,
+        )
+        left_probe = await _sample_terrain_height(
+            blender,
+            terrain_name,
+            candidate_x + side_x * sample_radius * 0.44,
+            candidate_y + side_y * sample_radius * 0.44,
+        )
+        right_probe = await _sample_terrain_height(
+            blender,
+            terrain_name,
+            candidate_x - side_x * sample_radius * 0.44,
+            candidate_y - side_y * sample_radius * 0.44,
+        )
+        center_z = float(relief["z"])
+        face_prominence = max(center_z - float(outside_probe), 0.0)
+        inside_mass = max(float(inside_probe) - center_z, 0.0)
+        sidewall_frame = max(((float(left_probe) + float(right_probe)) * 0.5) - center_z, 0.0)
+        score = (
+            slope_score
+            + face_prominence * 1.6
+            + inside_mass * 0.45
+            + sidewall_frame * 0.70
+            - anchor_distance * 0.16
+            + radial * 0.03
+            + max(float(relief["z"]), 0.0) * 0.02
+        )
+        relief["score"] = score
+        if best is None or score > float(best["score"]):
+            best = relief
+
+    if best is None:
+        return {
+            "x": float(anchor_x),
+            "y": float(anchor_y),
+            "z": 0.0,
+            "outward_x": 0.0,
+            "outward_y": 1.0,
+            "slope_drop": 0.0,
+            "score": 0.0,
+        }
+    return best
+
+
+async def _apply_hero_mountain_shaping(
+    blender: BlenderConnection,
+    *,
+    terrain_name: str,
+    map_spec: dict[str, Any],
+    terrain_size: float,
+    terrain_location: tuple[float, float],
+    terrain_preset: str,
+    height_scale: float,
+    cave_anchor: tuple[float, float] | None = None,
+) -> list[str]:
+    """Add a deliberate ridge-and-valley read for hero terrain compositions."""
+    def _simplify_backbone(
+        points: list[tuple[float, float]],
+        *,
+        max_points: int = 5,
+    ) -> list[tuple[float, float]]:
+        if len(points) <= max_points:
+            return list(points)
+        chosen: list[tuple[float, float]] = []
+        used: set[int] = set()
+        for slot in range(max_points):
+            raw_index = round(slot * (len(points) - 1) / max(max_points - 1, 1))
+            index = max(0, min(int(raw_index), len(points) - 1))
+            if index in used:
+                continue
+            used.add(index)
+            chosen.append(points[index])
+        if chosen[0] != points[0]:
+            chosen.insert(0, points[0])
+        if chosen[-1] != points[-1]:
+            chosen.append(points[-1])
+        return chosen
+
+    preset = str(terrain_preset or "").strip().lower()
+    terrain_cfg = map_spec.get("terrain", {}) if isinstance(map_spec, dict) else {}
+    water_cfg = map_spec.get("water", {}) if isinstance(map_spec, dict) else {}
+    river_specs = list(water_cfg.get("rivers", [])) if isinstance(water_cfg, dict) else []
+    has_cave = cave_anchor is not None or any(
+        isinstance(location, dict)
+        and str(location.get("type", "")).strip().lower() == "cave"
+        for location in (map_spec.get("locations", []) if isinstance(map_spec, dict) else [])
+    )
+    has_hero_water = bool(river_specs) or "water_level" in water_cfg or bool(water_cfg.get("waterfalls"))
+    mountain_like_presets = {"mountains", "cliffs", "canyon", "chaotic", "volcanic"}
+    hero_supported_presets = mountain_like_presets | {"hills", "coastal", "swamp"}
+    if preset not in hero_supported_presets or not (preset in mountain_like_presets or has_cave or has_hero_water):
+        return []
+
+    valley_points: list[tuple[float, float]] = []
+    if river_specs:
+        river = river_specs[0]
+        raw_chain = [
+            river.get("source", (-terrain_size * 0.35, terrain_size * 0.30)),
+            *(river.get("waypoints", []) or []),
+            river.get("destination", (terrain_size * 0.22, -terrain_size * 0.18)),
+        ]
+        for raw_point in raw_chain:
+            if isinstance(raw_point, (list, tuple)) and len(raw_point) >= 2:
+                valley_points.append(
+                    _map_point_to_world_xy(
+                        raw_point,
+                        terrain_size=terrain_size,
+                        terrain_location=terrain_location,
+                    )
+                )
+    if len(valley_points) < 2:
+        valley_points = [
+            (terrain_location[0] - terrain_size * 0.32, terrain_location[1] + terrain_size * 0.20),
+            (terrain_location[0] + terrain_size * 0.18, terrain_location[1] - terrain_size * 0.18),
+        ]
+    basin_center_raw = water_cfg.get("basin_center") if isinstance(water_cfg, dict) else None
+    if isinstance(basin_center_raw, (list, tuple)) and len(basin_center_raw) >= 2:
+        basin_point = _map_point_to_world_xy(
+            basin_center_raw,
+            terrain_size=terrain_size,
+            terrain_location=terrain_location,
+        )
+        if not valley_points or math.hypot(
+            basin_point[0] - valley_points[-1][0],
+            basin_point[1] - valley_points[-1][1],
+        ) > max(terrain_size * 0.05, 8.0):
+            valley_points.append(basin_point)
+    valley_points = _simplify_backbone(valley_points, max_points=5 if river_specs else 4)
+
+    mid_x = sum(point[0] for point in valley_points) / len(valley_points)
+    mid_y = sum(point[1] for point in valley_points) / len(valley_points)
+    start_x, start_y = valley_points[0]
+    end_x, end_y = valley_points[-1]
+    dir_x = end_x - start_x
+    dir_y = end_y - start_y
+    dir_len = max(math.hypot(dir_x, dir_y), 1e-6)
+    perp_x = -dir_y / dir_len
+    perp_y = dir_x / dir_len
+    ridge_sign = 1.0
+    if cave_anchor is not None:
+        cave_side = (cave_anchor[0] - mid_x) * perp_x + (cave_anchor[1] - mid_y) * perp_y
+        ridge_sign = 1.0 if cave_side >= 0.0 else -1.0
+
+    ridge_offset = max(terrain_size * 0.16, 22.0)
+    secondary_offset = ridge_offset * -0.72
+    margin = max(terrain_size * 0.06, 10.0)
+
+    primary_ridge = _offset_polyline_world(
+        valley_points,
+        offset_distance=ridge_offset * ridge_sign,
+        terrain_size=terrain_size,
+        terrain_location=terrain_location,
+        margin=margin,
+    )
+    secondary_ridge = _offset_polyline_world(
+        valley_points[1:] if len(valley_points) > 2 else valley_points,
+        offset_distance=secondary_offset * ridge_sign,
+        terrain_size=terrain_size,
+        terrain_location=terrain_location,
+        margin=margin,
+    )
+    valley_curve: list[list[float]] = []
+    for x, y in valley_points:
+        try:
+            sampled_z = await _sample_terrain_height(blender, terrain_name, x, y)
+        except Exception:
+            sampled_z = 0.0
+        valley_curve.append([float(x), float(y), float(sampled_z)])
+    if len(valley_curve) >= 3:
+        # Smooth sampled valley heights before using them as spline anchors.
+        # Raw terrain samples can oscillate enough to create terrace-like steps
+        # once carve/flatten passes stack on top of each other.
+        for _ in range(2):
+            smoothed_curve: list[list[float]] = []
+            for idx, point in enumerate(valley_curve):
+                prev_z = valley_curve[max(idx - 1, 0)][2]
+                curr_z = point[2]
+                next_z = valley_curve[min(idx + 1, len(valley_curve) - 1)][2]
+                smooth_z = prev_z * 0.22 + curr_z * 0.56 + next_z * 0.22
+                smoothed_curve.append([point[0], point[1], float(smooth_z)])
+            valley_curve = smoothed_curve
+
+    shape_steps: list[str] = []
+    river_valley_scale = 1.28 if river_specs else 1.0
+    primary_depth = max(height_scale * (0.24 if preset in mountain_like_presets else 0.18), 8.5)
+    primary_width = max(terrain_size * (0.17 if preset in mountain_like_presets else 0.19), 22.0)
+    await blender.send_command("terrain_spline_deform", {
+        "object_name": terrain_name,
+        "spline_points": primary_ridge,
+        "mode": "raise",
+        "depth": primary_depth,
+        "width": primary_width,
+        "falloff": 0.88,
+        "samples_per_segment": 14,
+    })
+    await blender.send_command("terrain_spline_deform", {
+        "object_name": terrain_name,
+        "spline_points": primary_ridge,
+        "mode": "smooth",
+        "depth": 0.0,
+        "width": max(primary_width * 1.22, 26.0),
+        "falloff": 0.96,
+        "samples_per_segment": 14,
+    })
+    shape_steps.append("hero_primary_ridge")
+
+    peak_anchor_idx = min(
+        max(int(len(primary_ridge) * 0.62), 0),
+        max(len(primary_ridge) - 1, 0),
+    )
+    if primary_ridge:
+        peak_center = primary_ridge[peak_anchor_idx]
+        peak_spine = [
+            [
+                float(peak_center[0]) - perp_x * terrain_size * 0.055,
+                float(peak_center[1]) - perp_y * terrain_size * 0.055,
+                float(peak_center[2]) if len(peak_center) >= 3 else 0.0,
+            ],
+            [
+                float(peak_center[0]) + perp_x * ridge_sign * terrain_size * 0.022,
+                float(peak_center[1]) + perp_y * ridge_sign * terrain_size * 0.022,
+                (float(peak_center[2]) if len(peak_center) >= 3 else 0.0) + max(height_scale * 0.10, 3.0),
+            ],
+            [
+                float(peak_center[0]) + perp_x * terrain_size * 0.055,
+                float(peak_center[1]) + perp_y * terrain_size * 0.055,
+                float(peak_center[2]) if len(peak_center) >= 3 else 0.0,
+            ],
+        ]
+        await blender.send_command("terrain_spline_deform", {
+            "object_name": terrain_name,
+            "spline_points": peak_spine,
+            "mode": "raise",
+            "depth": max(height_scale * (0.11 if preset in mountain_like_presets else 0.08), 4.2),
+            "width": max(terrain_size * 0.16, 22.0),
+            "falloff": 0.90,
+            "samples_per_segment": 12,
+        })
+        await blender.send_command("terrain_spline_deform", {
+            "object_name": terrain_name,
+            "spline_points": peak_spine,
+            "mode": "smooth",
+            "depth": 0.0,
+            "width": max(terrain_size * 0.22, 30.0),
+            "falloff": 0.98,
+            "samples_per_segment": 12,
+        })
+        shape_steps.append("hero_peak_massif")
+
+    if len(secondary_ridge) >= 2 and not river_specs:
+        await blender.send_command("terrain_spline_deform", {
+            "object_name": terrain_name,
+            "spline_points": secondary_ridge,
+            "mode": "raise",
+            "depth": max(height_scale * (0.09 if preset in mountain_like_presets else 0.07), 3.8),
+            "width": max(terrain_size * 0.16, 20.0),
+            "falloff": 0.94,
+            "samples_per_segment": 14,
+        })
+        await blender.send_command("terrain_spline_deform", {
+            "object_name": terrain_name,
+            "spline_points": secondary_ridge,
+            "mode": "smooth",
+            "depth": 0.0,
+            "width": max(terrain_size * 0.20, 26.0),
+            "falloff": 0.98,
+            "samples_per_segment": 14,
+        })
+        shape_steps.append("hero_secondary_ridge")
+
+    await blender.send_command("terrain_spline_deform", {
+        "object_name": terrain_name,
+        "spline_points": valley_curve,
+        "mode": "carve",
+        "depth": max(height_scale * 0.095, 3.4),
+        "width": max(terrain_size * 0.108 * river_valley_scale, 17.0),
+        "falloff": 0.92,
+        "samples_per_segment": 18,
+    })
+    shape_steps.append("hero_valley_cut")
+
+    floodplain_curve = [
+        [
+            float(point[0]),
+            float(point[1]),
+            float(point[2]) - max(height_scale * 0.028, 0.9),
+        ]
+        for point in valley_curve
+    ]
+    await blender.send_command("terrain_spline_deform", {
+        "object_name": terrain_name,
+        "spline_points": floodplain_curve,
+        "mode": "carve",
+        "width": max(terrain_size * 0.14 * river_valley_scale, 24.0 if river_specs else 20.0),
+        "depth": max(height_scale * 0.018, 0.75),
+        "falloff": 0.96,
+        "samples_per_segment": 18,
+    })
+    shape_steps.append("hero_valley_floor")
+    await blender.send_command("terrain_spline_deform", {
+        "object_name": terrain_name,
+        "spline_points": floodplain_curve,
+        "mode": "smooth",
+        "depth": 0.0,
+        "width": max(terrain_size * 0.28 * river_valley_scale, 40.0 if river_specs else 30.0),
+        "falloff": 0.995,
+        "samples_per_segment": 18,
+    })
+    shape_steps.append("hero_valley_smooth")
+    await blender.send_command("terrain_spline_deform", {
+        "object_name": terrain_name,
+        "spline_points": valley_curve,
+        "mode": "smooth",
+        "depth": 0.0,
+        "width": max(terrain_size * 0.18 * river_valley_scale, 26.0 if river_specs else 22.0),
+        "falloff": 0.985,
+        "samples_per_segment": 18,
+    })
+    shape_steps.append("hero_valley_feather")
+
+    return shape_steps
+
+
+def _terrain_review_material_key(terrain_preset: str) -> str:
+    preset = str(terrain_preset or "").strip().lower()
+    if preset in {"cliffs", "mountains", "volcanic", "canyon", "chaotic"}:
+        return "cliff_rock"
+    if preset in {"coastal"}:
+        return "wet_rock"
+    if preset in {"swamp"}:
+        return "mud"
+    return "dirt"
+
+
+def _terrain_review_biome_name(terrain_preset: str) -> str:
+    preset = str(terrain_preset or "").strip().lower()
+    if preset in {"mountains", "cliffs", "canyon", "volcanic", "chaotic"}:
+        return "mountain_pass_summer"
+    if preset == "coastal":
+        return "coastal"
+    if preset == "swamp":
+        return "corrupted_swamp"
+    return "grasslands"
+
+
+def _default_terrain_height_scale(
+    *,
+    terrain_preset: str,
+    terrain_size: float,
+    map_spec: dict[str, Any],
+) -> float:
+    """Return a more readable default terrain height scale for hero-map composition."""
+    preset = str(terrain_preset or "").strip().lower()
+    base = {
+        "mountains": 42.0,
+        "hills": 30.0,
+        "plains": 10.0,
+        "flat": 6.0,
+        "coastal": 24.0,
+        "swamp": 8.0,
+        "cliffs": 40.0,
+        "canyon": 38.0,
+        "volcanic": 44.0,
+        "chaotic": 46.0,
+    }.get(preset, 20.0)
+
+    water_cfg = map_spec.get("water", {}) if isinstance(map_spec, dict) else {}
+    has_rivers = bool(water_cfg.get("rivers"))
+    has_cave = any(
+        isinstance(location, dict)
+        and str(location.get("type", "")).strip().lower() == "cave"
+        for location in (map_spec.get("locations", []) if isinstance(map_spec, dict) else [])
+    )
+    has_road = bool(map_spec.get("roads")) if isinstance(map_spec, dict) else False
+
+    if preset in {"hills", "coastal"} and (has_rivers or has_cave or has_road):
+        base *= 1.22
+    if terrain_size >= 300.0:
+        base *= 1.08
+    return round(base, 3)
+
+
+def _default_cliff_overlay_setting(
+    *,
+    terrain_preset: str,
+    map_spec: dict[str, Any],
+) -> bool:
+    """Enable cliff overlays automatically when the requested composition needs them."""
+    preset = str(terrain_preset or "").strip().lower()
+    if preset in {"mountains", "cliffs", "canyon", "volcanic", "coastal", "chaotic"}:
+        return True
+    if any(
+        isinstance(location, dict)
+        and str(location.get("type", "")).strip().lower() == "cave"
+        for location in map_spec.get("locations", [])
+    ):
+        return True
+    water_cfg = map_spec.get("water", {})
+    if water_cfg.get("waterfalls"):
+        return True
+    return False
+
+
+def _distance_point_to_segment_2d(
+    px: float,
+    py: float,
+    ax: float,
+    ay: float,
+    bx: float,
+    by: float,
+) -> tuple[float, float, tuple[float, float]]:
+    """Return distance, segment t, and closest point from point->segment in 2D."""
+    abx = bx - ax
+    aby = by - ay
+    denom = abx * abx + aby * aby
+    if denom <= 1e-9:
+        return math.hypot(px - ax, py - ay), 0.0, (ax, ay)
+    t = ((px - ax) * abx + (py - ay) * aby) / denom
+    t = max(0.0, min(1.0, t))
+    qx = ax + abx * t
+    qy = ay + aby * t
+    return math.hypot(px - qx, py - qy), t, (qx, qy)
+
+
+def _move_point_outside_radius(
+    point: list[float],
+    *,
+    center_x: float,
+    center_y: float,
+    radius: float,
+    reference: tuple[float, float] | None = None,
+) -> list[float]:
+    """Push a 2D point just outside a circular exclusion radius."""
+    px = float(point[0])
+    py = float(point[1])
+    dx = px - center_x
+    dy = py - center_y
+    dist = math.hypot(dx, dy)
+    if dist <= 1e-6:
+        if reference is not None:
+            dx = px - float(reference[0])
+            dy = py - float(reference[1])
+            dist = math.hypot(dx, dy)
+        if dist <= 1e-6:
+            dx, dy, dist = 1.0, 0.0, 1.0
+    scale = (max(float(radius), 0.0) + 0.75) / dist
+    return [center_x + dx * scale, center_y + dy * scale]
+
+
+def _retarget_road_away_from_caves(
+    road: dict[str, Any],
+    cave_zones: list[dict[str, float]],
+) -> dict[str, Any]:
+    """Keep roads from terminating at cave mouths; downgrade them to trails nearby."""
+    if not cave_zones:
+        return dict(road)
+
+    raw_waypoints = road.get("waypoints", []) or []
+    adjusted = [
+        [float(waypoint[0]), float(waypoint[1])]
+        for waypoint in raw_waypoints
+        if isinstance(waypoint, (list, tuple)) and len(waypoint) >= 2
+    ]
+    if len(adjusted) < 2:
+        return dict(road)
+
+    trail_required = False
+    for zone in cave_zones:
+        center_x = float(zone["center_x"])
+        center_y = float(zone["center_y"])
+        radius = max(float(zone["radius"]), 1.0)
+
+        for idx, point in enumerate(list(adjusted)):
+            reference = None
+            if idx > 0:
+                reference = (adjusted[idx - 1][0], adjusted[idx - 1][1])
+            elif idx + 1 < len(adjusted):
+                reference = (adjusted[idx + 1][0], adjusted[idx + 1][1])
+            if math.hypot(point[0] - center_x, point[1] - center_y) < radius:
+                adjusted[idx] = _move_point_outside_radius(
+                    point,
+                    center_x=center_x,
+                    center_y=center_y,
+                    radius=radius,
+                    reference=reference,
+                )
+                trail_required = True
+
+        seg_index = 0
+        while seg_index < len(adjusted) - 1:
+            ax, ay = adjusted[seg_index]
+            bx, by = adjusted[seg_index + 1]
+            dist, _t, closest = _distance_point_to_segment_2d(
+                center_x,
+                center_y,
+                ax,
+                ay,
+                bx,
+                by,
+            )
+            if dist >= radius:
+                seg_index += 1
+                continue
+
+            trail_required = True
+            ox = closest[0] - center_x
+            oy = closest[1] - center_y
+            offset_len = math.hypot(ox, oy)
+            if offset_len <= 1e-6:
+                sx = bx - ax
+                sy = by - ay
+                side_len = math.hypot(sx, sy)
+                if side_len <= 1e-6:
+                    ox, oy, offset_len = 1.0, 0.0, 1.0
+                else:
+                    ox = -sy / side_len
+                    oy = sx / side_len
+                    offset_len = 1.0
+            detour_radius = radius + max(float(road.get("width", 3.0)) * 1.2, 2.5)
+            detour = [
+                center_x + (ox / offset_len) * detour_radius,
+                center_y + (oy / offset_len) * detour_radius,
+            ]
+            adjusted.insert(seg_index + 1, detour)
+            seg_index += 2
+
+    road_spec = dict(road)
+    road_spec["waypoints"] = adjusted
+    if trail_required:
+        road_spec["surface"] = "dirt_path"
+        road_spec["style"] = "trail"
+        road_spec["width"] = min(float(road.get("width", 3.0)), 2.1)
+        road_spec["force_mesh_overlay"] = False
+        road_spec["allow_bridges"] = False
+        road_spec["cave_path_adjusted"] = True
+    return road_spec
+
+
 async def _capture_aaa_screenshots(
     blender: BlenderConnection,
     *,
@@ -296,12 +1106,31 @@ async def _capture_aaa_screenshots(
     temp_dir: str | None = None,
     prefix: str = "aaa",
     object_name: str | None = None,
+    review_profile: str | None = None,
+    skip_beauty: bool = False,
 ) -> dict:
     """Render the shared AAA screenshot set used by visual verification gates."""
     import glob as _glob
     import tempfile as _tempfile
 
     angle_defs = _AAA_CAMERA_ANGLES[: max(1, min(int(angles), len(_AAA_CAMERA_ANGLES)))]
+    if str(review_profile or "").strip().lower() == "terrain":
+        terrain_pitch_overrides = {
+            "front": 18.0,
+            "back": 18.0,
+            "left": 17.0,
+            "right": 17.0,
+            "top": 82.0,
+            "ne_45": 24.0,
+            "nw_45": 24.0,
+            "sw_45": 22.0,
+            "se_45": 22.0,
+            "ground_level": 14.0,
+        }
+        angle_defs = [
+            (yaw, float(terrain_pitch_overrides.get(label, pitch)), label)
+            for yaw, pitch, label in angle_defs
+        ]
     safe_prefix = re.sub(r"[^A-Za-z0-9._-]+", "_", str(prefix or "aaa")).strip("_") or "aaa"
     target_dir = temp_dir or os.path.join(_tempfile.gettempdir(), f"vb_{safe_prefix}")
     os.makedirs(target_dir, exist_ok=True)
@@ -334,6 +1163,10 @@ async def _capture_aaa_screenshots(
                 "yaw": yaw,
                 "pitch": pitch,
                 "output_path": output_path,
+                "object_name": object_name,
+                "target_object": object_name,
+                "review_profile": review_profile,
+                "skip_beauty": skip_beauty,
             })
             if os.path.isfile(output_path):
                 screenshot_paths.append(output_path)
@@ -438,6 +1271,8 @@ async def _run_terrain_visual_gate(
         angles=len(_AAA_CAMERA_ANGLES),
         prefix=screenshot_prefix,
         object_name=object_name,
+        review_profile="terrain",
+        skip_beauty=True,
     )
     existing = capture["screenshots"]
     capture_errors = list(capture["capture_errors"])
@@ -1085,6 +1920,8 @@ def _lighting_preset_for_biome(biome_name: str) -> str:
         return "forest_review"
     if biome == "deep_forest":
         return "forest_review"
+    if biome.startswith("mountain_pass") or biome in {"coastal", "grasslands"}:
+        return "terrain_review"
     if biome in {"veil_crack_zone", "corrupted_swamp", "cemetery"}:
         return "veil_corrupted"
     return "forest_healthy"
@@ -1560,18 +2397,33 @@ async def _sample_terrain_height(
 import bpy
 from mathutils import Vector
 depsgraph = bpy.context.evaluated_depsgraph_get()
+obj = bpy.data.objects.get("{terrain_name}")
 origin = Vector(({x}, {y}, 10000.0))
 direction = Vector((0.0, 0.0, -1.0))
-hit, location, normal, face_index, hit_obj, matrix = bpy.context.scene.ray_cast(depsgraph, origin, direction)
-if hit and hit_obj and hit_obj.name == "{terrain_name}":
-    print(float(location.z))
-else:
+if obj is None:
     print(0.0)
+else:
+    eval_obj = obj.evaluated_get(depsgraph)
+    inv = eval_obj.matrix_world.inverted()
+    local_origin = inv @ origin
+    local_direction = (inv.to_3x3() @ direction).normalized()
+    hit, location, normal, face_index = eval_obj.ray_cast(local_origin, local_direction)
+    if hit:
+        world_location = eval_obj.matrix_world @ location
+        print(float(world_location.z))
+    else:
+        print(0.0)
 """.strip()
 
     try:
         result = await blender.send_command("execute_code", {"code": code})
-        output = str(result.get("result", {}).get("output", "")).strip()
+        output = ""
+        if isinstance(result, dict):
+            if result.get("output") is not None:
+                output = str(result.get("output", ""))
+            elif isinstance(result.get("result"), dict):
+                output = str(result.get("result", {}).get("output", ""))
+        output = output.strip()
         return float(output.splitlines()[-1]) if output else 0.0
     except (
         AttributeError,
@@ -1589,6 +2441,324 @@ else:
             exc_info=True,
         )
         return 0.0
+
+
+async def _sample_terrain_relief_profile(
+    blender: BlenderConnection,
+    terrain_name: str,
+    x: float,
+    y: float,
+    *,
+    radius: float,
+    sample_count: int = 8,
+    fallback_vector: tuple[float, float] = (0.0, 1.0),
+) -> dict[str, Any]:
+    """Sample local terrain relief and return the strongest uphill direction."""
+    center_height = await _sample_terrain_height(blender, terrain_name, x, y)
+    sample_count = max(int(sample_count), 4)
+    radius = max(float(radius), 1e-3)
+
+    weighted_x = 0.0
+    weighted_y = 0.0
+    highest_height = center_height
+    lowest_height = center_height
+    samples: list[dict[str, float]] = []
+
+    for index in range(sample_count):
+        angle = (math.tau * index) / float(sample_count)
+        sample_x = x + math.cos(angle) * radius
+        sample_y = y + math.sin(angle) * radius
+        sample_height = await _sample_terrain_height(blender, terrain_name, sample_x, sample_y)
+        delta = sample_height - center_height
+        weighted_x += math.cos(angle) * delta
+        weighted_y += math.sin(angle) * delta
+        highest_height = max(highest_height, sample_height)
+        lowest_height = min(lowest_height, sample_height)
+        samples.append({
+            "x": float(sample_x),
+            "y": float(sample_y),
+            "height": float(sample_height),
+        })
+
+    uphill_length = math.hypot(weighted_x, weighted_y)
+    if uphill_length <= 1e-6:
+        fallback_x, fallback_y = fallback_vector
+        fallback_length = math.hypot(fallback_x, fallback_y)
+        if fallback_length <= 1e-6:
+            fallback_x, fallback_y = 0.0, 1.0
+            fallback_length = 1.0
+        uphill_x = fallback_x / fallback_length
+        uphill_y = fallback_y / fallback_length
+    else:
+        uphill_x = weighted_x / uphill_length
+        uphill_y = weighted_y / uphill_length
+
+    return {
+        "center_height": float(center_height),
+        "highest_height": float(highest_height),
+        "lowest_height": float(lowest_height),
+        "relief_span": float(highest_height - lowest_height),
+        "uphill_vector": [float(uphill_x), float(uphill_y)],
+        "downhill_vector": [float(-uphill_x), float(-uphill_y)],
+        "samples": samples,
+    }
+
+
+async def _shape_hero_cave_ridge(
+    blender: BlenderConnection,
+    terrain_name: str,
+    *,
+    cave_name: str,
+    anchor_x: float,
+    anchor_y: float,
+    loc_radius: float,
+    entrance_width: float,
+    entrance_height: float,
+    terrain_location: tuple[float, float],
+) -> dict[str, Any]:
+    """Raise a short ridge/cliff lip to give the cave a readable mountain face."""
+    fallback_x = anchor_x - float(terrain_location[0])
+    fallback_y = anchor_y - float(terrain_location[1])
+    relief = await _sample_terrain_relief_profile(
+        blender,
+        terrain_name,
+        anchor_x,
+        anchor_y,
+        radius=max(entrance_width * 0.72, loc_radius * 0.55, 9.0),
+        sample_count=8,
+        fallback_vector=(fallback_x, fallback_y),
+    )
+    uphill_x, uphill_y = relief["uphill_vector"]
+    perp_x, perp_y = -uphill_y, uphill_x
+    ridge_offset = max(entrance_width * 0.82, loc_radius * 0.40, 5.2)
+    ridge_span = max(entrance_width * 2.9, loc_radius * 1.32, 14.0)
+    ridge_height = max(2.2, entrance_height * 0.44, relief["relief_span"] * 0.18)
+    ridge_height = min(ridge_height, max(entrance_height * 1.05, loc_radius * 0.30, 10.0))
+    ridge_center_x = anchor_x + uphill_x * ridge_offset
+    ridge_center_y = anchor_y + uphill_y * ridge_offset
+
+    await blender.send_command("terrain_spline_deform", {
+        "object_name": terrain_name,
+        "spline_points": [
+            [
+                ridge_center_x - perp_x * ridge_span * 0.48,
+                ridge_center_y - perp_y * ridge_span * 0.48,
+                relief["center_height"] + ridge_height * 0.45,
+            ],
+            [
+                ridge_center_x,
+                ridge_center_y,
+                relief["center_height"] + ridge_height,
+            ],
+            [
+                ridge_center_x + perp_x * ridge_span * 0.48,
+                ridge_center_y + perp_y * ridge_span * 0.48,
+                relief["center_height"] + ridge_height * 0.45,
+            ],
+        ],
+        "mode": "raise",
+        "falloff": 0.78,
+        "width": max(ridge_span * 0.74, entrance_width * 1.34),
+        "depth": max(ridge_height, 0.85),
+        "samples_per_segment": 12,
+    })
+
+    ridge_crest_height = await _sample_terrain_height(blender, terrain_name, ridge_center_x, ridge_center_y)
+    minimum_target = relief["center_height"] + max(0.35, min(ridge_height * 0.36, 1.4))
+    if ridge_crest_height < minimum_target and relief["relief_span"] < max(entrance_height * 0.48, 2.4):
+        raise RuntimeError(f"{cave_name}: ridge shaping did not raise the terrain enough")
+
+    relief["ridge_center"] = [float(ridge_center_x), float(ridge_center_y)]
+    relief["ridge_crest_height"] = float(ridge_crest_height)
+    return relief
+
+
+async def _temper_hero_peak_outliers(
+    blender: BlenderConnection,
+    terrain_name: str,
+    *,
+    percentile: float = 0.992,
+    blend: float = 0.76,
+    prominence_threshold: float = 5.5,
+    passes: int = 2,
+) -> dict[str, Any]:
+    """Pull isolated terrain spikes back toward local neighborhood height.
+
+    This runs inside Blender via ``execute_code`` so it can operate on the
+    current live terrain mesh without requiring a dedicated addon handler.
+    It tempers both isolated positive spikes and isolated negative pits.
+    """
+    percentile = max(0.90, min(float(percentile), 0.9995))
+    blend = max(0.05, min(float(blend), 0.98))
+    prominence_threshold = max(float(prominence_threshold), 0.25)
+    passes = max(1, min(int(passes), 5))
+
+    code = f"""
+import bpy, json
+obj = bpy.data.objects.get({terrain_name!r})
+if obj is None or getattr(obj, "type", "") != "MESH":
+    raise ValueError("Terrain mesh not found: " + {terrain_name!r})
+mesh = obj.data
+mesh.calc_loop_triangles()
+neighbor_map = [set() for _ in mesh.vertices]
+for poly in mesh.polygons:
+    verts = list(poly.vertices)
+    count = len(verts)
+    for idx, vert_index in enumerate(verts):
+        neighbor_map[vert_index].add(verts[(idx - 1) % count])
+        neighbor_map[vert_index].add(verts[(idx + 1) % count])
+expanded_neighbor_map = []
+for index, neighbors in enumerate(neighbor_map):
+    expanded = set(neighbors)
+    for neighbor_index in tuple(neighbors):
+        expanded.update(neighbor_map[neighbor_index])
+    expanded.discard(index)
+    expanded_neighbor_map.append(expanded)
+affected_total = 0
+threshold_value = None
+threshold_low = None
+for _ in range({passes}):
+    heights = [float(v.co.z) for v in mesh.vertices]
+    if not heights:
+        break
+    ordered = sorted(heights)
+    pos = (len(ordered) - 1) * {percentile}
+    lo = int(pos)
+    hi = min(lo + 1, len(ordered) - 1)
+    t = pos - lo
+    threshold_value = ordered[lo] * (1.0 - t) + ordered[hi] * t
+    low_pos = (len(ordered) - 1) * (1.0 - {percentile})
+    low_lo = int(low_pos)
+    low_hi = min(low_lo + 1, len(ordered) - 1)
+    low_t = low_pos - low_lo
+    threshold_low = ordered[low_lo] * (1.0 - low_t) + ordered[low_hi] * low_t
+    pending = {{}}
+    for index, vert in enumerate(mesh.vertices):
+        current_z = float(vert.co.z)
+        neighbors = expanded_neighbor_map[index] or neighbor_map[index]
+        if not neighbors:
+            continue
+        neighbor_heights = [float(mesh.vertices[n].co.z) for n in neighbors]
+        ordered_neighbors = sorted(neighbor_heights)
+        local_mean = sum(neighbor_heights) / len(neighbor_heights)
+        local_median = ordered_neighbors[len(ordered_neighbors) // 2]
+        local_max = max(neighbor_heights)
+        local_min = min(neighbor_heights)
+        prominence = current_z - local_median
+        if current_z > threshold_value:
+            if prominence < {prominence_threshold} or current_z <= local_max + {prominence_threshold} * 0.35:
+                continue
+            pending[index] = local_median + prominence * (1.0 - {blend})
+            continue
+        if current_z < threshold_low:
+            pit_depth = local_median - current_z
+            if pit_depth < {prominence_threshold} or current_z >= local_min - {prominence_threshold} * 0.55:
+                continue
+            pending[index] = local_median - pit_depth * (1.0 - {blend})
+    if not pending:
+        break
+    for index, new_z in pending.items():
+        mesh.vertices[index].co.z = new_z
+    affected_total += len(pending)
+mesh.update()
+print(json.dumps({{"affected_vertices": affected_total, "threshold_z": threshold_value, "threshold_low_z": threshold_low}}))
+"""
+    raw = await blender.send_command("execute_code", {"code": code})
+    output = raw.get("output") if isinstance(raw, dict) else raw
+    if isinstance(output, str) and output.strip():
+        try:
+            parsed = json.loads(output)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            pass
+    return {
+        "affected_vertices": 0,
+        "threshold_z": None,
+    }
+
+
+async def _stabilize_hero_terrain_patch(
+    blender: BlenderConnection,
+    terrain_name: str,
+    *,
+    center_x: float,
+    center_y: float,
+    radius: float,
+    floor_z: float | None = None,
+    ceiling_z: float | None = None,
+    blend: float = 0.82,
+) -> dict[str, Any]:
+    """Clamp catastrophic local terrain outliers inside a hero-feature patch."""
+    radius = max(float(radius), 0.5)
+    blend = max(0.05, min(float(blend), 1.0))
+    floor_expr = "None" if floor_z is None else repr(float(floor_z))
+    ceiling_expr = "None" if ceiling_z is None else repr(float(ceiling_z))
+    code = f"""
+import bpy, json, math
+
+def _smoothstep(value):
+    x = max(0.0, min(1.0, float(value)))
+    return x * x * (3.0 - 2.0 * x)
+
+obj = bpy.data.objects.get({terrain_name!r})
+if obj is None or getattr(obj, "type", "") != "MESH":
+    raise ValueError("Terrain mesh not found: " + {terrain_name!r})
+
+floor_z = {floor_expr}
+ceiling_z = {ceiling_expr}
+center_x = float({float(center_x)!r})
+center_y = float({float(center_y)!r})
+radius = float({radius!r})
+blend = float({blend!r})
+
+affected = 0
+min_before = None
+max_before = None
+min_after = None
+max_after = None
+for vert in obj.data.vertices:
+    world = obj.matrix_world @ vert.co
+    dx = float(world.x) - center_x
+    dy = float(world.y) - center_y
+    dist = math.hypot(dx, dy)
+    if dist > radius:
+        continue
+    falloff = 1.0 - _smoothstep(dist / max(radius, 1e-6))
+    current_z = float(vert.co.z)
+    target_z = current_z
+    if floor_z is not None and current_z < floor_z:
+        target_z = max(target_z, floor_z + (current_z - floor_z) * (1.0 - blend * falloff))
+    if ceiling_z is not None and target_z > ceiling_z:
+        target_z = min(target_z, ceiling_z + (target_z - ceiling_z) * (1.0 - blend * falloff))
+    if abs(target_z - current_z) <= 1e-6:
+        continue
+    min_before = current_z if min_before is None else min(min_before, current_z)
+    max_before = current_z if max_before is None else max(max_before, current_z)
+    vert.co.z = target_z
+    min_after = target_z if min_after is None else min(min_after, target_z)
+    max_after = target_z if max_after is None else max(max_after, target_z)
+    affected += 1
+
+obj.data.update()
+print(json.dumps({{
+    "affected_vertices": affected,
+    "min_before_z": min_before,
+    "max_before_z": max_before,
+    "min_after_z": min_after,
+    "max_after_z": max_after,
+}}))
+"""
+    raw = await blender.send_command("execute_code", {"code": code})
+    output = raw.get("output") if isinstance(raw, dict) else raw
+    if isinstance(output, str) and output.strip():
+        try:
+            parsed = json.loads(output)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            pass
+    return {"affected_vertices": 0}
 
 
 async def _position_generated_object(
@@ -3274,10 +4444,14 @@ async def asset_pipeline(
         map_seed = spec.get("seed", 42)
         budget = _resolve_map_generation_budget(spec)
         planned_locations = _plan_map_location_anchors(spec)
-        planned_cave_candidates = [
-            (float(planned["anchor"][0]), float(planned["anchor"][1]), 0.0)
+        planned_cave_locations = [
+            planned
             for planned in planned_locations
             if str(planned.get("source", {}).get("type", "")).strip().lower() == "cave"
+        ]
+        planned_cave_candidates = [
+            (float(planned["anchor"][0]), float(planned["anchor"][1]), 0.0)
+            for planned in planned_cave_locations
         ]
         steps_completed: list[str] = []
         steps_failed: list[dict] = []
@@ -3285,11 +4459,16 @@ async def asset_pipeline(
         created_objects: list[str] = []
         location_results: list[dict] = []
         interior_results: list[dict] = []
+        hero_cliff_shaped_caves: set[str] = set()
+        hero_cave_anchor_overrides: dict[str, dict[str, float]] = {}
+        deferred_river_surfaces: list[dict[str, Any]] = []
+        deferred_water_body: dict[str, Any] | None = None
         terrain_visual_verification: dict[str, Any] | None = None
         terrain_cfg = spec.get("terrain", {})
         terrain_result_payload: dict[str, Any] | None = None
         terrain_size = float(terrain_cfg.get("size", 200.0))
         terrain_location = tuple(terrain_cfg.get("location", (0.0, 0.0)))[:2]
+        terrain_preset = str(terrain_cfg.get("preset", "hills")).strip().lower()
         auto_export_unity = bool(
             spec.get("auto_export_unity")
             or spec.get("unity_export_approved")
@@ -3331,6 +4510,8 @@ async def asset_pipeline(
                     created_objects = ckpt.get("created_objects", [])
                     location_results = ckpt.get("location_results", [])
                     interior_results = ckpt.get("interior_results", [])
+                    deferred_river_surfaces = list(ckpt.get("deferred_river_surfaces", []) or [])
+                    deferred_water_body = ckpt.get("deferred_water_body")
                     _CHKPT_LOADED = True
 
         def _save_chkpt():
@@ -3352,6 +4533,8 @@ async def asset_pipeline(
                 "created_objects": created_objects,
                 "location_results": location_results,
                 "interior_results": interior_results,
+                "deferred_river_surfaces": deferred_river_surfaces,
+                "deferred_water_body": deferred_water_body,
                 "params_snapshot": {"terrain_size": terrain_size, "seed": map_seed},
             })
 
@@ -3360,6 +4543,315 @@ async def asset_pipeline(
             message = f"{step}{target}: {error}"
             logger.warning("compose_map warning: %s", message)
             pipeline_warnings.append(message)
+
+        async def _verify_basin_depth(
+            *,
+            basin_center: list[float],
+            resolved_water_level: float,
+            basin_depth: float,
+            basin_radius: float,
+            shore_width: float,
+            aspect_y: float,
+        ) -> None:
+            target_floor = float(resolved_water_level) - max(float(basin_depth) * 0.38, 0.9)
+            basin_floor_height = await _sample_terrain_height(
+                blender,
+                terrain_name,
+                float(basin_center[0]),
+                float(basin_center[1]),
+            )
+            if basin_floor_height <= target_floor:
+                return
+            await blender.send_command("env_carve_water_basin", {
+                "terrain_name": terrain_name,
+                "center": basin_center,
+                "water_level": resolved_water_level,
+                "radius": basin_radius,
+                "depth": max(basin_depth * 1.28, basin_depth + 1.0),
+                "shore_width": max(shore_width, basin_radius * 0.82),
+                "aspect_y": aspect_y,
+            })
+            basin_floor_height = await _sample_terrain_height(
+                blender,
+                terrain_name,
+                float(basin_center[0]),
+                float(basin_center[1]),
+            )
+            if basin_floor_height > target_floor:
+                raise RuntimeError(
+                    f"water basin floor remained too shallow ({basin_floor_height:.2f} > {target_floor:.2f})"
+                )
+
+        async def _verify_basin_inlet_depth(
+            *,
+            river_tail: list[float],
+            basin_entry: tuple[float, float],
+            resolved_water_level: float,
+            basin_depth: float,
+            river_width: float,
+        ) -> None:
+            target_height = float(resolved_water_level) - max(float(basin_depth) * 0.16, 0.45)
+            sample_points = [
+                (
+                    float(river_tail[0]) * (1.0 - t) + float(basin_entry[0]) * t,
+                    float(river_tail[1]) * (1.0 - t) + float(basin_entry[1]) * t,
+                )
+                for t in (0.0, 0.35, 0.7, 1.0)
+            ]
+            sampled_heights = [
+                await _sample_terrain_height(blender, terrain_name, sample_x, sample_y)
+                for sample_x, sample_y in sample_points
+            ]
+            if max(sampled_heights) <= target_height:
+                return
+            await blender.send_command("terrain_spline_deform", {
+                "object_name": terrain_name,
+                "spline_points": [
+                    [float(river_tail[0]), float(river_tail[1]), target_height],
+                    [
+                        float(river_tail[0]) * 0.55 + float(basin_entry[0]) * 0.45,
+                        float(river_tail[1]) * 0.55 + float(basin_entry[1]) * 0.45,
+                        target_height - max(basin_depth * 0.08, 0.15),
+                    ],
+                    [float(basin_entry[0]), float(basin_entry[1]), target_height - max(basin_depth * 0.12, 0.24)],
+                ],
+                "mode": "carve",
+                "width": max(float(river_width) * 2.8, 12.0),
+                "depth": max(float(basin_depth) * 0.90, 1.6),
+                "falloff": 0.92,
+            })
+            resampled = [
+                await _sample_terrain_height(blender, terrain_name, sample_x, sample_y)
+                for sample_x, sample_y in sample_points
+            ]
+            inlet_gap = max(resampled) - target_height
+            if inlet_gap <= max(float(basin_depth) * 0.20, 1.2):
+                return
+            if max(resampled) > target_height:
+                raise RuntimeError(
+                    f"water basin inlet remained too high ({max(resampled):.2f} > {target_height:.2f})"
+                )
+
+        async def _verify_basin_rim_containment(
+            *,
+            rim_points: list[list[float]],
+            resolved_water_level: float,
+            bank_raise: float,
+            basin_radius: float,
+        ) -> None:
+            """Ensure the basin rim stays above the final water plane outside the inlet gap."""
+            if len(rim_points) < 4:
+                return
+
+            target_rim_height = float(resolved_water_level) + max(float(bank_raise) * 0.45, 0.75)
+            sampled_heights = [
+                await _sample_terrain_height(blender, terrain_name, float(point[0]), float(point[1]))
+                for point in rim_points[:-1]
+            ]
+            if min(sampled_heights) >= target_rim_height:
+                return
+
+            await blender.send_command("terrain_spline_deform", {
+                "object_name": terrain_name,
+                "spline_points": rim_points,
+                "mode": "raise",
+                "depth": max(float(bank_raise) * 1.18, 2.8),
+                "width": max(float(basin_radius) * 0.24, 5.8),
+                "falloff": 0.90,
+            })
+            resampled = [
+                await _sample_terrain_height(blender, terrain_name, float(point[0]), float(point[1]))
+                for point in rim_points[:-1]
+            ]
+            if min(resampled) < target_rim_height:
+                raise RuntimeError(
+                    f"water basin rim remained too low ({min(resampled):.2f} < {target_rim_height:.2f})"
+                )
+
+        async def _reproject_river_surface_to_terrain(
+            surface_points: list[list[float]] | list[tuple[float, float, float]],
+            bed_points: list[list[float]] | list[tuple[float, float, float]] | None,
+            *,
+            min_water_depth: float,
+            terminal_water_level: float | None = None,
+        ) -> tuple[list[list[float]], list[list[float]]]:
+            """Resample a deferred river against the final terrain bed before mesh emission."""
+            cleaned_surface = [
+                [float(point[0]), float(point[1]), float(point[2])]
+                for point in (surface_points or [])
+                if isinstance(point, (list, tuple)) and len(point) >= 3
+            ]
+            cleaned_bed = [
+                [float(point[0]), float(point[1]), float(point[2])]
+                for point in (bed_points or cleaned_surface)
+                if isinstance(point, (list, tuple)) and len(point) >= 3
+            ]
+            count = min(len(cleaned_surface), len(cleaned_bed))
+            if count < 2 or not terrain_name:
+                return cleaned_surface, cleaned_bed
+
+            conformed_surface: list[list[float]] = []
+            conformed_bed: list[list[float]] = []
+            previous_surface_z: float | None = None
+            water_depth_floor = max(float(min_water_depth), 0.55)
+
+            for index in range(count):
+                sx, sy, sz = cleaned_surface[index]
+                bx, by, bz = cleaned_bed[index]
+                try:
+                    sampled_bed_z = float(await _sample_terrain_height(blender, terrain_name, bx, by))
+                except Exception as sample_exc:
+                    logger.debug(
+                        "Deferred river reprojection falling back to stored bed height for %s: %s",
+                        terrain_name,
+                        sample_exc,
+                        exc_info=True,
+                    )
+                    sampled_bed_z = float(bz)
+                if abs(sampled_bed_z) <= 1e-6 and abs(float(bz)) > 1e-6:
+                    sampled_bed_z = float(bz)
+                water_column = max(float(sz) - float(bz), water_depth_floor)
+                surface_z = sampled_bed_z + water_column
+                if previous_surface_z is not None:
+                    surface_z = min(surface_z, previous_surface_z - 0.015)
+                conformed_bed.append([bx, by, sampled_bed_z])
+                conformed_surface.append([sx, sy, surface_z])
+                previous_surface_z = surface_z
+
+            if terminal_water_level is not None:
+                conformed_surface = _blend_path_points_to_terminal_water_level(
+                    conformed_surface,
+                    float(terminal_water_level),
+                )
+            return conformed_surface, conformed_bed
+
+        async def _emit_deferred_water_surfaces() -> None:
+            """Create visible water only after all terrain mutations are complete."""
+            nonlocal deferred_river_surfaces, deferred_water_body
+
+            for pending in deferred_river_surfaces:
+                try:
+                    river_step = f"river_water_{int(pending['index'])}"
+                    if river_step in steps_completed:
+                        continue
+                    path_points, bed_points = await _reproject_river_surface_to_terrain(
+                        pending.get("path_points", []),
+                        pending.get("bed_points"),
+                        min_water_depth=float(pending.get("min_water_depth", 0.9)),
+                        terminal_water_level=(
+                            float(pending["terminal_water_level"])
+                            if pending.get("terminal_water_level") is not None
+                            else None
+                        ),
+                    )
+                    await blender.send_command(
+                        "env_create_water",
+                        {
+                            "name": pending["name"],
+                            "terrain_name": terrain_name,
+                            "path_points": path_points,
+                            "water_level": float(pending["water_level"]),
+                            "width": float(pending["width"]),
+                            "cross_sections": int(pending.get("cross_sections", 18)),
+                            "preview_fast": False,
+                            "preserve_path_shape": True,
+                            "surface_only": True,
+                        },
+                    )
+                    steps_completed.append(river_step)
+                    if pending["name"] not in created_objects:
+                        created_objects.append(pending["name"])
+                except Exception as river_emit_exc:
+                    steps_failed.append(
+                        {
+                            "step": f"river_water_{pending.get('index', 'unknown')}",
+                            "error": str(river_emit_exc),
+                        }
+                    )
+
+            if deferred_water_body and "water_plane" not in steps_completed:
+                try:
+                    await blender.send_command(
+                        "env_create_water",
+                        {
+                            "name": deferred_water_body["name"],
+                            "terrain_name": terrain_name,
+                            "water_level": float(deferred_water_body["water_level"]),
+                            "preview_fast": False,
+                            "mask_center": deferred_water_body["mask_center"],
+                            "mask_radius": float(deferred_water_body["mask_radius"]),
+                            "mask_aspect_y": float(deferred_water_body.get("mask_aspect_y", 1.0)),
+                            "surface_only": True,
+                        },
+                    )
+                    steps_completed.append("water_plane")
+                    if deferred_water_body["name"] not in created_objects:
+                        created_objects.append(deferred_water_body["name"])
+                except Exception as water_emit_exc:
+                    steps_failed.append({"step": "water_plane", "error": str(water_emit_exc)})
+
+        async def _generate_roads_after_terrain_mutations() -> None:
+            """Generate roads only after caves/locations finish editing terrain."""
+            cave_road_zones = []
+            for planned in planned_locations:
+                if str(planned.get("source", {}).get("type", "")).strip().lower() != "cave":
+                    continue
+                cave_name = str(planned.get("name") or planned.get("source", {}).get("name") or "")
+                override = hero_cave_anchor_overrides.get(cave_name)
+                center_x = float(override.get("x", planned["anchor"][0])) if override else float(planned["anchor"][0])
+                center_y = float(override.get("y", planned["anchor"][1])) if override else float(planned["anchor"][1])
+                cave_road_zones.append(
+                    {
+                        "center_x": center_x,
+                        "center_y": center_y,
+                        "radius": max(
+                            float(planned.get("radius", 15.0)) * 1.55,
+                            float(planned.get("source", {}).get("entrance_width", 0.0)) * 2.3,
+                            12.0,
+                        ),
+                    }
+                )
+
+            completed_roads = {s for s in steps_completed if s.startswith("road_")}
+            for i, road in enumerate(spec.get("roads", [])):
+                if f"road_{i}" in completed_roads:
+                    continue
+                try:
+                    road_spec = _retarget_road_away_from_caves(road, cave_road_zones)
+                    road_surface = str(
+                        road_spec.get("surface", road_spec.get("style", "trail"))
+                    ).strip().lower()
+                    low_profile_surface = road_surface in {"trail", "path", "dirt_path", "dirt"}
+                    waypoints = [
+                        list(
+                            _map_point_to_terrain_cell(
+                                waypoint,
+                                terrain_size=terrain_size,
+                                resolution=terrain_resolution,
+                                terrain_location=terrain_location,
+                            )
+                        )
+                        for waypoint in road_spec.get("waypoints", [])
+                        if isinstance(waypoint, (list, tuple)) and len(waypoint) >= 2
+                    ]
+                    if len(waypoints) < 2:
+                        raise ValueError("Road generation requires at least two waypoints")
+                    await blender.send_command(
+                        "env_generate_road",
+                        {
+                            "terrain_name": terrain_name,
+                            "waypoints": waypoints,
+                            "width": road_spec.get("width", 3),
+                            "surface": road_surface,
+                            "water_level": water_cfg.get("water_level"),
+                            "force_mesh_overlay": bool(road_spec.get("force_mesh_overlay", False)),
+                            "allow_bridges": bool(road_spec.get("allow_bridges", not low_profile_surface)),
+                            "seed": map_seed + 100 + i,
+                        },
+                    )
+                    steps_completed.append(f"road_{i}")
+                except Exception as road_exc:
+                    steps_failed.append({"step": f"road_{i}", "error": str(road_exc)})
 
         # --- Step 1: Clear scene ---
         if "scene_cleared" not in steps_completed:
@@ -3374,24 +4866,37 @@ async def asset_pipeline(
         terrain_name = f"{map_name}_Terrain"
         if "terrain_generated" not in steps_completed:
             try:
-                # Fix H1: route through TerrainPassController for contract
-                # enforcement (macro_world -> structural_masks -> erosion ->
-                # validation_minimal).  Legacy path remains as fallback.
-                # Fix L2: pass object_location so the terrain mesh is placed
-                # at the correct world-space position matching terrain_location.
                 _terrain_loc_3d = (
                     (terrain_location[0], terrain_location[1], 0.0)
                     if terrain_location != (0.0, 0.0) else (0.0, 0.0, 0.0)
                 )
-                _terrain_result = await blender.send_command("env_generate_terrain", {
+                terrain_params = {
                     "name": terrain_name,
-                    "terrain_type": terrain_cfg.get("preset", "hills"),
+                    "terrain_type": terrain_preset,
                     "resolution": terrain_resolution,
-                    "height_scale": terrain_cfg.get("height_scale", 20.0),
+                    "height_scale": float(
+                        terrain_cfg.get(
+                            "height_scale",
+                            _default_terrain_height_scale(
+                                terrain_preset=terrain_preset,
+                                terrain_size=terrain_size,
+                                map_spec=spec,
+                            ),
+                        )
+                    ),
                     "scale": terrain_size,
                     "seed": map_seed,
                     "erosion": "hydraulic" if terrain_cfg.get("erosion", True) else "none",
                     "erosion_iterations": terrain_cfg.get("erosion_iterations", 5000),
+                    "cliff_overlays": bool(
+                        terrain_cfg.get(
+                            "cliff_overlays",
+                            _default_cliff_overlay_setting(
+                                terrain_preset=terrain_preset,
+                                map_spec=spec,
+                            ),
+                        )
+                    ),
                     "use_controller": True,
                     "object_location": list(_terrain_loc_3d),
                     "scene_read": {
@@ -3399,7 +4904,16 @@ async def asset_pipeline(
                         "reviewer": "compose_map",
                         "cave_candidates": [list(c) for c in planned_cave_candidates],
                     } if planned_cave_candidates else None,
-                })
+                }
+                try:
+                    _terrain_result = await blender.send_command(
+                        "env_generate_terrain",
+                        {**terrain_params, "use_controller": True},
+                    )
+                except Exception as controller_exc:
+                    raise RuntimeError(
+                        f"TerrainPassController generation failed: {controller_exc}"
+                    ) from controller_exc
                 if (
                     isinstance(_terrain_result, dict)
                     and _terrain_result.get("status") not in (None, "success")
@@ -3408,11 +4922,111 @@ async def asset_pipeline(
                         _terrain_result.get("error", "env_generate_terrain returned non-success status")
                     )
                 terrain_result_payload = _terrain_result if isinstance(_terrain_result, dict) else None
+                if (
+                    isinstance(terrain_result_payload, dict)
+                    and terrain_result_payload.get("controller_used") is False
+                ):
+                    terrain_result_payload["controller_fallback_used"] = True
                 steps_completed.append("terrain_generated")
                 created_objects.append(terrain_name)
+                try:
+                    await blender.send_command("material_create_procedural", {
+                        "object_name": terrain_name,
+                        "material_key": _terrain_review_material_key(terrain_cfg.get("preset", "hills")),
+                        "name": f"{terrain_name}_Review",
+                    })
+                    steps_completed.append("terrain_review_material")
+                except Exception as material_exc:
+                    _record_pipeline_warning("terrain_review_material", material_exc, object_name=terrain_name)
+                if "hero_terrain_shaped" not in steps_completed:
+                    try:
+                        cave_anchor_hint = None
+                        if planned_cave_candidates:
+                            cave_anchor_hint = (
+                                float(planned_cave_candidates[0][0]),
+                                float(planned_cave_candidates[0][1]),
+                            )
+                        hero_steps = await _apply_hero_mountain_shaping(
+                            blender,
+                            terrain_name=terrain_name,
+                            map_spec=spec,
+                            terrain_size=terrain_size,
+                            terrain_location=terrain_location,
+                            terrain_preset=terrain_preset,
+                            height_scale=float(terrain_params["height_scale"]),
+                            cave_anchor=cave_anchor_hint,
+                        )
+                        if hero_steps:
+                            steps_completed.extend(hero_steps)
+                        try:
+                            spike_cleanup = await _temper_hero_peak_outliers(
+                                blender,
+                                terrain_name,
+                                percentile=0.991,
+                                blend=0.78,
+                                prominence_threshold=max(float(terrain_params["height_scale"]) * 0.085, 5.2),
+                                passes=2,
+                            )
+                            if int(spike_cleanup.get("affected_vertices", 0)) > 0:
+                                steps_completed.append("hero_peak_cleanup")
+                        except Exception as spike_cleanup_exc:
+                            _record_pipeline_warning("hero_peak_cleanup", spike_cleanup_exc, object_name=terrain_name)
+                        if hero_steps:
+                            steps_completed.append("hero_terrain_shaped")
+                    except Exception as hero_shape_exc:
+                        _record_pipeline_warning("hero_terrain_shaping", hero_shape_exc, object_name=terrain_name)
                 _save_chkpt()
             except Exception as e:
                 steps_failed.append({"step": "terrain", "error": str(e)})
+
+        # --- Step 2.5: Hero cliff shaping ---
+        if "terrain_generated" in steps_completed and terrain_name and planned_cave_locations:
+            for i, planned in enumerate(planned_cave_locations):
+                cave_source = planned.get("source", {})
+                cave_name = str(planned.get("name") or cave_source.get("name") or f"Cave_{i}")
+                anchor_x, anchor_y = planned["anchor"]
+                loc_radius = float(planned.get("radius", 15.0))
+                entrance_width = float(cave_source.get("entrance_width", max(5.5, loc_radius * 0.34)))
+                entrance_height = float(cave_source.get("entrance_height", max(4.2, loc_radius * 0.24)))
+                try:
+                    retargeted_anchor = await _retarget_cave_anchor_to_relief(
+                        blender,
+                        terrain_name,
+                        anchor_x=float(anchor_x),
+                        anchor_y=float(anchor_y),
+                        terrain_size=terrain_size,
+                        terrain_location=terrain_location,
+                        search_radius=max(loc_radius * 0.72, entrance_width * 1.55, 12.0),
+                        sample_radius=max(entrance_width * 0.88, 7.5),
+                    )
+                    hero_cave_anchor_overrides[cave_name] = {
+                        "x": float(retargeted_anchor["x"]),
+                        "y": float(retargeted_anchor["y"]),
+                        "z": float(retargeted_anchor["z"]),
+                        "outward_x": float(retargeted_anchor.get("outward_x", 0.0)),
+                        "outward_y": float(retargeted_anchor.get("outward_y", 1.0)),
+                        "slope_drop": float(retargeted_anchor.get("slope_drop", 0.0)),
+                    }
+                    await _shape_hero_cave_ridge(
+                        blender,
+                        terrain_name,
+                        cave_name=cave_name,
+                        anchor_x=float(retargeted_anchor["x"]),
+                        anchor_y=float(retargeted_anchor["y"]),
+                        loc_radius=loc_radius,
+                        entrance_width=entrance_width,
+                        entrance_height=entrance_height,
+                        terrain_location=terrain_location,
+                    )
+                    hero_cliff_shaped_caves.add(cave_name)
+                    steps_completed.append(f"hero_cliff_{cave_name}")
+                except Exception as ridge_exc:
+                    override = hero_cave_anchor_overrides.get(cave_name)
+                    if override is not None and float(override.get("slope_drop", 0.0)) >= max(entrance_height * 0.28, 1.9):
+                        hero_cliff_shaped_caves.add(cave_name)
+                        _record_pipeline_warning("hero_cliff_shaping_soft_accept", ridge_exc, object_name=cave_name)
+                    else:
+                        _record_pipeline_warning("hero_cliff_shaping", ridge_exc, object_name=cave_name)
 
         if "terrain_generated" not in steps_completed:
             early_result = {
@@ -3467,11 +5081,23 @@ async def asset_pipeline(
         # --- Step 3: Water bodies ---
         water_cfg = spec.get("water", {})
         if water_cfg:
+            terminal_water_plane_level: float | None = None
+            terminal_river_point: list[float] | None = None
+            terminal_prev_point: list[float] | None = None
+            terminal_basin_center: list[float] | None = None
+            terminal_basin_radius: float | None = None
+            terminal_basin_aspect_y = 1.35
+            pending_river_surfaces: list[dict[str, Any]] = []
             # Rivers
             for i, river in enumerate(water_cfg.get("rivers", [])):
                 if f"river_{i}" in steps_completed:
                     continue
                 try:
+                    river_width_m = max(float(river.get("width", 5.0)), 4.0)
+                    river_depth_m = max(
+                        float(river.get("depth", max(river_width_m * 0.9, terrain_size * 0.012, 3.0))),
+                        1.6,
+                    )
                     source = _map_point_to_terrain_cell(
                         river.get("source", [10, 10]),
                         terrain_size=terrain_size,
@@ -3484,12 +5110,23 @@ async def asset_pipeline(
                         resolution=terrain_resolution,
                         terrain_location=terrain_location,
                     )
+                    river_waypoints = [
+                        list(_map_point_to_terrain_cell(
+                            waypoint,
+                            terrain_size=terrain_size,
+                            resolution=terrain_resolution,
+                            terrain_location=terrain_location,
+                        ))
+                        for waypoint in river.get("waypoints", [])
+                        if isinstance(waypoint, (list, tuple)) and len(waypoint) >= 2
+                    ]
                     river_result = await blender.send_command("env_carve_river", {
                         "terrain_name": terrain_name,
                         "source": list(source),
                         "destination": list(destination),
-                        "width": river.get("width", 5),
-                        "depth": river.get("depth", 2.0),
+                        "waypoints": river_waypoints,
+                        "width": max(2, int(round(river_width_m))),
+                        "depth": river_depth_m,
                         "seed": map_seed + i,
                     })
                     steps_completed.append(f"river_{i}")
@@ -3498,70 +5135,314 @@ async def asset_pipeline(
                         river_path_points = list(river_result.get("path_points", []) or [])
                     if len(river_path_points) >= 2:
                         river_water_name = f"{map_name}_River_{i}"
-                        river_water_level = river.get("water_level")
-                        if river_water_level is None:
-                            river_water_level = water_cfg.get("water_level")
-                        if river_water_level is None:
-                            river_water_level = river_path_points[0][2]
-                        await blender.send_command("env_create_water", {
+                        configured_water_level = water_cfg.get("water_level")
+                        explicit_river_water_level = river.get("water_level")
+                        min_water_depth = max(river_depth_m * 0.42, 0.9)
+                        river_bed_points = []
+                        if isinstance(river_result, dict):
+                            river_bed_points = list(river_result.get("bed_points", []) or [])
+                        if len(river_bed_points) < len(river_path_points):
+                            river_bed_points = [
+                                [float(point[0]), float(point[1]), float(point[2]) - min_water_depth]
+                                for point in river_path_points
+                            ]
+                        if len(river_path_points) >= 4:
+                            river_path_points = _chaikin_smooth_path_points(river_path_points, passes=2)
+                        if len(river_bed_points) >= 4:
+                            river_bed_points = _chaikin_smooth_path_points(river_bed_points, passes=2)
+                        river_water_level = (
+                            float(explicit_river_water_level)
+                            if explicit_river_water_level is not None
+                            else float(river_path_points[-1][2])
+                        )
+                        if explicit_river_water_level is not None:
+                            river_path_points = _blend_path_points_to_terminal_water_level(
+                                river_path_points,
+                                river_water_level,
+                            )
+                        terminal_river_point = list(river_path_points[-1])
+                        terminal_prev_point = list(river_path_points[-2])
+                        terminal_water_plane_level = (
+                            float(configured_water_level)
+                            if configured_water_level is not None
+                            else float(river_path_points[-1][2])
+                        )
+                        pending_river_surfaces.append({
+                            "index": i,
                             "name": river_water_name,
-                            "terrain_name": terrain_name,
                             "path_points": river_path_points,
-                            "water_level": river_water_level,
-                            "width": max(float(river.get("width", 5)), 2.0),
-                            "preview_fast": True,
+                            "bed_points": river_bed_points,
+                            "water_level": float(river_water_level),
+                            "width": max(river_width_m * 1.18, 3.0),
+                            "cross_sections": 18,
+                            "min_water_depth": min_water_depth,
+                            "terminal_water_level": None,
                         })
-                        steps_completed.append(f"river_water_{i}")
-                        created_objects.append(river_water_name)
                 except Exception as e:
                     steps_failed.append({"step": f"river_{i}", "error": str(e)})
 
             # Water level (lakes/ocean)
             if "water_level" in water_cfg and "water_plane" not in steps_completed:
                 try:
-                    await blender.send_command("env_create_water", {
+                    configured_water_level = water_cfg.get("water_level")
+                    resolved_water_level = (
+                        float(configured_water_level)
+                        if configured_water_level is not None
+                        else terminal_water_plane_level
+                    )
+                    if resolved_water_level is None:
+                        resolved_water_level = float(water_cfg["water_level"])
+                    if (
+                        terminal_river_point is not None
+                        and terminal_prev_point is not None
+                        and "water_basin" not in steps_completed
+                    ):
+                        flow_dx = float(terminal_river_point[0]) - float(terminal_prev_point[0])
+                        flow_dy = float(terminal_river_point[1]) - float(terminal_prev_point[1])
+                        flow_len = max((flow_dx * flow_dx + flow_dy * flow_dy) ** 0.5, 1e-6)
+                        flow_dx /= flow_len
+                        flow_dy /= flow_len
+                        river_width = max(
+                            float((water_cfg.get("rivers") or [{}])[0].get("width", 6.0)),
+                            4.0,
+                        )
+                        basin_radius = max(
+                            float(water_cfg.get("basin_radius", max(river_width * 2.6, terrain_size * 0.062, 12.0))),
+                            10.0,
+                        )
+                        basin_depth = max(
+                            float(water_cfg.get("basin_depth", max(river_width * 0.34, terrain_size * 0.010, 2.4))),
+                            1.2,
+                        )
+                        basin_center_override = water_cfg.get("basin_center")
+                        if isinstance(basin_center_override, (list, tuple)) and len(basin_center_override) >= 2:
+                            basin_center = [
+                                float(basin_center_override[0]),
+                                float(basin_center_override[1]),
+                            ]
+                        else:
+                            basin_center = [
+                                float(terminal_river_point[0]) + flow_dx * basin_radius * 0.3,
+                                float(terminal_river_point[1]) + flow_dy * basin_radius * 0.24,
+                            ]
+                        basin_margin = max(basin_radius * 0.92, 18.0)
+                        basin_center[0] = max(-terrain_size * 0.5 + basin_margin, min(terrain_size * 0.5 - basin_margin, basin_center[0]))
+                        basin_center[1] = max(-terrain_size * 0.5 + basin_margin, min(terrain_size * 0.5 - basin_margin, basin_center[1]))
+                        if terminal_prev_point is not None:
+                            try:
+                                inlet_mid_x = (
+                                    float(terminal_river_point[0]) * 0.58
+                                    + basin_center[0] * 0.42
+                                )
+                                inlet_mid_y = (
+                                    float(terminal_river_point[1]) * 0.58
+                                    + basin_center[1] * 0.42
+                                )
+                                await blender.send_command("terrain_spline_deform", {
+                                    "object_name": terrain_name,
+                                    "spline_points": [
+                                        [float(terminal_prev_point[0]), float(terminal_prev_point[1]), resolved_water_level - basin_depth * 0.12],
+                                        [float(terminal_river_point[0]), float(terminal_river_point[1]), resolved_water_level - basin_depth * 0.18],
+                                        [inlet_mid_x, inlet_mid_y, resolved_water_level - basin_depth * 0.24],
+                                        [basin_center[0], basin_center[1], resolved_water_level - basin_depth * 0.30],
+                                    ],
+                                    "mode": "carve",
+                                    "width": max(basin_radius * 0.78, river_width * 2.2),
+                                    "depth": max(basin_depth * 0.92, 1.4),
+                                    "falloff": 0.90,
+                                })
+                            except Exception as basin_shelf_exc:
+                                _record_pipeline_warning("water_basin_inlet", basin_shelf_exc, object_name=terrain_name)
+                        lobe_offsets = [
+                            (
+                                basin_center[0] - flow_dy * basin_radius * 0.58 + flow_dx * basin_radius * 0.14,
+                                basin_center[1] + flow_dx * basin_radius * 0.58 + flow_dy * basin_radius * 0.14,
+                                basin_radius * 0.62,
+                                basin_depth * 0.72,
+                            ),
+                            (
+                                basin_center[0] + flow_dy * basin_radius * 0.42 + flow_dx * basin_radius * 0.28,
+                                basin_center[1] - flow_dx * basin_radius * 0.42 + flow_dy * basin_radius * 0.28,
+                                basin_radius * 0.48,
+                                basin_depth * 0.58,
+                            ),
+                        ]
+                        for lobe_index, (lobe_x, lobe_y, lobe_radius, lobe_depth) in enumerate(lobe_offsets):
+                            try:
+                                await blender.send_command("env_carve_water_basin", {
+                                    "terrain_name": terrain_name,
+                                    "center": [lobe_x, lobe_y],
+                                    "water_level": resolved_water_level,
+                                    "radius": max(lobe_radius, 6.0),
+                                    "depth": max(lobe_depth, 1.1),
+                                    "shore_width": max(basin_radius * 0.72, 10.0),
+                                    "aspect_y": terminal_basin_aspect_y,
+                                })
+                            except Exception as basin_lobe_exc:
+                                _record_pipeline_warning(
+                                    f"water_basin_lobe_{lobe_index}",
+                                    basin_lobe_exc,
+                                    object_name=terrain_name,
+                                )
+                        await blender.send_command("env_carve_water_basin", {
+                            "terrain_name": terrain_name,
+                            "center": basin_center,
+                            "water_level": resolved_water_level,
+                            "radius": basin_radius,
+                            "depth": basin_depth,
+                            "shore_width": max(float(water_cfg.get("shore_width", basin_radius * 1.55)), basin_radius * 0.72),
+                            "aspect_y": terminal_basin_aspect_y,
+                        })
+                        await _verify_basin_depth(
+                            basin_center=basin_center,
+                            resolved_water_level=float(resolved_water_level),
+                            basin_depth=basin_depth,
+                            basin_radius=basin_radius,
+                            shore_width=max(float(water_cfg.get("shore_width", basin_radius * 1.55)), basin_radius * 0.72),
+                            aspect_y=terminal_basin_aspect_y,
+                        )
+                        terminal_basin_center = basin_center
+                        terminal_basin_radius = basin_radius
+                        steps_completed.append("water_basin")
+                        rim_angles = np.linspace(0.0, math.tau, 24, endpoint=False)
+                        inlet_angle = math.atan2(flow_dy, flow_dx)
+                        rim_points: list[list[float]] = []
+                        bank_raise = max(basin_depth * 0.30, 2.0)
+                        for angle in rim_angles:
+                            delta = math.atan2(math.sin(angle - inlet_angle), math.cos(angle - inlet_angle))
+                            if abs(delta) <= math.radians(36.0):
+                                continue
+                            rim_points.append([
+                                basin_center[0] + math.cos(angle) * basin_radius * 1.10,
+                                basin_center[1] + math.sin(angle) * basin_radius * terminal_basin_aspect_y * 1.08,
+                                resolved_water_level + bank_raise * 0.78,
+                            ])
+                        if len(rim_points) >= 3:
+                            rim_points.append(rim_points[0])
+                            await blender.send_command("terrain_spline_deform", {
+                                "object_name": terrain_name,
+                                "spline_points": rim_points,
+                                "mode": "raise",
+                                "depth": bank_raise,
+                                "width": max(basin_radius * 0.22, 5.2),
+                                "falloff": 0.90,
+                            })
+                            await blender.send_command("terrain_spline_deform", {
+                                "object_name": terrain_name,
+                                "spline_points": rim_points,
+                                "mode": "smooth",
+                                "depth": 0.0,
+                                "width": max(basin_radius * 0.28, 6.4),
+                                "falloff": 0.95,
+                            })
+                            await _verify_basin_rim_containment(
+                                rim_points=rim_points,
+                                resolved_water_level=float(resolved_water_level),
+                                bank_raise=bank_raise,
+                                basin_radius=basin_radius,
+                            )
+
+                    for pending in pending_river_surfaces:
+                        river_path_points = [list(point) for point in pending["path_points"]]
+                        river_bed_points = [list(point) for point in pending.get("bed_points", [])]
+                        river_water_level = float(pending["water_level"])
+                        if terminal_basin_center is not None and len(river_path_points) >= 2:
+                            basin_entry_x = terminal_basin_center[0] - flow_dx * basin_radius * 0.78
+                            basin_entry_y = terminal_basin_center[1] - flow_dy * basin_radius * 0.78
+                            await _verify_basin_inlet_depth(
+                                river_tail=river_path_points[-1],
+                                basin_entry=(basin_entry_x, basin_entry_y),
+                                resolved_water_level=float(resolved_water_level),
+                                basin_depth=basin_depth,
+                                river_width=float((water_cfg.get("rivers") or [{}])[0].get("width", 6.0)),
+                            )
+                            river_path_points = _blend_path_points_to_terminal_water_level(
+                                river_path_points,
+                                resolved_water_level,
+                            )
+                            connector_start_index = max(0, len(river_path_points) - 3)
+                            connector_start = river_path_points[connector_start_index]
+                            if len(river_bed_points) < len(river_path_points):
+                                river_bed_points = [
+                                    [float(point[0]), float(point[1]), float(point[2]) - float(pending.get("min_water_depth", 0.9))]
+                                    for point in river_path_points
+                                ]
+                            connector_bed_start = river_bed_points[min(connector_start_index, len(river_bed_points) - 1)]
+                            basin_bed_level = float(resolved_water_level) - max(
+                                float(pending.get("min_water_depth", 0.9)),
+                                float(basin_depth) * 0.24,
+                            )
+                            connector_mid_a = [
+                                connector_start[0] * 0.38 + basin_entry_x * 0.62,
+                                connector_start[1] * 0.38 + basin_entry_y * 0.62,
+                                connector_start[2] * 0.36 + float(resolved_water_level) * 0.64,
+                            ]
+                            connector_mid_b = [
+                                river_path_points[-1][0] * 0.20 + basin_entry_x * 0.80,
+                                river_path_points[-1][1] * 0.20 + basin_entry_y * 0.80,
+                                river_path_points[-1][2] * 0.18 + float(resolved_water_level) * 0.82,
+                            ]
+                            connector_mid_a_bed = [
+                                connector_mid_a[0],
+                                connector_mid_a[1],
+                                connector_bed_start[2] * 0.40 + basin_bed_level * 0.60,
+                            ]
+                            connector_mid_b_bed = [
+                                connector_mid_b[0],
+                                connector_mid_b[1],
+                                connector_bed_start[2] * 0.18 + basin_bed_level * 0.82,
+                            ]
+                            river_path_points = (
+                                river_path_points[: connector_start_index + 1]
+                                + [connector_mid_a, connector_mid_b, [basin_entry_x, basin_entry_y, resolved_water_level]]
+                            )
+                            river_bed_points = (
+                                river_bed_points[: connector_start_index + 1]
+                                + [
+                                    connector_mid_a_bed,
+                                    connector_mid_b_bed,
+                                    [basin_entry_x, basin_entry_y, basin_bed_level],
+                                ]
+                            )
+                            river_water_level = float(resolved_water_level)
+                            pending["terminal_water_level"] = float(resolved_water_level)
+                        if len(river_path_points) >= 4:
+                            river_path_points = _chaikin_smooth_path_points(river_path_points, passes=1)
+                        if len(river_bed_points) >= 4:
+                            river_bed_points = _chaikin_smooth_path_points(river_bed_points, passes=1)
+                        pending["path_points"] = river_path_points
+                        pending["bed_points"] = river_bed_points
+                        pending["water_level"] = river_water_level
+
+                    deferred_river_surfaces = [
+                        existing
+                        for existing in deferred_river_surfaces
+                        if existing.get("name") not in {pending["name"] for pending in pending_river_surfaces}
+                    ]
+                    deferred_river_surfaces.extend(pending_river_surfaces)
+                    deferred_water_body = {
                         "name": f"{map_name}_Water",
-                        "water_level": water_cfg["water_level"],
-                        "terrain_name": terrain_name,
-                    })
-                    steps_completed.append("water_plane")
-                    created_objects.append(f"{map_name}_Water")
+                        "water_level": float(resolved_water_level),
+                        "mask_center": terminal_basin_center,
+                        "mask_radius": (
+                            float(terminal_basin_radius) * 0.96
+                            if terminal_basin_radius is not None
+                            else 0.0
+                        ),
+                        "mask_aspect_y": float(terminal_basin_aspect_y),
+                    }
                 except Exception as e:
                     steps_failed.append({"step": "water_plane", "error": str(e)})
 
-            _save_chkpt()  # checkpoint after water
-
-        # --- Step 4: Roads ---
-        _completed_roads = {s for s in steps_completed if s.startswith("road_")}
-        for i, road in enumerate(spec.get("roads", [])):
-            if f"road_{i}" in _completed_roads:
-                continue
-            try:
-                waypoints = [
-                    list(_map_point_to_terrain_cell(
-                        waypoint,
-                        terrain_size=terrain_size,
-                        resolution=terrain_resolution,
-                        terrain_location=terrain_location,
-                    ))
-                    for waypoint in road.get("waypoints", [])
-                    if isinstance(waypoint, (list, tuple)) and len(waypoint) >= 2
+            if pending_river_surfaces and "water_level" not in water_cfg:
+                deferred_river_surfaces = [
+                    existing
+                    for existing in deferred_river_surfaces
+                    if existing.get("name") not in {pending["name"] for pending in pending_river_surfaces}
                 ]
-                if len(waypoints) < 2:
-                    raise ValueError("Road generation requires at least two waypoints")
-                await blender.send_command("env_generate_road", {
-                    "terrain_name": terrain_name,
-                    "waypoints": waypoints,
-                    "width": road.get("width", 3),
-                    "surface": road.get("surface", road.get("style", "dirt")),
-                    "water_level": water_cfg.get("water_level"),
-                    "seed": map_seed + 100 + i,
-                })
-                steps_completed.append(f"road_{i}")
-            except Exception as e:
-                steps_failed.append({"step": f"road_{i}", "error": str(e)})
+                deferred_river_surfaces.extend(pending_river_surfaces)
 
-        _save_chkpt()  # checkpoint after roads
+            _save_chkpt()  # checkpoint after water
 
         # --- Step 5: Place locations ---
         _completed_locs = {s.replace("location_mesh_", "") for s in steps_completed if s.startswith("location_mesh_")}
@@ -3676,46 +5557,377 @@ async def asset_pipeline(
 
                 if loc_type == "cave":
                     cave_name = str(loc.get("name", f"Cave_{i}"))
-                    approach_x = terrain_location[0] - anchor_x
-                    approach_y = terrain_location[1] - anchor_y
-                    approach_len = math.hypot(approach_x, approach_y)
-                    if approach_len <= 1e-6:
-                        approach_x, approach_y, approach_len = 0.0, 1.0, 1.0
-                    approach_x /= approach_len
-                    approach_y /= approach_len
-                    tunnel_x = -approach_x
-                    tunnel_y = -approach_y
-                    entrance_rotation_z = math.atan2(-approach_x, approach_y)
+                    entrance_width = float(loc.get("entrance_width", max(6.2, loc_radius * 0.38)))
+                    entrance_height = float(loc.get("entrance_height", max(4.8, loc_radius * 0.28)))
+                    entrance_depth = float(loc.get("entrance_depth", max(6.5, loc_radius * 0.48)))
+                    anchor_override = hero_cave_anchor_overrides.get(cave_name)
+                    if anchor_override is not None:
+                        anchor_x = float(anchor_override["x"])
+                        anchor_y = float(anchor_override["y"])
+                        anchor_z = float(anchor_override.get("z", anchor_z))
+                    if cave_name not in hero_cliff_shaped_caves:
+                        _record_pipeline_warning(
+                            "hero_cliff_shaping_missing",
+                            RuntimeError(f"{cave_name}: proceeding from natural relief without a hero ridge raise"),
+                            object_name=cave_name,
+                        )
+                    relief_profile: dict[str, Any] | None = None
+                    if terrain_name:
+                        retargeted_anchor = anchor_override or await _retarget_cave_anchor_to_relief(
+                            blender,
+                            terrain_name,
+                            anchor_x=anchor_x,
+                            anchor_y=anchor_y,
+                            terrain_size=terrain_size,
+                            terrain_location=terrain_location,
+                            search_radius=max(loc_radius * 0.72, entrance_width * 1.55, 12.0),
+                            sample_radius=max(entrance_width * 0.88, 7.5),
+                        )
+                        anchor_x = float(retargeted_anchor["x"])
+                        anchor_y = float(retargeted_anchor["y"])
+                        anchor_z = float(retargeted_anchor["z"])
+                        relief_profile = await _sample_terrain_relief_profile(
+                            blender,
+                            terrain_name,
+                            anchor_x,
+                            anchor_y,
+                            radius=max(entrance_width * 0.78, loc_radius * 0.54, 9.0),
+                            sample_count=8,
+                            fallback_vector=(
+                                terrain_location[0] - anchor_x,
+                                terrain_location[1] - anchor_y,
+                            ),
+                        )
+                        required_relief = max(0.8, entrance_height * 0.12)
+                        if (
+                            relief_profile["relief_span"] < required_relief
+                            and float(retargeted_anchor.get("slope_drop", 0.0)) < max(entrance_height * 0.24, 1.8)
+                        ):
+                            raise RuntimeError(f"{cave_name}: terrain relief too weak for a cliff cave")
+                        tunnel_x, tunnel_y = relief_profile["uphill_vector"]
+                    else:
+                        approach_x = terrain_location[0] - anchor_x
+                        approach_y = terrain_location[1] - anchor_y
+                        approach_len = math.hypot(approach_x, approach_y)
+                        if approach_len <= 1e-6:
+                            approach_x, approach_y, approach_len = 0.0, 1.0, 1.0
+                        approach_x /= approach_len
+                        approach_y /= approach_len
+                        tunnel_x = -approach_x
+                        tunnel_y = -approach_y
+                    face_x, face_y = -tunnel_x, -tunnel_y
+                    perp_x, perp_y = -tunnel_y, tunnel_x
+                    if terrain_name:
+                        lip_offset = max(entrance_width * 0.24, 3.2)
+                        shifted_x, shifted_y = _clamp_world_xy(
+                            anchor_x + face_x * lip_offset,
+                            anchor_y + face_y * lip_offset,
+                            terrain_size=terrain_size,
+                            terrain_location=terrain_location,
+                            margin=max(loc_radius * 0.42, 10.0),
+                        )
+                        anchor_x = float(shifted_x)
+                        anchor_y = float(shifted_y)
+                        anchor_z = await _sample_terrain_height(blender, terrain_name, anchor_x, anchor_y)
+                        if relief_profile is not None:
+                            relief_profile = await _sample_terrain_relief_profile(
+                                blender,
+                                terrain_name,
+                                anchor_x,
+                                anchor_y,
+                                radius=max(entrance_width * 0.78, loc_radius * 0.54, 9.0),
+                                sample_count=8,
+                                fallback_vector=(
+                                    terrain_location[0] - anchor_x,
+                                    terrain_location[1] - anchor_y,
+                                ),
+                            )
+                            tunnel_x, tunnel_y = relief_profile["uphill_vector"]
+                            face_x, face_y = -tunnel_x, -tunnel_y
+                            perp_x, perp_y = -tunnel_y, tunnel_x
+                    entrance_rotation_z = math.atan2(-face_x, face_y)
                     entrance_name = f"{cave_name}_Entrance"
                     chamber_name = f"{cave_name}_Chamber"
+                    cave_material_key = str(
+                        loc.get(
+                            "material_key",
+                            "wet_rock"
+                            if str(terrain_cfg.get("preset", "")).strip().lower() in {"coastal", "swamp"}
+                            else "cliff_rock",
+                        )
+                    )
+                    chamber_material_key = str(loc.get("chamber_material_key", "wet_rock"))
 
-                    entrance_result = await blender.send_command("env_create_cave_entrance", {
+                    if terrain_name:
+                        pre_carve_anchor_z = anchor_z
+                        cave_apron_center_x = anchor_x + face_x * max(entrance_width * 0.18, 1.5)
+                        cave_apron_center_y = anchor_y + face_y * max(entrance_width * 0.18, 1.5)
+                        apron_radius_x = max(entrance_width * 0.24, 2.0)
+                        apron_radius_y = max(entrance_width * 0.16, 1.4)
+                        try:
+                            await blender.send_command("terrain_flatten_zone", {
+                                "object_name": terrain_name,
+                                "center_x": cave_apron_center_x,
+                                "center_y": cave_apron_center_y,
+                                "radius_x": apron_radius_x,
+                                "radius_y": apron_radius_y,
+                                "target_height": anchor_z - 0.08,
+                                "blend_distance": max(entrance_width * 0.10, 0.7),
+                            })
+                        except Exception as cave_apron_exc:
+                            raise RuntimeError(f"{cave_name}: cave apron flatten failed") from cave_apron_exc
+
+                        tunnel_curve = [
+                            [anchor_x + face_x * max(entrance_width * 0.34, 2.4), anchor_y + face_y * max(entrance_width * 0.34, 2.4), anchor_z - 0.04],
+                            [anchor_x, anchor_y, anchor_z - 0.34],
+                            [anchor_x + tunnel_x * max(entrance_depth * 0.56, 6.0), anchor_y + tunnel_y * max(entrance_depth * 0.56, 6.0), anchor_z - max(entrance_height * 0.60, 4.0)],
+                            [anchor_x + tunnel_x * max(entrance_depth * 1.08, 10.0), anchor_y + tunnel_y * max(entrance_depth * 1.08, 10.0), anchor_z - max(entrance_height * 0.96, 6.2)],
+                        ]
+                        try:
+                            await blender.send_command("terrain_spline_deform", {
+                                "object_name": terrain_name,
+                                "spline_points": tunnel_curve,
+                                "mode": "smooth",
+                                "falloff": 0.90,
+                                "width": max(entrance_width * 0.56, 3.4),
+                            })
+                        except Exception as cave_flatten_exc:
+                            raise RuntimeError(f"{cave_name}: cave tunnel pre-smooth failed") from cave_flatten_exc
+                        try:
+                            await blender.send_command("terrain_spline_deform", {
+                                "object_name": terrain_name,
+                                "spline_points": tunnel_curve,
+                                "mode": "carve",
+                                "depth": max(entrance_height * 0.96, entrance_depth * 0.28, 4.6),
+                                "falloff": 0.84,
+                                "width": max(entrance_width * 0.68, 4.2),
+                            })
+                        except Exception as cave_carve_exc:
+                            raise RuntimeError(f"{cave_name}: cave tunnel carve failed") from cave_carve_exc
+                        try:
+                            await blender.send_command("terrain_spline_deform", {
+                                "object_name": terrain_name,
+                                "spline_points": [
+                                    [float(tunnel_curve[1][0]), float(tunnel_curve[1][1]), float(tunnel_curve[1][2]) - 0.38],
+                                    [float(tunnel_curve[2][0]), float(tunnel_curve[2][1]), float(tunnel_curve[2][2]) - 0.72],
+                                    [float(tunnel_curve[3][0]), float(tunnel_curve[3][1]), float(tunnel_curve[3][2]) - 0.58],
+                                ],
+                                "mode": "carve",
+                                "depth": max(entrance_height * 0.44, 2.6),
+                                "falloff": 0.78,
+                                "width": max(entrance_width * 0.58, 4.0),
+                            })
+                        except Exception as cave_alcove_exc:
+                            _record_pipeline_warning("cave_alcove_shape", cave_alcove_exc, object_name=cave_name)
+                        rim_center_x = anchor_x + tunnel_x * max(entrance_width * 0.14, 1.2)
+                        rim_center_y = anchor_y + tunnel_y * max(entrance_width * 0.14, 1.2)
+                        try:
+                            await blender.send_command("terrain_spline_deform", {
+                                "object_name": terrain_name,
+                                "spline_points": [
+                                    [
+                                        rim_center_x - perp_x * entrance_width * 0.72,
+                                        rim_center_y - perp_y * entrance_width * 0.72,
+                                        anchor_z + entrance_height * 0.28,
+                                    ],
+                                    [
+                                        rim_center_x,
+                                        rim_center_y,
+                                        anchor_z + entrance_height * 0.78,
+                                    ],
+                                    [
+                                        rim_center_x + perp_x * entrance_width * 0.72,
+                                        rim_center_y + perp_y * entrance_width * 0.72,
+                                        anchor_z + entrance_height * 0.28,
+                                    ],
+                                ],
+                                "mode": "raise",
+                                "depth": max(entrance_height * 0.54, 3.0),
+                                "falloff": 0.80,
+                                "width": max(entrance_width * 0.94, 5.0),
+                            })
+                        except Exception as cave_brow_exc:
+                            _record_pipeline_warning("cave_brow_shape", cave_brow_exc, object_name=cave_name)
+                        for side_sign in (-1.0, 1.0):
+                            side_x = anchor_x + perp_x * entrance_width * 0.62 * side_sign
+                            side_y = anchor_y + perp_y * entrance_width * 0.62 * side_sign
+                            try:
+                                await blender.send_command("terrain_spline_deform", {
+                                    "object_name": terrain_name,
+                                    "spline_points": [
+                                        [
+                                            side_x + face_x * entrance_width * 0.08,
+                                            side_y + face_y * entrance_width * 0.08,
+                                            anchor_z + entrance_height * 0.18,
+                                        ],
+                                        [
+                                            side_x + tunnel_x * entrance_depth * 0.24,
+                                            side_y + tunnel_y * entrance_depth * 0.24,
+                                            anchor_z + entrance_height * 0.54,
+                                        ],
+                                    ],
+                                    "mode": "raise",
+                                    "depth": max(entrance_height * 0.40, 2.4),
+                                    "falloff": 0.82,
+                                    "width": max(entrance_width * 0.52, 3.8),
+                                })
+                            except Exception as cave_buttress_exc:
+                                _record_pipeline_warning("cave_sidewall_shape", cave_buttress_exc, object_name=cave_name)
+                        try:
+                            await blender.send_command("terrain_spline_deform", {
+                                "object_name": terrain_name,
+                                "spline_points": tunnel_curve[:3],
+                                "mode": "smooth",
+                                "depth": 0.0,
+                                "falloff": 0.94,
+                                "width": max(entrance_width * 0.88, 4.8),
+                            })
+                        except Exception as cave_mouth_smooth_exc:
+                            _record_pipeline_warning("cave_mouth_blend", cave_mouth_smooth_exc, object_name=cave_name)
+                        try:
+                            await blender.send_command("terrain_spline_deform", {
+                                "object_name": terrain_name,
+                                "spline_points": tunnel_curve[:3],
+                                "mode": "carve",
+                                "depth": max(entrance_height * 0.70, 4.2),
+                                "falloff": 0.82,
+                                "width": max(entrance_width * 0.62, 3.8),
+                            })
+                        except Exception as cave_shadow_core_exc:
+                            _record_pipeline_warning("cave_shadow_core", cave_shadow_core_exc, object_name=cave_name)
+                        try:
+                            anchor_z = await _sample_terrain_height(blender, terrain_name, anchor_x, anchor_y)
+                        except Exception as cave_resample_exc:
+                            raise RuntimeError(f"{cave_name}: cave anchor resample failed") from cave_resample_exc
+                        if relief_profile is not None:
+                            min_cave_floor = float(relief_profile["center_height"]) - max(entrance_height * 1.10, 8.0)
+                            if anchor_z < min_cave_floor:
+                                try:
+                                    catastrophic_patch = await _stabilize_hero_terrain_patch(
+                                        blender,
+                                        terrain_name,
+                                        center_x=anchor_x,
+                                        center_y=anchor_y,
+                                        radius=max(entrance_width * 2.25, 24.0),
+                                        floor_z=min_cave_floor,
+                                        ceiling_z=float(relief_profile["center_height"]) + max(entrance_height * 0.45, 3.6),
+                                        blend=0.98,
+                                    )
+                                    if int(catastrophic_patch.get("affected_vertices", 0)) > 0:
+                                        steps_completed.append(f"terrain_catastrophic_clamp_{cave_name}")
+                                    anchor_z = max(
+                                        min_cave_floor,
+                                        await _sample_terrain_height(blender, terrain_name, anchor_x, anchor_y),
+                                    )
+                                except Exception as cave_floor_exc:
+                                    _record_pipeline_warning("cave_catastrophic_clamp", cave_floor_exc, object_name=cave_name)
+                                    anchor_z = max(anchor_z, min_cave_floor)
+                        if relief_profile is not None and anchor_z > relief_profile["center_height"] + 0.35:
+                            try:
+                                await blender.send_command("terrain_spline_deform", {
+                                    "object_name": terrain_name,
+                                    "spline_points": tunnel_curve[:3],
+                                    "mode": "carve",
+                                    "depth": max(entrance_depth * 0.20, 1.2),
+                                    "falloff": 0.95,
+                                    "width": max(entrance_width * 0.86, 4.2),
+                                })
+                                anchor_z = await _sample_terrain_height(blender, terrain_name, anchor_x, anchor_y)
+                            except Exception as cave_retry_exc:
+                                _record_pipeline_warning("cave_lip_retry", cave_retry_exc, object_name=cave_name)
+                        if relief_profile is not None and anchor_z > relief_profile["center_height"] + 0.35:
+                            sink_amount = float(pre_carve_anchor_z) - float(anchor_z)
+                            if sink_amount < max(0.45, entrance_height * 0.05):
+                                raise RuntimeError(f"{cave_name}: cave deformation did not sink below the cliff lip")
+                            _record_pipeline_warning(
+                                "cave_lip_soft_accept",
+                                RuntimeError(
+                                    f"{cave_name}: accepting cave lip after {sink_amount:.2f}m sink even though the anchor remains high"
+                                ),
+                                object_name=cave_name,
+                            )
+                        try:
+                            cave_patch_fix = await _stabilize_hero_terrain_patch(
+                                blender,
+                                terrain_name,
+                                center_x=anchor_x + tunnel_x * max(entrance_depth * 0.58, 7.0),
+                                center_y=anchor_y + tunnel_y * max(entrance_depth * 0.58, 7.0),
+                                radius=max(entrance_width * 1.46, 10.0),
+                                floor_z=anchor_z - max(entrance_height * 1.04, 6.2),
+                                blend=0.92,
+                            )
+                            if int(cave_patch_fix.get("affected_vertices", 0)) > 0:
+                                steps_completed.append(f"terrain_patch_fix_{cave_name}")
+                        except Exception as cave_patch_exc:
+                            _record_pipeline_warning("cave_patch_fix", cave_patch_exc, object_name=cave_name)
+                        try:
+                            cave_mouth_clamp = await _stabilize_hero_terrain_patch(
+                                blender,
+                                terrain_name,
+                                center_x=anchor_x,
+                                center_y=anchor_y,
+                                radius=max(entrance_width * 2.10, 22.0),
+                                floor_z=anchor_z - max(entrance_height * 1.40, 12.0),
+                                ceiling_z=anchor_z + max(entrance_height * 0.60, 4.4),
+                                blend=0.96,
+                            )
+                            if int(cave_mouth_clamp.get("affected_vertices", 0)) > 0:
+                                steps_completed.append(f"terrain_mouth_clamp_{cave_name}")
+                        except Exception as cave_mouth_clamp_exc:
+                            _record_pipeline_warning("cave_mouth_clamp", cave_mouth_clamp_exc, object_name=cave_name)
+
+                    entrance_result = {
+                        "status": "terrain_carved",
+                        "terrain_name": terrain_name,
                         "name": entrance_name,
-                        "width": loc.get("entrance_width", max(5.5, loc_radius * 0.34)),
-                        "height": loc.get("entrance_height", max(4.2, loc_radius * 0.24)),
-                        "depth": loc.get("entrance_depth", max(5.0, loc_radius * 0.42)),
-                        "terrain_edge_height": anchor_z - 0.35,
-                        "style": loc.get("entrance_style", "natural"),
-                        "rotation_z": entrance_rotation_z,
-                        "location": [anchor_x, anchor_y, 0.0],
-                        "material_key": loc.get("material_key", "stone"),
-                        "seed": map_seed + 700 + i,
-                    })
-                    created_objects.append(entrance_name)
+                        "anchor": [round(anchor_x, 3), round(anchor_y, 3), round(anchor_z, 3)],
+                        "rotation_z": round(float(entrance_rotation_z), 6),
+                        "material_key": cave_material_key,
+                        "surface_mode": "terrain_carved",
+                    }
 
                     loc_params["name"] = chamber_name
-                    loc_params["width"] = int(max(24, min(int(loc_params.get("width", 32)), 48)))
-                    loc_params["height"] = int(max(24, min(int(loc_params.get("height", 32)), 48)))
-                    loc_params["cell_size"] = float(loc.get("cell_size", 1.15))
-                    loc_params["wall_height"] = float(loc.get("wall_height", max(4.5, loc_radius * 0.22)))
+                    loc_params["width"] = int(max(16, min(int(loc_params.get("width", 24)), 22)))
+                    loc_params["height"] = int(max(16, min(int(loc_params.get("height", 24)), 22)))
+                    loc_params["cell_size"] = float(loc.get("cell_size", 0.92))
+                    loc_params["wall_height"] = float(loc.get("wall_height", max(4.6, loc_radius * 0.18)))
 
                     loc_result = await blender.send_command(handler, loc_params)
 
-                    chamber_offset = max(8.0, loc_radius * 0.45)
+                    chamber_offset = max(entrance_depth * 0.72, loc_radius * 0.40, 6.2)
+                    chamber_x = anchor_x + tunnel_x * chamber_offset
+                    chamber_y = anchor_y + tunnel_y * chamber_offset
+                    chamber_surface_z = anchor_z
+                    if terrain_name:
+                        try:
+                            chamber_surface_z = await _sample_terrain_height(blender, terrain_name, chamber_x, chamber_y)
+                        except Exception as chamber_surface_exc:
+                            _record_pipeline_warning("cave_chamber_surface_resample", chamber_surface_exc, object_name=chamber_name)
+                        try:
+                            connector_curve = [
+                                [float(tunnel_curve[-2][0]), float(tunnel_curve[-2][1]), float(tunnel_curve[-2][2]) - 0.35],
+                                [float(tunnel_curve[-1][0]), float(tunnel_curve[-1][1]), float(tunnel_curve[-1][2]) - 0.45],
+                                [
+                                    chamber_x,
+                                    chamber_y,
+                                    chamber_surface_z - max(entrance_height * 0.58, 3.6),
+                                ],
+                            ]
+                            await blender.send_command("terrain_spline_deform", {
+                                "object_name": terrain_name,
+                                "spline_points": connector_curve,
+                                "mode": "carve",
+                                "depth": max(entrance_height * 0.52, 2.8),
+                                "falloff": 0.90,
+                                "width": max(entrance_width * 0.92, 4.4),
+                            })
+                        except Exception as cave_connector_exc:
+                            _record_pipeline_warning("cave_connector_carve", cave_connector_exc, object_name=chamber_name)
+                    chamber_burial = max(entrance_height * 0.42, entrance_depth * 0.18, loc_radius * 0.16, 5.8)
                     chamber_position = (
-                        anchor_x + tunnel_x * chamber_offset,
-                        anchor_y + tunnel_y * chamber_offset,
-                        anchor_z - min(2.0, max(0.8, loc_radius * 0.08)),
+                        chamber_x,
+                        chamber_y,
+                        chamber_surface_z - chamber_burial,
                     )
                     try:
                         await _position_generated_object(
@@ -3723,6 +5935,22 @@ async def asset_pipeline(
                             chamber_name,
                             chamber_position,
                         )
+                        try:
+                            await blender.send_command("material_create_procedural", {
+                                "object_name": chamber_name,
+                                "material_key": chamber_material_key,
+                                "name": f"{chamber_name}_Surface",
+                            })
+                        except Exception as chamber_mat_exc:
+                            _record_pipeline_warning("cave_chamber_material", chamber_mat_exc, object_name=chamber_name)
+                        try:
+                            await blender.send_command("set_visibility", {
+                                "name": chamber_name,
+                                "visible": False,
+                                "render_visible": False,
+                            })
+                        except Exception as chamber_hide_exc:
+                            _record_pipeline_warning("cave_chamber_hide", chamber_hide_exc, object_name=chamber_name)
                         steps_completed.append(f"location_placed_{loc.get('name', i)}")
                     except Exception as placement_exc:
                         steps_failed.append({
@@ -3732,7 +5960,7 @@ async def asset_pipeline(
                     steps_completed.append(f"location_mesh_{loc.get('name', i)}")
                     created_objects.append(chamber_name)
                     location_results.append({
-                        "name": entrance_name,
+                        "name": cave_name,
                         "type": loc_type,
                         "anchor": [round(anchor_x, 3), round(anchor_y, 3), round(anchor_z, 3)],
                         "radius": planned["radius"],
@@ -3804,11 +6032,125 @@ async def asset_pipeline(
                     steps_completed.append("lighting_ready")
                 except Exception as e:
                     steps_failed.append({"step": "lighting", "error": str(e)})
+        else:
+            if "terrain_review_surface" not in steps_completed:
+                try:
+                    await blender.send_command("env_paint_terrain", {
+                        "name": terrain_name,
+                        "height_scale": terrain_cfg.get("height_scale", 20.0),
+                    })
+                    await blender.send_command("terrain_create_biome_material", {
+                        "biome_name": _terrain_review_biome_name(terrain_cfg.get("preset", "hills")),
+                        "object_name": terrain_name,
+                    })
+                    steps_completed.append("terrain_review_surface")
+                except Exception as e:
+                    _record_pipeline_warning("terrain_review_surface", e, object_name=terrain_name)
+        if not biome and "lighting_ready" not in steps_completed:
+            try:
+                await blender.send_command("setup_dark_fantasy_lighting", {
+                    "object_name": terrain_name,
+                    "preset": "terrain_review",
+                })
+                steps_completed.append("lighting_ready")
+            except Exception as e:
+                _record_pipeline_warning("lighting_review_setup", e, object_name=terrain_name)
 
         if "biome_painted" in steps_completed or "lighting_ready" in steps_completed:
             _save_chkpt()  # checkpoint after biome+lighting
 
-        # --- Step 7: Vegetation scatter ---
+        # --- Step 6.25: Roads (after terrain mutations and biome surfacing) ---
+        await _generate_roads_after_terrain_mutations()
+        _save_chkpt()  # checkpoint after roads
+
+        if terrain_name and "hero_final_cleanup" not in steps_completed:
+            try:
+                final_cleanup = await _temper_hero_peak_outliers(
+                    blender,
+                    terrain_name,
+                    percentile=0.996,
+                    blend=0.88,
+                    prominence_threshold=4.0,
+                    passes=2,
+                )
+                if int(final_cleanup.get("affected_vertices", 0)) > 0:
+                    steps_completed.append("hero_final_cleanup")
+                    _save_chkpt()
+            except Exception as final_cleanup_exc:
+                _record_pipeline_warning("hero_final_cleanup", final_cleanup_exc, object_name=terrain_name)
+
+        # --- Step 6.5: Emit visible water only after terrain is frozen ---
+        if deferred_river_surfaces or deferred_water_body:
+            await _emit_deferred_water_surfaces()
+            _save_chkpt()
+
+        terrain_visual_profiles = _normalize_validation_profiles(spec.get("terrain_visual_profiles"))
+        if not terrain_visual_profiles:
+            terrain_visual_profiles = _derive_terrain_validation_profiles(
+                map_spec=spec,
+                terrain_result=terrain_result_payload,
+                object_names=created_objects,
+                location_results=location_results,
+            )
+
+        # --- Step 7: Base terrain visual verification (before clutter) ---
+        if terrain_name and "terrain_base_visual_verified" not in steps_completed:
+            terrain_base_verification = await _run_terrain_visual_gate(
+                blender,
+                map_spec=spec,
+                terrain_result=terrain_result_payload,
+                object_names=created_objects,
+                location_results=location_results,
+                validation_profiles=terrain_visual_profiles,
+                min_score=int(spec.get("terrain_visual_min_score", 60)),
+                screenshot_prefix=f"{map_name}_terrain_base_gate",
+                object_name=terrain_name,
+            )
+            if terrain_base_verification.get("passed", False):
+                steps_completed.append("terrain_base_visual_verified")
+                _save_chkpt()
+            else:
+                failed_profiles = terrain_base_verification.get("failed_profiles", terrain_visual_profiles)
+                steps_failed.append({
+                    "step": "terrain_visual_verification",
+                    "error": "Terrain base visual verification failed for "
+                    + (", ".join(failed_profiles) if failed_profiles else "terrain_readability"),
+                })
+                _save_chkpt()
+                early_result = {
+                    "status": "partial",
+                    "map_name": map_name,
+                    "steps_completed": steps_completed,
+                    "steps_failed": steps_failed,
+                    "warnings": pipeline_warnings,
+                    "objects_created": created_objects,
+                    "locations": location_results,
+                    "interiors": interior_results,
+                    "budget_applied": budget,
+                    "quality_report": {
+                        "validated_objects": [],
+                        "warnings": [],
+                        "failures": [],
+                        "skipped": True,
+                        "reason": "terrain base visual verification blocked vegetation and props",
+                    },
+                    "heightmap_export_path": None,
+                    "game_check_failures": [],
+                    "fbx_exported_files": [],
+                    "resumed_from_checkpoint": _CHKPT_LOADED,
+                    "checkpoint_dir": checkpoint_dir,
+                    "terrain_visual_profiles": terrain_visual_profiles,
+                    "terrain_visual_verification": terrain_base_verification,
+                    "approved_for_unity_export": False,
+                    "unity_export_status": "blocked_by_base_visual_verification",
+                    "next_steps": [
+                        "Fix the terrain base before adding vegetation, props, or export.",
+                        "Review the terrain screenshots; this run intentionally stopped before clutter dressing.",
+                    ],
+                }
+                return await _with_screenshot(blender, early_result, capture_viewport, object_name=terrain_name)
+
+        # --- Step 8: Vegetation scatter ---
         veg_cfg = spec.get("vegetation", {})
         if veg_cfg and "vegetation_scattered" not in steps_completed:
             try:
@@ -3830,7 +6172,7 @@ async def asset_pipeline(
         if "vegetation_scattered" in steps_completed:
             _save_chkpt()  # checkpoint after vegetation
 
-        # --- Step 8: Prop scatter ---
+        # --- Step 9: Prop scatter ---
         if spec.get("props", True) and "props_scattered" not in steps_completed:
             try:
                 scatter_buildings = [
@@ -3861,7 +6203,7 @@ async def asset_pipeline(
         if "props_scattered" in steps_completed:
             _save_chkpt()  # checkpoint after props
 
-        # --- Step 9: Generate interiors for key buildings ---
+        # --- Step 10: Generate interiors for key buildings ---
         if "interiors_generated" not in steps_completed:
             if not interior_results:  # SAFE-02: Only reset if empty (not loaded from checkpoint)
                 interior_results = []
@@ -3887,14 +6229,6 @@ async def asset_pipeline(
                 steps_completed.append("interiors_generated")
                 _save_chkpt()  # checkpoint after interiors
 
-        terrain_visual_profiles = _normalize_validation_profiles(spec.get("terrain_visual_profiles"))
-        if not terrain_visual_profiles:
-            terrain_visual_profiles = _derive_terrain_validation_profiles(
-                map_spec=spec,
-                terrain_result=terrain_result_payload,
-                object_names=created_objects,
-                location_results=location_results,
-            )
         if terrain_name and "terrain_visual_verified" in steps_completed:
             terrain_visual_verification = {
                 "status": "success",
@@ -3910,7 +6244,7 @@ async def asset_pipeline(
                 "reason": "terrain visual verification already completed in checkpoint state",
             }
 
-        # --- Step 10: Mandatory terrain visual verification ---
+        # --- Step 11: Mandatory terrain visual verification ---
         if terrain_name and "terrain_visual_verified" not in steps_completed:
             terrain_visual_verification = await _run_terrain_visual_gate(
                 blender,
@@ -4187,7 +6521,7 @@ async def asset_pipeline(
         )
 
         result = {
-            "status": "success" if not steps_failed and not quality_report["failures"] and not pipeline_warnings else "partial",
+            "status": "success" if not steps_failed and not quality_report["failures"] else "partial",
             "map_name": map_name,
             "steps_completed": steps_completed,
             "steps_failed": steps_failed,

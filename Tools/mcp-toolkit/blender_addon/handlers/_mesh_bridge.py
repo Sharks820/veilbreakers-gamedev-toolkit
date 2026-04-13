@@ -487,6 +487,8 @@ CATEGORY_MATERIAL_MAP: dict[str, str] = {
     "fence_barrier": "rough_timber",
     # Doors -- rough timber
     "door": "rough_timber",
+    # Door/window grouped registry category
+    "door_window": "rough_timber",
     # Camp equipment -- leather
     "camp": "leather",
     # Infrastructure -- cobblestone floor

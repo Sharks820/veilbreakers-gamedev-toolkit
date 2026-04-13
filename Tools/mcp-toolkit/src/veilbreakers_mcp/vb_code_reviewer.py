@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+import logging
 import os
 import re
 import sys
@@ -34,6 +35,9 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from veilbreakers_mcp._types import Category, FindingType, Severity
+
+
+logger = logging.getLogger(__name__)
 
 # =========================================================================
 # IMPORT FALLBACKS -- modules may not exist yet (built by other agents)
@@ -2398,6 +2402,13 @@ def scan_project(
     else:
         extensions = []
 
+    runtime_warnings: list[str] = []
+
+    def _record_runtime_warning(message: str) -> None:
+        logger.warning("vb_code_reviewer: %s", message)
+        if message not in runtime_warnings:
+            runtime_warnings.append(message)
+
     # 1. Collect files
     files = collect_files(paths, extensions)
     if changed_ranges:
@@ -2418,7 +2429,8 @@ def scan_project(
             context = ContextEngine(context_root)  # type: ignore[operator]
             # Lazy context: Build after identifying files with issues
             context_available = True
-        except Exception:
+        except Exception as exc:
+            _record_runtime_warning(f"context_engine_init_failed: {exc}")
             context = None
 
     # 3. Unified per-file scan — read once, run ALL layers together
@@ -2457,8 +2469,8 @@ def scan_project(
         try:
             with open(cache_file, "r") as f:
                 cache.update(json.load(f))
-        except (json.JSONDecodeError, IOError):
-            pass
+        except (json.JSONDecodeError, IOError) as exc:
+            _record_runtime_warning(f"cache_load_failed: {cache_file}: {exc}")
 
     def _save_cache() -> None:
         """Save scan results to cache file (atomic write pattern)."""
@@ -2471,8 +2483,8 @@ def scan_project(
             with open(temp_file, "w", encoding="utf-8") as f:
                 json.dump(cache, f, indent=2)
             temp_file.replace(cache_file)  # Atomic rename on Windows/Unix
-        except (OSError, IOError):
-            pass  # Best effort cleanup
+        except (OSError, IOError) as exc:
+            _record_runtime_warning(f"cache_save_failed: {cache_file}: {exc}")
 
     explicit_file_targets = {
         _normalize_path(str(Path(path).resolve()))
@@ -2644,16 +2656,17 @@ def scan_project(
                         layer=_ast_issue_layer(af.rule_id),
                     ), source_tool="ast")
                     ast_findings += 1
-            except Exception:
-                pass
+            except Exception as exc:
+                _record_runtime_warning(f"ast_scan_failed: {filepath}: {exc}")
 
     # Lazy context building: Build context only for files with issues (advisory/strict only)
     if context_available and files_with_regex_issues and context:
         try:
             # Only build context if we have files that need it (40-60% reduction)
             context.build_context()
-        except Exception:
+        except Exception as exc:
             # Context build failure shouldn't break the scan
+            _record_runtime_warning(f"context_build_failed: {exc}")
             context = None
 
     # --- Layer 3: External tools ---
@@ -2731,9 +2744,12 @@ rules:
                                     for defn in defs[:50]:  # Limit to top 50 definitions
                                         rule_content += f"      - pattern: {defn.name}\n"
                                     rule_file.write_text(rule_content, encoding="utf-8")
-                        except Exception:
-                            pass
-                except Exception:
+                        except Exception as exc:
+                            _record_runtime_warning(
+                                f"context_rule_generation_failed: {issue_file}: {exc}"
+                            )
+                except Exception as exc:
+                    _record_runtime_warning(f"context_rule_tempdir_failed: {exc}")
                     context_rules_dir = ""
 
             def _merge_tool_finding(tf, *, allowed_files: set[str], source_tool: str):
@@ -2801,8 +2817,8 @@ rules:
                 tools_used.append("ast-grep")
 
             tools_used = list(dict.fromkeys(tools_used))
-        except ImportError:
-            pass
+        except ImportError as exc:
+            _record_runtime_warning(f"external_tool_runner_import_failed: {exc}")
         # context_rules_dir_obj cleans up automatically when exiting context
 
     # Smart incremental: Store scan results in cache before returning
@@ -2832,6 +2848,7 @@ rules:
     report["ast_findings"] = ast_findings
     report["tool_findings"] = tool_findings
     report["tools_used"] = tools_used
+    report["runtime_warnings"] = runtime_warnings
 
     # Smart incremental: Save cache before return
     if scannable_files or cache:

@@ -49,7 +49,7 @@ All functions are pure Python with math-only dependencies (no bpy/bmesh).
 from __future__ import annotations
 
 import math
-from functools import lru_cache
+from functools import lru_cache, wraps
 from typing import Any
 
 # ---------------------------------------------------------------------------
@@ -228,6 +228,59 @@ def _make_result(
             vertices, faces, sharp_angle
         )
     return result
+
+
+def _alias_generator_category(
+    generator: Any,
+    alias_category: str,
+) -> Any:
+    """Return a wrapper that rewrites metadata.category for alias access."""
+
+    @wraps(generator)
+    def _wrapped(*args: Any, **kwargs: Any) -> MeshSpec:
+        result = generator(*args, **kwargs)
+        metadata = dict(result.get("metadata", {}))
+        metadata["category"] = alias_category
+        alias_result = dict(result)
+        alias_result["metadata"] = metadata
+        return alias_result  # type: ignore[return-value]
+
+    return _wrapped
+
+
+class _GeneratorRegistry(dict[str, dict[str, Any]]):
+    """Dictionary-like registry with backward-compatible category aliases."""
+
+    def __init__(
+        self,
+        canonical: dict[str, dict[str, Any]],
+        aliases: dict[str, str],
+    ) -> None:
+        super().__init__(canonical)
+        self._aliases = aliases
+        self._alias_cache: dict[str, dict[str, Any]] = {}
+
+    def __contains__(self, key: object) -> bool:
+        return dict.__contains__(self, key) or (
+            isinstance(key, str) and key in self._aliases
+        )
+
+    def __getitem__(self, key: str) -> dict[str, Any]:
+        if dict.__contains__(self, key):
+            return dict.__getitem__(self, key)
+        canonical_key = self._aliases.get(key)
+        if canonical_key is None:
+            raise KeyError(key)
+        cached = self._alias_cache.get(key)
+        if cached is not None:
+            return cached
+        canonical_group = dict.__getitem__(self, canonical_key)
+        alias_group = {
+            name: _alias_generator_category(func, key)
+            for name, func in canonical_group.items()
+        }
+        self._alias_cache[key] = alias_group
+        return alias_group
 
 
 def _compute_dimensions(
@@ -10487,7 +10540,7 @@ def generate_door_mesh(
     verts, faces = _merge_meshes(*parts)
     verts, faces = _enhance_mesh_detail(verts, faces, min_vertex_count=500)
     return _make_result(f"Door_{style}", verts, faces,
-                        style=style, category="door")
+                        style=style, category="door_window")
 
 
 def generate_window_mesh(
@@ -19535,7 +19588,7 @@ def generate_deer_mesh(style: str = "adult") -> MeshSpec:
 
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"Deer_{style}", verts, faces,
-                        style=style, category="forest_animals")
+                        style=style, category="forest_animal")
 
 
 def generate_wolf_mesh(style: str = "adult") -> MeshSpec:
@@ -19635,7 +19688,7 @@ def generate_wolf_mesh(style: str = "adult") -> MeshSpec:
 
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"Wolf_{style}", verts, faces,
-                        style=style, category="forest_animals")
+                        style=style, category="forest_animal")
 
 
 def generate_fox_mesh(style: str = "adult") -> MeshSpec:
@@ -19724,7 +19777,7 @@ def generate_fox_mesh(style: str = "adult") -> MeshSpec:
 
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"Fox_{style}", verts, faces,
-                        style=style, category="forest_animals")
+                        style=style, category="forest_animal")
 
 
 def generate_rabbit_mesh(style: str = "sitting") -> MeshSpec:
@@ -19797,7 +19850,7 @@ def generate_rabbit_mesh(style: str = "sitting") -> MeshSpec:
 
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"Rabbit_{style}", verts, faces,
-                        style=style, category="forest_animals")
+                        style=style, category="forest_animal")
 
 
 def generate_owl_mesh(style: str = "perched") -> MeshSpec:
@@ -19889,7 +19942,7 @@ def generate_owl_mesh(style: str = "perched") -> MeshSpec:
 
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"Owl_{style}", verts, faces,
-                        style=style, category="forest_animals")
+                        style=style, category="forest_animal")
 
 
 def generate_crow_mesh(style: str = "perched") -> MeshSpec:
@@ -19975,7 +20028,7 @@ def generate_crow_mesh(style: str = "perched") -> MeshSpec:
 
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"Crow_{style}", verts, faces,
-                        style=style, category="forest_animals")
+                        style=style, category="forest_animal")
 
 
 # =========================================================================
@@ -20087,7 +20140,7 @@ def generate_mountain_goat_mesh(style: str = "standing") -> MeshSpec:
 
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"MountainGoat_{style}", verts, faces,
-                        style=style, category="mountain_animals")
+                        style=style, category="mountain_animal")
 
 
 def generate_eagle_mesh(style: str = "perched") -> MeshSpec:
@@ -20185,7 +20238,7 @@ def generate_eagle_mesh(style: str = "perched") -> MeshSpec:
 
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"Eagle_{style}", verts, faces,
-                        style=style, category="mountain_animals")
+                        style=style, category="mountain_animal")
 
 
 def generate_bear_mesh(style: str = "standing") -> MeshSpec:
@@ -20314,7 +20367,7 @@ def generate_bear_mesh(style: str = "standing") -> MeshSpec:
 
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"Bear_{style}", verts, faces,
-                        style=style, category="mountain_animals")
+                        style=style, category="mountain_animal")
 
 
 # =========================================================================
@@ -20447,7 +20500,7 @@ def generate_horse_mesh(style: str = "standing") -> MeshSpec:
 
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"Horse_{style}", verts, faces,
-                        style=style, category="domestic_animals")
+                        style=style, category="domestic_animal")
 
 
 def generate_chicken_mesh(style: str = "standing") -> MeshSpec:
@@ -20539,7 +20592,7 @@ def generate_chicken_mesh(style: str = "standing") -> MeshSpec:
 
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"Chicken_{style}", verts, faces,
-                        style=style, category="domestic_animals")
+                        style=style, category="domestic_animal")
 
 
 def generate_dog_mesh(style: str = "sitting") -> MeshSpec:
@@ -20658,7 +20711,7 @@ def generate_dog_mesh(style: str = "sitting") -> MeshSpec:
 
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"Dog_{style}", verts, faces,
-                        style=style, category="domestic_animals")
+                        style=style, category="domestic_animal")
 
 
 def generate_cat_mesh(style: str = "sitting") -> MeshSpec:
@@ -20758,7 +20811,7 @@ def generate_cat_mesh(style: str = "sitting") -> MeshSpec:
 
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"Cat_{style}", verts, faces,
-                        style=style, category="domestic_animals")
+                        style=style, category="domestic_animal")
 
 
 # =========================================================================
@@ -21157,7 +21210,7 @@ def generate_frog_mesh(style: str = "sitting") -> MeshSpec:
 
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"Frog_{style}", verts, faces,
-                        style=style, category="swamp_animals")
+                        style=style, category="swamp_animal")
 
 
 def generate_snake_ambient_mesh(style: str = "coiled") -> MeshSpec:
@@ -21252,7 +21305,7 @@ def generate_snake_ambient_mesh(style: str = "coiled") -> MeshSpec:
         faces.append(tuple(idx + offset for idx in face))
 
     return _make_result(f"SnakeAmbient_{style}", verts, faces,
-                        style=style, category="swamp_animals")
+                        style=style, category="swamp_animal")
 
 
 def generate_turtle_mesh(style: str = "standing") -> MeshSpec:
@@ -21339,7 +21392,7 @@ def generate_turtle_mesh(style: str = "standing") -> MeshSpec:
 
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"Turtle_{style}", verts, faces,
-                        style=style, category="swamp_animals")
+                        style=style, category="swamp_animal")
 
 
 # =========================================================================
@@ -22455,7 +22508,7 @@ GENERATORS = {
         "map_scroll": generate_map_scroll_mesh,
         "lockpick": generate_lockpick_mesh,
     },
-    "forest_animals": {
+    "forest_animal": {
         "deer": generate_deer_mesh,
         "wolf": generate_wolf_mesh,
         "fox": generate_fox_mesh,
@@ -22463,12 +22516,12 @@ GENERATORS = {
         "owl": generate_owl_mesh,
         "crow": generate_crow_mesh,
     },
-    "mountain_animals": {
+    "mountain_animal": {
         "mountain_goat": generate_mountain_goat_mesh,
         "eagle": generate_eagle_mesh,
         "bear": generate_bear_mesh,
     },
-    "domestic_animals": {
+    "domestic_animal": {
         "horse": generate_horse_mesh,
         "chicken": generate_chicken_mesh,
         "dog": generate_dog_mesh,
@@ -22480,7 +22533,7 @@ GENERATORS = {
         "small_spider": generate_small_spider_mesh,
         "beetle": generate_beetle_mesh,
     },
-    "swamp_animals": {
+    "swamp_animal": {
         "frog": generate_frog_mesh,
         "snake_ambient": generate_snake_ambient_mesh,
         "turtle": generate_turtle_mesh,
@@ -22493,3 +22546,13 @@ GENERATORS = {
         "harbor_dock": generate_harbor_dock_mesh,
     },
 }
+
+_GENERATOR_CATEGORY_ALIASES = {
+    "door": "door_window",
+    "forest_animals": "forest_animal",
+    "mountain_animals": "mountain_animal",
+    "domestic_animals": "domestic_animal",
+    "swamp_animals": "swamp_animal",
+}
+
+GENERATORS = _GeneratorRegistry(GENERATORS, _GENERATOR_CATEGORY_ALIASES)

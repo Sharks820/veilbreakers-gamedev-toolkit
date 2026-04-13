@@ -28,6 +28,57 @@ from .terrain_semantics import (
 # ---------------------------------------------------------------------------
 
 
+def _shift_with_edge_repeat(
+    array: np.ndarray,
+    *,
+    row_shift: int,
+    col_shift: int,
+) -> np.ndarray:
+    """Shift a heightfield without toroidal wraparound.
+
+    ``np.roll`` creates cross-edge contamination that shows up as visible seams
+    on terrain boundaries. This helper repeats the nearest edge sample instead.
+    """
+    src = np.asarray(array, dtype=np.float64)
+    out = np.empty_like(src)
+
+    if row_shift >= 0:
+        src_r0 = 0
+        src_r1 = src.shape[0] - row_shift
+        dst_r0 = row_shift
+        dst_r1 = src.shape[0]
+    else:
+        src_r0 = -row_shift
+        src_r1 = src.shape[0]
+        dst_r0 = 0
+        dst_r1 = src.shape[0] + row_shift
+
+    if col_shift >= 0:
+        src_c0 = 0
+        src_c1 = src.shape[1] - col_shift
+        dst_c0 = col_shift
+        dst_c1 = src.shape[1]
+    else:
+        src_c0 = -col_shift
+        src_c1 = src.shape[1]
+        dst_c0 = 0
+        dst_c1 = src.shape[1] + col_shift
+
+    out[dst_r0:dst_r1, dst_c0:dst_c1] = src[src_r0:src_r1, src_c0:src_c1]
+
+    if row_shift > 0:
+        out[:row_shift, :] = out[row_shift:row_shift + 1, :]
+    elif row_shift < 0:
+        out[row_shift:, :] = out[row_shift - 1:row_shift, :]
+
+    if col_shift > 0:
+        out[:, :col_shift] = out[:, col_shift:col_shift + 1]
+    elif col_shift < 0:
+        out[:, col_shift:] = out[:, col_shift - 1:col_shift]
+
+    return out
+
+
 def apply_wind_erosion(
     stack: TerrainMaskStack,
     prevailing_dir_rad: float,
@@ -47,14 +98,14 @@ def apply_wind_erosion(
         raise ValueError("intensity must be in [0, 1]")
 
     h = np.asarray(stack.height, dtype=np.float64)
-    H, W = h.shape
-
     dx = math.cos(prevailing_dir_rad)
     dy = math.sin(prevailing_dir_rad)
 
     # Upwind / downwind shifts (1 cell)
-    up = np.roll(h, shift=(-int(round(dy)), -int(round(dx))), axis=(0, 1))
-    down = np.roll(h, shift=(int(round(dy)), int(round(dx))), axis=(0, 1))
+    row_shift = int(round(dy))
+    col_shift = int(round(dx))
+    up = _shift_with_edge_repeat(h, row_shift=-row_shift, col_shift=-col_shift)
+    down = _shift_with_edge_repeat(h, row_shift=row_shift, col_shift=col_shift)
 
     # Asymmetric blend: downwind side gets more of the upwind's mass
     blended = 0.5 * h + 0.3 * up + 0.2 * down

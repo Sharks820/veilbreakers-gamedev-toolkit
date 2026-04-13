@@ -1865,10 +1865,10 @@ BIOME_PALETTES_V2: dict[str, dict[str, dict[str, Any]]] = {
         "special": {"base_color": (0.34, 0.37, 0.33, 1.0), "roughness": 0.68, "roughness_variation": 0.10, "metallic": 0.0, "normal_strength": 0.35, "detail_scale": 9.0, "wear_intensity": 0.05, "node_recipe": "terrain", "description": "Snow remnants + wet alpine patches", "subsurface_color": (0.28, 0.34, 0.30, 1.0), "subsurface_weight": 0.04},
     },
     "mountain_pass_summer": {
-        "ground": {"base_color": (0.10, 0.15, 0.08, 1.0), "roughness": 0.84, "roughness_variation": 0.14, "metallic": 0.0, "normal_strength": 0.75, "detail_scale": 12.0, "wear_intensity": 0.22, "node_recipe": "terrain", "description": "July alpine grass + gravel + damp dark soil"},
-        "slope": {"base_color": (0.12, 0.16, 0.11, 1.0), "roughness": 0.76, "roughness_variation": 0.12, "metallic": 0.0, "normal_strength": 1.05, "detail_scale": 7.0, "wear_intensity": 0.28, "node_recipe": "stone", "description": "Lichen-heavy rock + mossed switchback slopes"},
-        "cliff": {"base_color": (0.19, 0.17, 0.14, 1.0), "roughness": 0.89, "roughness_variation": 0.15, "metallic": 0.0, "normal_strength": 1.7, "detail_scale": 4.0, "wear_intensity": 0.42, "node_recipe": "stone", "description": "Layered cliff stone with warm sediment bands"},
-        "special": {"base_color": (0.09, 0.12, 0.07, 1.0), "roughness": 0.58, "roughness_variation": 0.08, "metallic": 0.0, "normal_strength": 0.42, "detail_scale": 10.0, "wear_intensity": 0.08, "node_recipe": "terrain", "description": "Wet riverbank grass + saturated alpine patches", "subsurface_color": (0.16, 0.20, 0.12, 1.0), "subsurface_weight": 0.03},
+        "ground": {"base_color": (0.15, 0.18, 0.11, 1.0), "roughness": 0.84, "roughness_variation": 0.15, "metallic": 0.0, "normal_strength": 0.88, "detail_scale": 12.0, "wear_intensity": 0.24, "node_recipe": "terrain", "description": "Alpine grass, gravel, and sun-dried soil for mountain passes"},
+        "slope": {"base_color": (0.18, 0.19, 0.16, 1.0), "roughness": 0.78, "roughness_variation": 0.12, "metallic": 0.0, "normal_strength": 1.28, "detail_scale": 8.4, "wear_intensity": 0.32, "node_recipe": "stone", "description": "Cool gray rock with lichen and switchback wear"},
+        "cliff": {"base_color": (0.28, 0.26, 0.23, 1.0), "roughness": 0.80, "roughness_variation": 0.16, "metallic": 0.0, "normal_strength": 2.35, "detail_scale": 8.6, "wear_intensity": 0.50, "node_recipe": "stone", "description": "Readable warm-gray cliff stone with fractured sediment bands"},
+        "special": {"base_color": (0.10, 0.17, 0.14, 1.0), "roughness": 0.54, "roughness_variation": 0.10, "metallic": 0.0, "normal_strength": 0.46, "detail_scale": 9.0, "wear_intensity": 0.10, "node_recipe": "terrain", "description": "Wet riverbank grass and moss-darkened alpine runoff patches", "subsurface_color": (0.18, 0.24, 0.18, 1.0), "subsurface_weight": 0.035},
     },
     "mountain_pass_winter": {
         "ground": {"base_color": (0.10, 0.12, 0.08, 1.0), "roughness": 0.84, "roughness_variation": 0.14, "metallic": 0.0, "normal_strength": 0.8, "detail_scale": 11.0, "wear_intensity": 0.24, "node_recipe": "terrain", "description": "Frozen gravel + sparse alpine grass"},
@@ -1988,6 +1988,13 @@ def auto_assign_terrain_layers(
     num_verts = len(vertices)
     if num_verts == 0:
         return []
+    special_policy = _resolve_special_band_policy(
+        biome_name,
+        special_low_pct=special_low_pct,
+        special_high_pct=special_high_pct,
+    )
+    special_low_pct = special_policy["low_pct"]
+    special_high_pct = special_policy["high_pct"]
     slope_flat_rad = math.radians(slope_flat_deg)
     slope_cliff_rad = math.radians(slope_cliff_deg)
     vert_faces: list[list[int]] = [[] for _ in range(num_verts)]
@@ -2076,9 +2083,19 @@ def auto_assign_terrain_layers(
             a_moisture = 0.0
 
         a = 0.0
-        if h_pct < special_low_pct and special_low_pct > 0:
+        low_special_allowed = (
+            angle < slope_flat_rad * 1.12
+            if special_policy["restrict_low_to_ground"]
+            else True
+        )
+        high_special_allowed = (
+            angle < slope_flat_rad * 1.05
+            if special_policy["restrict_high_to_ground"]
+            else True
+        )
+        if low_special_allowed and h_pct < special_low_pct and special_low_pct > 0:
             a = 1.0 - (h_pct / special_low_pct)
-        elif h_pct > special_high_pct and special_high_pct < 1.0:
+        elif high_special_allowed and h_pct > special_high_pct and special_high_pct < 1.0:
             a = (h_pct - special_high_pct) / (1.0 - special_high_pct)
         a = max(0.0, min(1.0, a + a_moisture))
 
@@ -2115,6 +2132,236 @@ def _resolve_biome_palette_name(
     return resolved
 
 
+def _resolve_special_band_policy(
+    biome_name: str,
+    *,
+    special_low_pct: float,
+    special_high_pct: float,
+) -> dict[str, Any]:
+    """Return biome-aware special-layer rules.
+
+    Mountain-pass terrain should not paint altitude contour rings into the
+    special channel. Keep the special layer down in low, flatter runoff zones
+    and disable the high-altitude band entirely for those palettes.
+    """
+    resolved = _resolve_biome_palette_name(biome_name)
+    policy = {
+        "low_pct": float(special_low_pct),
+        "high_pct": float(special_high_pct),
+        "restrict_low_to_ground": False,
+        "restrict_high_to_ground": False,
+    }
+    if resolved in {"mountain_pass", "mountain_pass_summer", "mountain_pass_winter"}:
+        policy["low_pct"] = min(float(special_low_pct), 0.08)
+        policy["high_pct"] = 1.0
+        policy["restrict_low_to_ground"] = True
+        policy["restrict_high_to_ground"] = True
+    return policy
+
+
+def _clamp_rgba(color: Sequence[float], scale: float = 1.0, bias: float = 0.0) -> tuple[float, float, float, float]:
+    """Scale/bias an RGBA color while keeping it in a valid shader range."""
+    alpha = float(color[3]) if len(color) >= 4 else 1.0
+    rgb = [
+        max(0.0, min(1.0, float(channel) * scale + bias))
+        for channel in color[:3]
+    ]
+    return (rgb[0], rgb[1], rgb[2], alpha)
+
+
+def _build_terrain_recipe(
+    tree: Any,
+    links: Any,
+    *,
+    bsdf: Any,
+    texcoord_output: Any,
+    layer_name: str,
+    layer_params: Mapping[str, Any],
+    x: float,
+    y: float,
+) -> Any:
+    """Build recipe-driven terrain detail so rock layers stop reading as fuzzy noise."""
+    recipe = str(layer_params.get("node_recipe", "terrain")).strip().lower()
+    detail_scale = max(float(layer_params.get("detail_scale", 6.0)), 0.25)
+    normal_strength = max(float(layer_params.get("normal_strength", 1.0)), 0.0)
+    wear_intensity = float(layer_params.get("wear_intensity", 0.2))
+    base_color = layer_params["base_color"]
+
+    def _hook_vector(node: Any) -> None:
+        vector_input = node.inputs.get("Vector") if hasattr(node, "inputs") else None
+        if texcoord_output is not None and vector_input is not None:
+            links.new(texcoord_output, vector_input)
+
+    primary_noise = _add_node(tree, "ShaderNodeTexNoise", x - 300, y - 120, f"Noise {layer_name}")
+    _hook_vector(primary_noise)
+    primary_noise.inputs["Scale"].default_value = detail_scale
+    primary_noise.inputs["Detail"].default_value = 5.4 if recipe == "stone" else 9.5
+    primary_noise.inputs["Roughness"].default_value = 0.38 if recipe == "stone" else 0.58
+    if primary_noise.inputs.get("Distortion") is not None:
+        primary_noise.inputs["Distortion"].default_value = 0.04 if recipe == "stone" else 0.18
+
+    base_color_input = bsdf.inputs.get("Base Color")
+    height_socket = primary_noise.outputs["Fac"]
+
+    if recipe == "stone":
+        strata = _add_node(tree, "ShaderNodeTexWave", x - 520, y - 40, f"Strata {layer_name}")
+        _hook_vector(strata)
+        strata.wave_type = "BANDS"
+        if hasattr(strata, "bands_direction"):
+            strata.bands_direction = "Z"
+        strata.inputs["Scale"].default_value = max(detail_scale * 0.82, 1.2)
+        strata.inputs["Distortion"].default_value = 7.0
+        detail_input = strata.inputs.get("Detail")
+        if detail_input is not None:
+            detail_input.default_value = 3.5
+        detail_scale_input = strata.inputs.get("Detail Scale")
+        if detail_scale_input is not None:
+            detail_scale_input.default_value = 1.45
+
+        fracture = _add_node(tree, "ShaderNodeTexVoronoi", x - 520, y - 210, f"Fracture {layer_name}")
+        _hook_vector(fracture)
+        fracture.inputs["Scale"].default_value = max(detail_scale * 0.82, 2.1)
+        randomness_input = fracture.inputs.get("Randomness")
+        if randomness_input is not None:
+            randomness_input.default_value = 0.48
+
+        fracture_mix = _add_node(tree, "ShaderNodeMath", x - 340, y - 215, f"Fracture Mix {layer_name}")
+        fracture_mix.operation = "MULTIPLY"
+        fracture_mix.inputs[1].default_value = 0.12
+        links.new(fracture.outputs["Distance"], fracture_mix.inputs[0])
+
+        macro_mix = _add_node(tree, "ShaderNodeMath", x - 150, y - 130, f"Stone Height {layer_name}")
+        macro_mix.operation = "ADD"
+        links.new(primary_noise.outputs["Fac"], macro_mix.inputs[0])
+        links.new(fracture_mix.outputs["Value"], macro_mix.inputs[1])
+
+        strata_weight = _add_node(tree, "ShaderNodeMath", x - 330, y - 20, f"Strata Weight {layer_name}")
+        strata_weight.operation = "MULTIPLY"
+        strata_weight.inputs[1].default_value = 0.12
+        links.new(strata.outputs["Fac"], strata_weight.inputs[0])
+
+        strata_mix = _add_node(tree, "ShaderNodeMath", x - 150, y - 25, f"Stone Detail {layer_name}")
+        strata_mix.operation = "ADD"
+        links.new(macro_mix.outputs["Value"], strata_mix.inputs[0])
+        links.new(strata_weight.outputs["Value"], strata_mix.inputs[1])
+
+        shape_ramp = _add_node(tree, "ShaderNodeValToRGB", 35, y - 95, f"Stone Ramp {layer_name}")
+        if hasattr(shape_ramp, "color_ramp"):
+            shape_ramp.color_ramp.elements[0].position = 0.28
+            shape_ramp.color_ramp.elements[0].color = (0.03, 0.03, 0.03, 1.0)
+            shape_ramp.color_ramp.elements[1].position = 0.78
+            shape_ramp.color_ramp.elements[1].color = (0.96, 0.96, 0.96, 1.0)
+        links.new(macro_mix.outputs["Value"], shape_ramp.inputs["Fac"])
+
+        dark_rgb = _add_node(tree, "ShaderNodeRGB", -145, y + 90, f"Stone Dark {layer_name}")
+        dark_rgb.outputs["Color"].default_value = _clamp_rgba(base_color, scale=0.82, bias=-0.005)
+        light_rgb = _add_node(tree, "ShaderNodeRGB", -145, y + 155, f"Stone Light {layer_name}")
+        light_rgb.outputs["Color"].default_value = _clamp_rgba(base_color, scale=1.04, bias=0.005)
+        strata_color = _add_node(tree, "ShaderNodeMixRGB", 220, y + 120, f"Stone Color {layer_name}")
+        strata_color.blend_type = "MIX"
+        links.new(shape_ramp.outputs["Color"], strata_color.inputs["Fac"])
+        links.new(dark_rgb.outputs["Color"], strata_color.inputs["Color1"])
+        links.new(light_rgb.outputs["Color"], strata_color.inputs["Color2"])
+        if base_color_input is not None:
+            links.new(strata_color.outputs["Color"], base_color_input)
+
+        rough_variation = _add_node(tree, "ShaderNodeMapRange", 220, y + 25, f"Stone Rough {layer_name}")
+        rough_variation.clamp = True
+        rough_variation.inputs["From Min"].default_value = 0.0
+        rough_variation.inputs["From Max"].default_value = 1.0
+        rough_variation.inputs["To Min"].default_value = max(float(layer_params["roughness"]) - 0.07, 0.05)
+        rough_variation.inputs["To Max"].default_value = min(float(layer_params["roughness"]) + 0.05, 1.0)
+        links.new(shape_ramp.outputs["Color"], rough_variation.inputs["Value"])
+        rough_input = bsdf.inputs.get("Roughness")
+        if rough_input is not None:
+            links.new(rough_variation.outputs["Result"], rough_input)
+
+        bump = _add_node(tree, "ShaderNodeBump", 220, y - 120, f"Bump {layer_name}")
+        bump.inputs["Strength"].default_value = normal_strength * 0.54
+        bump.inputs["Distance"].default_value = 0.0045
+        links.new(strata_mix.outputs["Value"], bump.inputs["Height"])
+        links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+        height_socket = macro_mix.outputs["Value"]
+    elif recipe == "organic":
+        moss_noise = _add_node(tree, "ShaderNodeTexNoise", x - 520, y - 210, f"Organic Macro {layer_name}")
+        _hook_vector(moss_noise)
+        moss_noise.inputs["Scale"].default_value = max(detail_scale * 0.52, 0.7)
+        moss_noise.inputs["Detail"].default_value = 6.0
+        moss_noise.inputs["Roughness"].default_value = 0.72
+
+        blend = _add_node(tree, "ShaderNodeMath", x - 200, y - 150, f"Organic Height {layer_name}")
+        blend.operation = "MULTIPLY"
+        blend.inputs[1].default_value = 0.72
+        links.new(moss_noise.outputs["Fac"], blend.inputs[0])
+
+        combine = _add_node(tree, "ShaderNodeMath", x - 10, y - 150, f"Organic Blend {layer_name}")
+        combine.operation = "ADD"
+        links.new(primary_noise.outputs["Fac"], combine.inputs[0])
+        links.new(blend.outputs["Value"], combine.inputs[1])
+
+        color_ramp = _add_node(tree, "ShaderNodeValToRGB", 180, y - 105, f"Organic Ramp {layer_name}")
+        if hasattr(color_ramp, "color_ramp"):
+            color_ramp.color_ramp.elements[0].position = 0.32
+            color_ramp.color_ramp.elements[1].position = 0.74
+        links.new(combine.outputs["Value"], color_ramp.inputs["Fac"])
+
+        darker = _add_node(tree, "ShaderNodeRGB", -120, y + 90, f"Organic Dark {layer_name}")
+        darker.outputs["Color"].default_value = _clamp_rgba(base_color, scale=0.74)
+        lighter = _add_node(tree, "ShaderNodeRGB", -120, y + 155, f"Organic Light {layer_name}")
+        lighter.outputs["Color"].default_value = _clamp_rgba(base_color, scale=1.08)
+        color_mix = _add_node(tree, "ShaderNodeMixRGB", 380, y + 120, f"Organic Color {layer_name}")
+        links.new(color_ramp.outputs["Color"], color_mix.inputs["Fac"])
+        links.new(darker.outputs["Color"], color_mix.inputs["Color1"])
+        links.new(lighter.outputs["Color"], color_mix.inputs["Color2"])
+        if base_color_input is not None:
+            links.new(color_mix.outputs["Color"], base_color_input)
+
+        bump = _add_node(tree, "ShaderNodeBump", 380, y - 110, f"Bump {layer_name}")
+        bump.inputs["Strength"].default_value = normal_strength * 0.72
+        bump.inputs["Distance"].default_value = 0.012
+        links.new(color_ramp.outputs["Color"], bump.inputs["Height"])
+        links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+        height_socket = combine.outputs["Value"]
+    else:
+        gravel_noise = _add_node(tree, "ShaderNodeTexNoise", x - 520, y - 210, f"Terrain Macro {layer_name}")
+        _hook_vector(gravel_noise)
+        gravel_noise.inputs["Scale"].default_value = max(detail_scale * 0.46, 0.9)
+        gravel_noise.inputs["Detail"].default_value = 7.0
+        gravel_noise.inputs["Roughness"].default_value = 0.5
+
+        gravel_mix = _add_node(tree, "ShaderNodeMath", x - 215, y - 150, f"Terrain Height {layer_name}")
+        gravel_mix.operation = "ADD"
+        gravel_mix.inputs[1].default_value = 0.0
+        links.new(primary_noise.outputs["Fac"], gravel_mix.inputs[0])
+        links.new(gravel_noise.outputs["Fac"], gravel_mix.inputs[1])
+
+        terrain_ramp = _add_node(tree, "ShaderNodeValToRGB", 5, y - 95, f"Terrain Ramp {layer_name}")
+        if hasattr(terrain_ramp, "color_ramp"):
+            terrain_ramp.color_ramp.elements[0].position = 0.30
+            terrain_ramp.color_ramp.elements[1].position = 0.72
+        links.new(gravel_mix.outputs["Value"], terrain_ramp.inputs["Fac"])
+
+        dark_rgb = _add_node(tree, "ShaderNodeRGB", -145, y + 90, f"Terrain Dark {layer_name}")
+        dark_rgb.outputs["Color"].default_value = _clamp_rgba(base_color, scale=0.76)
+        light_rgb = _add_node(tree, "ShaderNodeRGB", -145, y + 155, f"Terrain Light {layer_name}")
+        light_rgb.outputs["Color"].default_value = _clamp_rgba(base_color, scale=1.05)
+        terrain_color = _add_node(tree, "ShaderNodeMixRGB", 220, y + 120, f"Terrain Color {layer_name}")
+        links.new(terrain_ramp.outputs["Color"], terrain_color.inputs["Fac"])
+        links.new(dark_rgb.outputs["Color"], terrain_color.inputs["Color1"])
+        links.new(light_rgb.outputs["Color"], terrain_color.inputs["Color2"])
+        if base_color_input is not None:
+            links.new(terrain_color.outputs["Color"], base_color_input)
+
+        bump = _add_node(tree, "ShaderNodeBump", 220, y - 120, f"Bump {layer_name}")
+        bump.inputs["Strength"].default_value = normal_strength * (0.72 + wear_intensity * 0.30)
+        bump.inputs["Distance"].default_value = 0.011
+        links.new(terrain_ramp.outputs["Color"], bump.inputs["Height"])
+        links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+        height_socket = gravel_mix.outputs["Value"]
+
+    return height_socket
+
+
 def compute_world_splatmap_weights(
     heightmap: list[list[float]] | np.ndarray,
     biome_name: str = DEFAULT_BIOME,
@@ -2146,6 +2393,13 @@ def compute_world_splatmap_weights(
             get_biome_palette(biome_name)
         except ValueError:
             logger.warning("Unknown biome '%s' passed to compute_world_splatmap_weights", biome_name)
+    special_policy = _resolve_special_band_policy(
+        biome_name,
+        special_low_pct=special_low_pct,
+        special_high_pct=special_high_pct,
+    )
+    special_low_pct = float(special_policy["low_pct"])
+    special_high_pct = float(special_policy["high_pct"])
 
     slope_map = compute_slope_map(hmap, cell_size=cell_size)
     if height_range is not None:
@@ -2226,9 +2480,13 @@ def compute_world_splatmap_weights(
     alpha = np.zeros_like(hp)
     if special_low_pct > 1e-9:
         low_mask = hp < special_low_pct
+        if special_policy["restrict_low_to_ground"]:
+            low_mask &= slope < (flat_deg * 1.12)
         alpha = np.where(low_mask, 1.0 - (hp / max(special_low_pct, 1e-9)), alpha)
     if special_high_pct < 1.0:
         high_mask = hp > special_high_pct
+        if special_policy["restrict_high_to_ground"]:
+            high_mask &= slope < (flat_deg * 1.05)
         alpha = np.where(
             high_mask,
             (hp - special_high_pct) / max(1.0 - special_high_pct, 1e-9),
@@ -2258,6 +2516,8 @@ def create_biome_terrain_material(
     biome_name: str,
     object_name: str | None = None,
     season: str | None = None,
+    *,
+    preserve_existing_splatmap: bool = True,
 ) -> Any:
     """Create a multi-layer terrain material with vertex-color splatmap blending.
 
@@ -2287,6 +2547,8 @@ def create_biome_terrain_material(
     links = tree.links
     nodes.clear()
     output = _add_node(tree, "ShaderNodeOutputMaterial", 1200, 0, "Output")
+    texcoord = _add_node(tree, "ShaderNodeTexCoord", -1100, 200, "TexCoord")
+    generated_socket = texcoord.outputs.get("Generated") if hasattr(texcoord, "outputs") else None
     vcol_node = _add_node(tree, "ShaderNodeVertexColor", -800, -600, "Splatmap")
     vcol_node.layer_name = "VB_TerrainSplatmap"
     separate = _add_node(tree, "ShaderNodeSeparateColor", -600, -600, "Split")
@@ -2294,7 +2556,7 @@ def create_biome_terrain_material(
     links.new(vcol_node.outputs["Color"], separate.inputs["Color"])
     layer_names = ["ground", "slope", "cliff", "special"]
     layer_bsdfs: list[Any] = []
-    noise_nodes: list[Any] = []
+    layer_height_sockets: list[Any] = []
     for i, ln in enumerate(layer_names):
         lp = palette[ln]
         y = 400 - i * 300
@@ -2321,16 +2583,18 @@ def create_biome_terrain_material(
                 sci = bsdf.inputs.get("Subsurface Color")
                 if sci is not None:
                     sci.default_value = sc
-        noise = _add_node(tree, "ShaderNodeTexNoise", -500, y - 100, f"Noise {ln}")
-        noise.inputs["Scale"].default_value = lp["detail_scale"]
-        noise.inputs["Detail"].default_value = 8.0
-        bump = _add_node(tree, "ShaderNodeBump", -350, y - 100, f"Bump {ln}")
-        bump.inputs["Strength"].default_value = lp["normal_strength"]
-        bump.inputs["Distance"].default_value = 0.02
-        links.new(noise.outputs["Fac"], bump.inputs["Height"])
-        links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+        height_socket = _build_terrain_recipe(
+            tree,
+            links,
+            bsdf=bsdf,
+            texcoord_output=generated_socket,
+            layer_name=ln,
+            layer_params=lp,
+            x=-220,
+            y=y,
+        )
         layer_bsdfs.append(bsdf)
-        noise_nodes.append(noise)
+        layer_height_sockets.append(height_socket)
 
     # -- HeightBlend: height-based texture transitions between layers --
     height_blend_group = _create_height_blend_group()
@@ -2342,8 +2606,8 @@ def create_biome_terrain_material(
 
     hb_01 = _add_node(tree, "ShaderNodeGroup", 0, 300, "HB Ground/Slope")
     hb_01.node_tree = height_blend_group
-    links.new(noise_nodes[0].outputs["Fac"], hb_01.inputs["Height_A"])
-    links.new(noise_nodes[1].outputs["Fac"], hb_01.inputs["Height_B"])
+    links.new(layer_height_sockets[0], hb_01.inputs["Height_A"])
+    links.new(layer_height_sockets[1], hb_01.inputs["Height_B"])
     links.new(separate.outputs["Green"], hb_01.inputs["Mask"])
     hb_01.inputs["Blend_Contrast"].default_value = 0.6
     links.new(hb_01.outputs["Result"], mix_01.inputs["Fac"])
@@ -2355,8 +2619,8 @@ def create_biome_terrain_material(
 
     hb_02 = _add_node(tree, "ShaderNodeGroup", 300, 200, "HB Mix/Cliff")
     hb_02.node_tree = height_blend_group
-    links.new(noise_nodes[1].outputs["Fac"], hb_02.inputs["Height_A"])
-    links.new(noise_nodes[2].outputs["Fac"], hb_02.inputs["Height_B"])
+    links.new(layer_height_sockets[1], hb_02.inputs["Height_A"])
+    links.new(layer_height_sockets[2], hb_02.inputs["Height_B"])
     links.new(separate.outputs["Blue"], hb_02.inputs["Mask"])
     hb_02.inputs["Blend_Contrast"].default_value = 0.5
     links.new(hb_02.outputs["Result"], mix_02.inputs["Fac"])
@@ -2368,8 +2632,8 @@ def create_biome_terrain_material(
 
     hb_03 = _add_node(tree, "ShaderNodeGroup", 600, 100, "HB Mix/Special")
     hb_03.node_tree = height_blend_group
-    links.new(noise_nodes[2].outputs["Fac"], hb_03.inputs["Height_A"])
-    links.new(noise_nodes[3].outputs["Fac"], hb_03.inputs["Height_B"])
+    links.new(layer_height_sockets[2], hb_03.inputs["Height_A"])
+    links.new(layer_height_sockets[3], hb_03.inputs["Height_B"])
     links.new(vcol_node.outputs["Alpha"], hb_03.inputs["Mask"])
     hb_03.inputs["Blend_Contrast"].default_value = 0.5
     links.new(hb_03.outputs["Result"], mix_03.inputs["Fac"])
@@ -2377,30 +2641,68 @@ def create_biome_terrain_material(
     if object_name:
         obj = bpy.data.objects.get(object_name)
         if obj is not None and obj.type == "MESH":
-            if mat.name not in [s.name for s in obj.data.materials if s is not None]:
-                obj.data.materials.append(mat)
             mesh = obj.data
+            # Terrain preview should use a single authoritative terrain material.
+            # Leaving old face-material slots from env_paint_terrain in place makes
+            # the terrain render as a patchwork of unrelated materials.
+            if hasattr(mesh.materials, "clear"):
+                mesh.materials.clear()
+                mesh.materials.append(mat)
+            else:
+                if mesh.materials:
+                    mesh.materials[0] = mat
+                else:
+                    mesh.materials.append(mat)
+            for poly in getattr(mesh, "polygons", []):
+                poly.material_index = 0
+
             vcn = "VB_TerrainSplatmap"
-            if vcn not in mesh.color_attributes:
+            existing_vcol = mesh.color_attributes.get(vcn)
+            if existing_vcol is None:
                 mesh.color_attributes.new(name=vcn, type="FLOAT_COLOR", domain="CORNER")
             vcol = mesh.color_attributes[vcn]
-            if hasattr(mesh, "calc_normals_split"):
-                mesh.calc_normals_split()
-            elif hasattr(mesh, "calc_normals"):
-                mesh.calc_normals()
-            vl = [(v.co.x, v.co.y, v.co.z) for v in mesh.vertices]
-            nl = [(p.normal.x, p.normal.y, p.normal.z) for p in mesh.polygons]
-            fl = [tuple(p.vertices) for p in mesh.polygons]
-            weights = auto_assign_terrain_layers(vl, nl, fl, biome_name)
-            for poly in mesh.polygons:
-                for li in poly.loop_indices:
-                    vi_idx = mesh.loops[li].vertex_index
-                    w = weights[vi_idx]
-                    vcol.data[li].color = (w[0], w[1], w[2], w[3])
+
+            preserve_layer = False
+            if preserve_existing_splatmap and existing_vcol is not None:
+                try:
+                    preserve_layer = any(
+                        float(sum(existing_vcol.data[idx].color[:4])) > 1e-5
+                        for idx in range(len(existing_vcol.data))
+                    )
+                except Exception:
+                    preserve_layer = False
+
+            if not preserve_layer:
+                if hasattr(mesh, "calc_normals_split"):
+                    mesh.calc_normals_split()
+                elif hasattr(mesh, "calc_normals"):
+                    mesh.calc_normals()
+                vl = [(v.co.x, v.co.y, v.co.z) for v in mesh.vertices]
+                nl = [(p.normal.x, p.normal.y, p.normal.z) for p in mesh.polygons]
+                fl = [tuple(p.vertices) for p in mesh.polygons]
+                # Do not auto-paint the "special" layer from arbitrary top/bottom
+                # height percentiles in Blender preview; that produces obviously
+                # fake terrain striping unrelated to actual terrain semantics.
+                weights = auto_assign_terrain_layers(
+                    vl,
+                    nl,
+                    fl,
+                    biome_name,
+                    special_low_pct=0.0,
+                    special_high_pct=1.0,
+                )
+                for poly in mesh.polygons:
+                    for li in poly.loop_indices:
+                        vi_idx = mesh.loops[li].vertex_index
+                        w = weights[vi_idx]
+                        vcol.data[li].color = (w[0], w[1], w[2], w[3])
     if object_name:
         obj = bpy.data.objects.get(object_name)
         if obj is not None and hasattr(obj.data, "materials"):
-            if obj.data.materials:
+            if hasattr(obj.data.materials, "clear"):
+                obj.data.materials.clear()
+                obj.data.materials.append(mat)
+            elif obj.data.materials:
                 obj.data.materials[0] = mat
             else:
                 obj.data.materials.append(mat)
@@ -2436,7 +2738,12 @@ def handle_create_biome_terrain(params: dict[str, Any]) -> dict[str, Any]:
                      f"Available: {sorted(BIOME_PALETTES_V2.keys())}",
         }
     object_name = params.get("object_name")
-    mat = create_biome_terrain_material(biome_name, object_name, season=season)
+    mat = create_biome_terrain_material(
+        biome_name,
+        object_name,
+        season=season,
+        preserve_existing_splatmap=bool(params.get("preserve_existing_splatmap", True)),
+    )
     palette = BIOME_PALETTES_V2[resolved_biome_name]
     layer_info = {ln: ld.get("description", "") for ln, ld in palette.items()}
     rd: dict[str, Any] = {

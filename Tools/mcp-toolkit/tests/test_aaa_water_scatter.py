@@ -18,6 +18,7 @@ from __future__ import annotations
 import math
 import types
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
@@ -571,6 +572,17 @@ class TestWaterMaterialProperties(unittest.TestCase):
         finally:
             _environment_mod.bpy = orig_bpy
             _environment_mod.bmesh = orig_bmesh
+
+    def test_preserve_path_shape_skips_resmoothing(self):
+        path = [[0.0, -10.0, 0.0], [0.0, 0.0, -0.5], [0.0, 10.0, -1.0]]
+        with patch.object(_environment_mod, "_smooth_river_path_points", side_effect=AssertionError("unexpected smoothing")):
+            result = handle_create_water({
+                "name": "PreconformedRiver",
+                "path_points": path,
+                "preserve_path_shape": True,
+            })
+        self.assertIsNotNone(result)
+        self.assertIn("name", result)
 
 
 # ===========================================================================

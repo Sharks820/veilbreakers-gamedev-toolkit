@@ -105,6 +105,7 @@ async def post_process_tripo_model(
     texture_dir_str = str(texture_dir)
 
     result: dict[str, Any] = {
+        "status": "success",
         "channels": {},
         "albedo_delit": None,
         "palette_validation": {"passed": False, "issues": [], "stats": {}},
@@ -120,6 +121,7 @@ async def post_process_tripo_model(
     try:
         channels = extract_glb_textures(glb_path, texture_dir_str)
     except Exception as exc:  # noqa: BLE001
+        result["status"] = "error"
         result["extraction_error"] = str(exc)
         return result
 
@@ -137,6 +139,7 @@ async def post_process_tripo_model(
                 albedo_delit_path = delit_out
                 result["albedo_delit"] = albedo_delit_path
         except Exception as exc:  # noqa: BLE001
+            result["status"] = "partial"
             result["delight_error"] = str(exc)
             result["warnings"].append(f"delight_failed: {exc}")
 
@@ -149,6 +152,7 @@ async def post_process_tripo_model(
         try:
             palette_result = validate_palette(albedo_for_validation)
         except Exception as exc:  # noqa: BLE001
+            result["status"] = "partial"
             result["palette_validation_error"] = str(exc)
             result["warnings"].append(f"palette_validation_failed: {exc}")
     result["palette_validation"] = palette_result
@@ -162,6 +166,7 @@ async def post_process_tripo_model(
         try:
             roughness_result = validate_roughness_map(orm_path)
         except Exception as exc:  # noqa: BLE001
+            result["status"] = "partial"
             result["roughness_validation_error"] = str(exc)
             result["warnings"].append(f"roughness_validation_failed: {exc}")
     result["roughness_validation"] = roughness_result
@@ -174,6 +179,8 @@ async def post_process_tripo_model(
         palette_passed=palette_result.get("passed", False),
         roughness_passed=roughness_result.get("passed", False),
     )
+    if result["warnings"] and result["status"] == "success":
+        result["status"] = "partial"
 
     return result
 

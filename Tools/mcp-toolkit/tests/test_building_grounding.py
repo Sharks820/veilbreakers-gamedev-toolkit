@@ -59,6 +59,18 @@ class TestSampleTerrainHeight:
         )
 
     @pytest.mark.asyncio
+    async def test_accepts_top_level_execute_code_output(self):
+        """Blender may return execute_code output at the top level."""
+        from veilbreakers_mcp.blender_server import _sample_terrain_height
+
+        blender = AsyncMock()
+        blender.send_command = AsyncMock(return_value={"output": "-37.75", "executed": True})
+
+        result = await _sample_terrain_height(blender, "Terrain", 10.0, 20.0)
+
+        assert result == pytest.approx(-37.75)
+
+    @pytest.mark.asyncio
     async def test_returns_zero_when_output_empty(self):
         """Empty output (no hit) should return 0.0, not crash."""
         from veilbreakers_mcp.blender_server import _sample_terrain_height
