@@ -181,6 +181,7 @@ from .environment import (
     handle_paint_terrain,
     handle_carve_river,
     handle_generate_road,
+    handle_create_cave_entrance,
     handle_create_water,
     handle_export_heightmap,
     handle_generate_multi_biome_world,
@@ -1002,6 +1003,7 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "env_paint_terrain": handle_paint_terrain,
     "env_carve_river": handle_carve_river,
     "env_generate_road": handle_generate_road,
+    "env_create_cave_entrance": handle_create_cave_entrance,
     "env_create_water": handle_create_water,
     "env_export_heightmap": handle_export_heightmap,
     # Environment scatter operations

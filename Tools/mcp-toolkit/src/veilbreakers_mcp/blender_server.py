@@ -252,6 +252,26 @@ def _derive_terrain_validation_profiles(
     if has_waterfall_signal:
         profiles.append("terrain_waterfall")
 
+    has_river_signal = (
+        bool(water_cfg.get("rivers"))
+        or _payload_contains_keywords(
+            [water_cfg, combined_location_payloads, object_names or []],
+            ("river", "stream", "creek", "fjord", "watercourse"),
+        )
+    )
+    if has_river_signal:
+        profiles.append("terrain_river")
+
+    has_road_signal = (
+        bool(map_spec.get("roads"))
+        or _payload_contains_keywords(
+            [map_spec.get("roads", []), combined_location_payloads, object_names or []],
+            ("road", "path", "trail", "bridge", "causeway"),
+        )
+    )
+    if has_road_signal:
+        profiles.append("terrain_road")
+
     has_cave_signal = (
         any(
             isinstance(location, dict)
@@ -275,6 +295,7 @@ async def _capture_aaa_screenshots(
     angles: int = 10,
     temp_dir: str | None = None,
     prefix: str = "aaa",
+    object_name: str | None = None,
 ) -> dict:
     """Render the shared AAA screenshot set used by visual verification gates."""
     import glob as _glob
@@ -291,6 +312,19 @@ async def _capture_aaa_screenshots(
     screenshot_paths: list[str] = []
     capture_errors: list[str] = []
     angle_labels: list[str] = []
+
+    if object_name:
+        try:
+            await blender.send_command("auto_frame_camera", {"object_name": object_name})
+        except Exception as exc:
+            capture_errors.append(f"{object_name}: auto_frame_camera failed ({exc})")
+            return {
+                "screenshots": [],
+                "capture_errors": capture_errors,
+                "angle_labels": [],
+                "directory": target_dir,
+                "angles": angle_defs,
+            }
 
     for index, (yaw, pitch, label) in enumerate(angle_defs):
         output_path = os.path.join(target_dir, f"{safe_prefix}_{index}_{label}.png")
@@ -328,6 +362,7 @@ async def _run_aaa_visual_verification(
     baseline_dir: str | None = None,
     screenshot_prefix: str = "aaa",
     screenshot_dir: str | None = None,
+    object_name: str | None = None,
 ) -> dict:
     """Capture multi-angle screenshots and run the shared AAA verifier."""
     capture = await _capture_aaa_screenshots(
@@ -335,6 +370,7 @@ async def _run_aaa_visual_verification(
         angles=angles,
         temp_dir=screenshot_dir,
         prefix=screenshot_prefix,
+        object_name=object_name,
     )
     existing = capture["screenshots"]
     capture_errors = list(capture["capture_errors"])
@@ -383,6 +419,7 @@ async def _run_terrain_visual_gate(
     validation_profiles: list[str] | None = None,
     min_score: int = 60,
     screenshot_prefix: str = "terrain_gate",
+    object_name: str | None = None,
 ) -> dict:
     """Run mandatory terrain-focused multi-profile verification on one capture set."""
     profiles = _normalize_validation_profiles(validation_profiles)
@@ -400,6 +437,7 @@ async def _run_terrain_visual_gate(
         blender,
         angles=len(_AAA_CAMERA_ANGLES),
         prefix=screenshot_prefix,
+        object_name=object_name,
     )
     existing = capture["screenshots"]
     capture_errors = list(capture["capture_errors"])
@@ -2780,6 +2818,7 @@ async def asset_pipeline(
                 # Auto-import all downloaded variants into Blender in a grid
                 models = result.get("models", [])
                 verified = [m for m in models if m.get("verified")]
+                result_warnings = result.setdefault("warnings", [])
                 if verified:
                     spacing = 3.0
                     positions = [
@@ -2805,11 +2844,17 @@ async def asset_pipeline(
                             m["texture_channels"] = post_result.get("channels", {})
                             if post_result.get("albedo_delit"):
                                 m["texture_channels"]["albedo_delit"] = post_result["albedo_delit"]
+                            if post_result.get("warnings"):
+                                result_warnings.extend(
+                                    f"variant_{i + 1}_post_process: {warning}"
+                                    for warning in post_result["warnings"]
+                                )
+                            if post_result.get("status") not in (None, "success"):
+                                result["status"] = "partial"
                         except Exception as exc:
-                            logger.debug(
-                                "Post-process failed for variant %s: %s", i + 1, exc,
-                                exc_info=True,
-                            )
+                            logger.warning("Post-process failed for variant %s: %s", i + 1, exc, exc_info=True)
+                            result_warnings.append(f"variant_{i + 1}_post_process_failed: {exc}")
+                            result["status"] = "partial"
                             m["texture_channels"] = {}
 
                         code = (
@@ -2825,18 +2870,22 @@ async def asset_pipeline(
                             f'names'
                         )
                         try:
-                            import_result = await blender.send_command(
+                            await blender.send_command(
                                 "execute_code", {"code": code}
                             )
                             imported_names.append(f"variant_{i+1}")
                         except Exception as exc:
-                            logger.debug(
+                            logger.warning(
                                 "Failed to import variant %s into Blender: %s",
                                 i + 1,
                                 exc,
                                 exc_info=True,
                             )
+                            result_warnings.append(f"variant_{i + 1}_import_failed: {exc}")
+                            result["status"] = "partial"
                     result["imported_to_blender"] = len(imported_names)
+                    if imported_names and len(imported_names) != len(verified):
+                        result["status"] = "partial"
                     result["next_steps"] = [
                         "All variants imported to Blender in a grid layout.",
                         "Each model's 'texture_channels' key contains extracted PBR paths (albedo, orm, normal).",
@@ -2857,6 +2906,7 @@ async def asset_pipeline(
                 else:
                     result = await gen.generate_from_text(prompt, output_dir)
                 result["output_dir"] = output_dir
+                result_warnings = result.setdefault("warnings", [])
 
                 # Post-process: extract textures, import into Blender (same as studio path)
                 model_path = result.get("model_path") or result.get("pbr_model_path")
@@ -2873,11 +2923,19 @@ async def asset_pipeline(
                         result["texture_channels"] = post_result.get("channels", {})
                         if post_result.get("albedo_delit"):
                             result["texture_channels"]["albedo_delit"] = post_result["albedo_delit"]
+                        if post_result.get("warnings"):
+                            result_warnings.extend(
+                                f"post_process: {warning}" for warning in post_result["warnings"]
+                            )
+                        if post_result.get("status") not in (None, "success"):
+                            result["status"] = "partial"
                     except Exception as exc:
-                        logger.debug(
+                        logger.warning(
                             "Post-process failed for API-key model: %s", exc,
                             exc_info=True,
                         )
+                        result_warnings.append(f"post_process_failed: {exc}")
+                        result["status"] = "partial"
                         result["texture_channels"] = {}
 
                     safe = model_path.replace('\\', '/').replace('"', '\\"')
@@ -2894,10 +2952,12 @@ async def asset_pipeline(
                         await blender.send_command("execute_code", {"code": code})
                         result["imported_to_blender"] = 1
                     except Exception as exc:
-                        logger.debug(
+                        logger.warning(
                             "Failed to import API-key model into Blender: %s",
                             exc, exc_info=True,
                         )
+                        result_warnings.append(f"import_failed: {exc}")
+                        result["status"] = "partial"
 
                     result["next_steps"] = [
                         "Model imported to Blender with extracted textures.",
@@ -3214,6 +3274,11 @@ async def asset_pipeline(
         map_seed = spec.get("seed", 42)
         budget = _resolve_map_generation_budget(spec)
         planned_locations = _plan_map_location_anchors(spec)
+        planned_cave_candidates = [
+            (float(planned["anchor"][0]), float(planned["anchor"][1]), 0.0)
+            for planned in planned_locations
+            if str(planned.get("source", {}).get("type", "")).strip().lower() == "cave"
+        ]
         steps_completed: list[str] = []
         steps_failed: list[dict] = []
         pipeline_warnings: list[str] = []
@@ -3329,6 +3394,11 @@ async def asset_pipeline(
                     "erosion_iterations": terrain_cfg.get("erosion_iterations", 5000),
                     "use_controller": True,
                     "object_location": list(_terrain_loc_3d),
+                    "scene_read": {
+                        "timestamp": 0.0,
+                        "reviewer": "compose_map",
+                        "cave_candidates": [list(c) for c in planned_cave_candidates],
+                    } if planned_cave_candidates else None,
                 })
                 if (
                     isinstance(_terrain_result, dict)
@@ -3343,6 +3413,56 @@ async def asset_pipeline(
                 _save_chkpt()
             except Exception as e:
                 steps_failed.append({"step": "terrain", "error": str(e)})
+
+        if "terrain_generated" not in steps_completed:
+            early_result = {
+                "status": "partial",
+                "map_name": map_name,
+                "steps_completed": steps_completed,
+                "steps_failed": steps_failed,
+                "warnings": pipeline_warnings,
+                "objects_created": created_objects,
+                "locations": location_results,
+                "interiors": interior_results,
+                "budget_applied": budget,
+                "quality_report": {
+                    "validated_objects": [],
+                    "warnings": [],
+                    "failures": [],
+                    "skipped": True,
+                    "reason": "terrain generation failed before downstream worldbuilding",
+                },
+                "heightmap_export_path": None,
+                "game_check_failures": [],
+                "fbx_exported_files": [],
+                "resumed_from_checkpoint": _CHKPT_LOADED,
+                "checkpoint_dir": checkpoint_dir,
+                "terrain_visual_profiles": [],
+                "terrain_visual_verification": {
+                    "status": "skipped",
+                    "passed": False,
+                    "required_profiles": [],
+                    "failed_profiles": [],
+                    "issues": [],
+                    "capture_errors": [],
+                    "screenshots": [],
+                    "angle_labels": [],
+                    "profile_results": [],
+                    "reason": "terrain generation failed",
+                },
+                "approved_for_unity_export": False,
+                "unity_export_status": "blocked_by_terrain_generation_failure",
+                "next_steps": [
+                    "Fix the terrain generation failure before attempting rivers, roads, vegetation, or export.",
+                    "Do not trust any terrain screenshots from this run; no terrain object was generated.",
+                ],
+            }
+            return await _with_screenshot(
+                blender,
+                early_result,
+                capture_viewport,
+                object_name=None,
+            )
 
         # --- Step 3: Water bodies ---
         water_cfg = spec.get("water", {})
@@ -3364,7 +3484,7 @@ async def asset_pipeline(
                         resolution=terrain_resolution,
                         terrain_location=terrain_location,
                     )
-                    await blender.send_command("env_carve_river", {
+                    river_result = await blender.send_command("env_carve_river", {
                         "terrain_name": terrain_name,
                         "source": list(source),
                         "destination": list(destination),
@@ -3373,6 +3493,26 @@ async def asset_pipeline(
                         "seed": map_seed + i,
                     })
                     steps_completed.append(f"river_{i}")
+                    river_path_points = []
+                    if isinstance(river_result, dict):
+                        river_path_points = list(river_result.get("path_points", []) or [])
+                    if len(river_path_points) >= 2:
+                        river_water_name = f"{map_name}_River_{i}"
+                        river_water_level = river.get("water_level")
+                        if river_water_level is None:
+                            river_water_level = water_cfg.get("water_level")
+                        if river_water_level is None:
+                            river_water_level = river_path_points[0][2]
+                        await blender.send_command("env_create_water", {
+                            "name": river_water_name,
+                            "terrain_name": terrain_name,
+                            "path_points": river_path_points,
+                            "water_level": river_water_level,
+                            "width": max(float(river.get("width", 5)), 2.0),
+                            "preview_fast": True,
+                        })
+                        steps_completed.append(f"river_water_{i}")
+                        created_objects.append(river_water_name)
                 except Exception as e:
                     steps_failed.append({"step": f"river_{i}", "error": str(e)})
 
@@ -3413,6 +3553,7 @@ async def asset_pipeline(
                     "terrain_name": terrain_name,
                     "waypoints": waypoints,
                     "width": road.get("width", 3),
+                    "surface": road.get("surface", road.get("style", "dirt")),
                     "water_level": water_cfg.get("water_level"),
                     "seed": map_seed + 100 + i,
                 })
@@ -3470,67 +3611,140 @@ async def asset_pipeline(
                         corner_heights.append(ch)
                     anchor_z = max(corner_heights) if corner_heights else 0.0
 
-                    # ARCH-021: Flatten terrain using flatten_terrain_zone (heightmap-aware)
-                    # with spline deform as fallback for non-heightmap terrain objects.
-                    _flatten_ok = False
-                    try:
-                        await blender.send_command("terrain_flatten_zone", {
-                            "object_name": terrain_name,
-                            "center_x": anchor_x,
-                            "center_y": anchor_y,
-                            "radius_x": loc_radius,
-                            "radius_y": loc_radius,
-                            "target_height": anchor_z,
-                            "blend_distance": loc_radius * 0.5,
-                        })
-                        _flatten_ok = True
-                    except Exception:
-                        pass
-                    if not _flatten_ok:
-                        # Fallback: spline deform for non-heightmap terrain
+                    if loc_type != "cave":
+                        # ARCH-021: Flatten terrain using flatten_terrain_zone (heightmap-aware)
+                        # with spline deform as fallback for non-heightmap terrain objects.
+                        _flatten_ok = False
                         try:
-                            await blender.send_command("terrain_spline_deform", {
+                            await blender.send_command("terrain_flatten_zone", {
                                 "object_name": terrain_name,
-                                "spline_points": [
-                                    [anchor_x - loc_radius, anchor_y - loc_radius, anchor_z],
-                                    [anchor_x + loc_radius, anchor_y - loc_radius, anchor_z],
-                                    [anchor_x + loc_radius, anchor_y + loc_radius, anchor_z],
-                                    [anchor_x - loc_radius, anchor_y + loc_radius, anchor_z],
-                                ],
-                                "mode": "flatten",
-                                "falloff": 0.85,
-                                "width": loc_radius * 0.4,
+                                "center_x": anchor_x,
+                                "center_y": anchor_y,
+                                "radius_x": loc_radius,
+                                "radius_y": loc_radius,
+                                "target_height": anchor_z,
+                                "blend_distance": loc_radius * 0.5,
                             })
+                            _flatten_ok = True
                         except Exception:
-                            pass  # Non-fatal
+                            pass
+                        if not _flatten_ok:
+                            # Fallback: spline deform for non-heightmap terrain
+                            try:
+                                await blender.send_command("terrain_spline_deform", {
+                                    "object_name": terrain_name,
+                                    "spline_points": [
+                                        [anchor_x - loc_radius, anchor_y - loc_radius, anchor_z],
+                                        [anchor_x + loc_radius, anchor_y - loc_radius, anchor_z],
+                                        [anchor_x + loc_radius, anchor_y + loc_radius, anchor_z],
+                                        [anchor_x - loc_radius, anchor_y + loc_radius, anchor_z],
+                                    ],
+                                    "mode": "flatten",
+                                    "falloff": 0.85,
+                                    "width": loc_radius * 0.4,
+                                })
+                            except Exception:
+                                pass  # Non-fatal
 
-                    # Auto-compute foundation profile from terrain slope
-                    if corner_heights and len(corner_heights) >= 5:
-                        _min_h = min(corner_heights[:4])
-                        _max_h = max(corner_heights[:4])
-                        _height_diff = _max_h - _min_h
-                        if _height_diff > 0.3:
-                            loc_params["foundation_profile"] = {
-                                "foundation_height": _height_diff + 0.2,
-                                "side_heights": {
-                                    # corners: [0]=(-r,-r), [1]=(+r,-r), [2]=(-r,+r), [3]=(+r,+r)
-                                    "front": max(0.0, anchor_z - min(corner_heights[0], corner_heights[1])),
-                                    "back":  max(0.0, anchor_z - min(corner_heights[2], corner_heights[3])),
-                                    "left":  max(0.0, anchor_z - min(corner_heights[0], corner_heights[2])),
-                                    "right": max(0.0, anchor_z - min(corner_heights[1], corner_heights[3])),
-                                },
-                                "retaining_sides": [
-                                    side for side, h in [
-                                        ("front", min(corner_heights[0], corner_heights[1])),
-                                        ("back",  min(corner_heights[2], corner_heights[3])),
-                                        ("left",  min(corner_heights[0], corner_heights[2])),
-                                        ("right", min(corner_heights[1], corner_heights[3])),
-                                    ]
-                                    if anchor_z - h > 0.5
-                                ],
-                                "stair_wall": "front",
-                                "stair_steps": max(2, int(_height_diff / 0.25)),
-                            }
+                        # Auto-compute foundation profile from terrain slope
+                        if corner_heights and len(corner_heights) >= 5:
+                            _min_h = min(corner_heights[:4])
+                            _max_h = max(corner_heights[:4])
+                            _height_diff = _max_h - _min_h
+                            if _height_diff > 0.3:
+                                loc_params["foundation_profile"] = {
+                                    "foundation_height": _height_diff + 0.2,
+                                    "side_heights": {
+                                        # corners: [0]=(-r,-r), [1]=(+r,-r), [2]=(-r,+r), [3]=(+r,+r)
+                                        "front": max(0.0, anchor_z - min(corner_heights[0], corner_heights[1])),
+                                        "back":  max(0.0, anchor_z - min(corner_heights[2], corner_heights[3])),
+                                        "left":  max(0.0, anchor_z - min(corner_heights[0], corner_heights[2])),
+                                        "right": max(0.0, anchor_z - min(corner_heights[1], corner_heights[3])),
+                                    },
+                                    "retaining_sides": [
+                                        side for side, h in [
+                                            ("front", min(corner_heights[0], corner_heights[1])),
+                                            ("back",  min(corner_heights[2], corner_heights[3])),
+                                            ("left",  min(corner_heights[0], corner_heights[2])),
+                                            ("right", min(corner_heights[1], corner_heights[3])),
+                                        ]
+                                        if anchor_z - h > 0.5
+                                    ],
+                                    "stair_wall": "front",
+                                    "stair_steps": max(2, int(_height_diff / 0.25)),
+                                }
+
+                if loc_type == "cave":
+                    cave_name = str(loc.get("name", f"Cave_{i}"))
+                    approach_x = terrain_location[0] - anchor_x
+                    approach_y = terrain_location[1] - anchor_y
+                    approach_len = math.hypot(approach_x, approach_y)
+                    if approach_len <= 1e-6:
+                        approach_x, approach_y, approach_len = 0.0, 1.0, 1.0
+                    approach_x /= approach_len
+                    approach_y /= approach_len
+                    tunnel_x = -approach_x
+                    tunnel_y = -approach_y
+                    entrance_rotation_z = math.atan2(-approach_x, approach_y)
+                    entrance_name = f"{cave_name}_Entrance"
+                    chamber_name = f"{cave_name}_Chamber"
+
+                    entrance_result = await blender.send_command("env_create_cave_entrance", {
+                        "name": entrance_name,
+                        "width": loc.get("entrance_width", max(5.5, loc_radius * 0.34)),
+                        "height": loc.get("entrance_height", max(4.2, loc_radius * 0.24)),
+                        "depth": loc.get("entrance_depth", max(5.0, loc_radius * 0.42)),
+                        "terrain_edge_height": anchor_z - 0.35,
+                        "style": loc.get("entrance_style", "natural"),
+                        "rotation_z": entrance_rotation_z,
+                        "location": [anchor_x, anchor_y, 0.0],
+                        "material_key": loc.get("material_key", "stone"),
+                        "seed": map_seed + 700 + i,
+                    })
+                    created_objects.append(entrance_name)
+
+                    loc_params["name"] = chamber_name
+                    loc_params["width"] = int(max(24, min(int(loc_params.get("width", 32)), 48)))
+                    loc_params["height"] = int(max(24, min(int(loc_params.get("height", 32)), 48)))
+                    loc_params["cell_size"] = float(loc.get("cell_size", 1.15))
+                    loc_params["wall_height"] = float(loc.get("wall_height", max(4.5, loc_radius * 0.22)))
+
+                    loc_result = await blender.send_command(handler, loc_params)
+
+                    chamber_offset = max(8.0, loc_radius * 0.45)
+                    chamber_position = (
+                        anchor_x + tunnel_x * chamber_offset,
+                        anchor_y + tunnel_y * chamber_offset,
+                        anchor_z - min(2.0, max(0.8, loc_radius * 0.08)),
+                    )
+                    try:
+                        await _position_generated_object(
+                            blender,
+                            chamber_name,
+                            chamber_position,
+                        )
+                        steps_completed.append(f"location_placed_{loc.get('name', i)}")
+                    except Exception as placement_exc:
+                        steps_failed.append({
+                            "step": f"location_place_{loc.get('name', i)}",
+                            "error": str(placement_exc),
+                        })
+                    steps_completed.append(f"location_mesh_{loc.get('name', i)}")
+                    created_objects.append(chamber_name)
+                    location_results.append({
+                        "name": entrance_name,
+                        "type": loc_type,
+                        "anchor": [round(anchor_x, 3), round(anchor_y, 3), round(anchor_z, 3)],
+                        "radius": planned["radius"],
+                        "layout_brief": loc_params.get("layout_brief", ""),
+                        "site_profile": loc_params.get("site_profile", ""),
+                        "supporting_objects": [chamber_name],
+                        "result": {
+                            "entrance": entrance_result,
+                            "chamber": loc_result if isinstance(loc_result, dict) else str(loc_result)[:200],
+                        },
+                    })
+                    continue
 
                 # Generate building WITH foundation profile included
                 loc_result = await blender.send_command(handler, loc_params)
@@ -3707,6 +3921,7 @@ async def asset_pipeline(
                 validation_profiles=terrain_visual_profiles,
                 min_score=int(spec.get("terrain_visual_min_score", 60)),
                 screenshot_prefix=f"{map_name}_terrain_gate",
+                object_name=terrain_name,
             )
             terrain_visual_profiles = list(terrain_visual_verification.get("required_profiles", terrain_visual_profiles))
             if terrain_visual_verification.get("passed", False):
@@ -4553,7 +4768,15 @@ async def asset_pipeline(
                 else:
                     steps_completed.append(f"prop_quality_{room_name}")
             except Exception as pq_err:
-                logger.debug("Prop quality check skipped for %s: %s", room_obj_name, pq_err)
+                _record_interior_warning(
+                    "prop_quality_check_failed",
+                    pq_err,
+                    object_name=room_obj_name,
+                )
+                steps_failed.append({
+                    "step": f"prop_quality_{room_name}",
+                    "error": str(pq_err),
+                })
         _save_interior_chkpt()
 
         # --- Build Tripo prop generation queue ---

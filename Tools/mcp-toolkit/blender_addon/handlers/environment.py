@@ -1195,26 +1195,49 @@ def handle_generate_terrain(params: dict) -> dict:
 
     # --- Controller path: controller state is the terrain source of truth ---
     if use_controller:
+        object_location = tuple(params.get("object_location", (0.0, 0.0, 0.0)))
+        scene_read_payload = params.get("scene_read")
+        if scene_read_payload is not None and not isinstance(scene_read_payload, dict):
+            scene_read_payload = None
+        cave_candidates = []
+        if isinstance(scene_read_payload, dict):
+            for entry in scene_read_payload.get("cave_candidates", ()) or ():
+                if isinstance(entry, (list, tuple)) and len(entry) >= 2:
+                    cave_candidates.append(
+                        (
+                            float(entry[0]),
+                            float(entry[1]),
+                            float(entry[2]) if len(entry) >= 3 else 0.0,
+                        )
+                    )
         controller_params = {
             "tile_size": max(resolution - 1, 1),
             "cell_size": float(scale) / max(resolution - 1, 1),
             "seed": seed,
             "terrain_type": terrain_type,
             "scale": noise_scale,
+            "world_origin_x": float(object_location[0]) - float(scale) * 0.5,
+            "world_origin_y": float(object_location[1]) - float(scale) * 0.5,
         }
         pipeline = ["macro_world", "structural_masks"]
+        if erosion in ("hydraulic", "thermal", "both") or cave_candidates:
+            controller_scene_read = dict(scene_read_payload or {})
+            controller_scene_read.setdefault("timestamp", 0.0)
+            controller_scene_read.setdefault("reviewer", "compose_map")
+            if cave_candidates:
+                controller_scene_read["cave_candidates"] = cave_candidates
+            controller_params["scene_read"] = controller_scene_read
         if erosion in ("hydraulic", "thermal", "both"):
             pipeline.append("erosion")
             pipeline.append("structural_masks")
-            controller_params["scene_read"] = {
-                "timestamp": 0.0,
-                "reviewer": "compose_map",
-            }
             controller_params["erosion_profile"] = (
                 "temperate" if erosion == "hydraulic"
                 else "arid" if erosion == "thermal"
                 else "temperate"
             )
+        if cave_candidates:
+            pipeline.append("caves")
+            pipeline.append("integrate_deltas")
         if params.get("cliff_overlays", True):
             pipeline.append("cliffs")
         pipeline.append("validation_minimal")
@@ -1249,7 +1272,6 @@ def handle_generate_terrain(params: dict) -> dict:
         heightmap = _enhance_heightmap_relief(heightmap, terrain_type=terrain_type)
 
         terrain_size = scale
-        object_location = tuple(params.get("object_location", (0.0, 0.0, 0.0)))
         controller_cliff_placements: list[dict[str, Any]] | None = None
         if params.get("cliff_overlays", True) and controller_state.mask_stack.cliff_candidate is not None:
             from .terrain_cliffs import carve_cliff_system
@@ -1294,6 +1316,11 @@ def handle_generate_terrain(params: dict) -> dict:
             "controller_ok": not failed_passes,
             "controller_passes": [r.pass_name for r in controller_results],
         }
+        if cave_candidates:
+            result["cave_candidates"] = [list(c) for c in cave_candidates]
+            result["cave_mask_present"] = bool(
+                controller_state.mask_stack.get("cave_candidate") is not None
+            )
         if biome_preset is not None:
             result["biome_preset"] = biome_name
             result["scatter_rules"] = biome_preset.get("scatter_rules", [])
@@ -1715,6 +1742,15 @@ def _execute_terrain_pipeline(params: dict) -> dict[str, Any]:
     scene_read_raw = params.get("scene_read")
     scene_read: Optional[TerrainSceneRead] = None
     if scene_read_raw is not None:
+        raw_cave_candidates = scene_read_raw.get("cave_candidates", ()) or ()
+        cave_candidates: list[tuple[float, float, float]] = []
+        for entry in raw_cave_candidates:
+            if not isinstance(entry, (list, tuple)) or len(entry) < 2:
+                continue
+            cx = float(entry[0])
+            cy = float(entry[1])
+            cz = float(entry[2]) if len(entry) >= 3 else 0.0
+            cave_candidates.append((cx, cy, cz))
         scene_read = TerrainSceneRead(
             timestamp=float(scene_read_raw.get("timestamp", 0.0)),
             major_landforms=tuple(scene_read_raw.get("major_landforms", ()) or ()),
@@ -1722,7 +1758,7 @@ def _execute_terrain_pipeline(params: dict) -> dict[str, Any]:
             hero_features_present=tuple(),
             hero_features_missing=tuple(scene_read_raw.get("hero_features_missing", ()) or ()),
             waterfall_chains=tuple(),
-            cave_candidates=tuple(),
+            cave_candidates=tuple(cave_candidates),
             protected_zones_in_region=tuple(z.zone_id for z in protected_zones),
             edit_scope=region or region_bounds,
             success_criteria=tuple(scene_read_raw.get("success_criteria", ()) or ()),
@@ -2622,6 +2658,90 @@ def _create_bridge_object_from_spec(
     return obj
 
 
+def _create_mesh_object_from_spec(
+    spec: dict[str, Any],
+    *,
+    object_name: str,
+    location: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    rotation: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    parent: Any | None = None,
+    material_key: str | None = None,
+) -> Any | None:
+    """Materialize a generic MeshSpec into Blender for terrain hero features."""
+    from ._mesh_bridge import mesh_from_spec
+    from .procedural_materials import create_procedural_material
+
+    obj = mesh_from_spec(
+        spec,
+        name=object_name,
+        location=location,
+        rotation=rotation,
+        parent=parent,
+    )
+    if obj is None or isinstance(obj, dict):
+        return obj
+
+    if material_key:
+        try:
+            mat = create_procedural_material(object_name, material_key)
+            if mat is not None and hasattr(obj.data, "materials"):
+                obj.data.materials.clear()
+                obj.data.materials.append(mat)
+        except Exception:
+            pass
+    return obj
+
+
+def handle_create_cave_entrance(params: dict) -> dict:
+    """Create a terrain-facing cave entrance mesh object from the pure generator."""
+    from ._terrain_depth import generate_cave_entrance_mesh
+
+    object_name = str(params.get("name", "CaveEntrance"))
+    width = float(params.get("width", 5.5))
+    height = float(params.get("height", 4.6))
+    depth = float(params.get("depth", 5.5))
+    style = str(params.get("style", "natural"))
+    seed = int(params.get("seed", 0))
+    location_raw = params.get("location", (0.0, 0.0, 0.0))
+    rotation_z = float(params.get("rotation_z", 0.0))
+    terrain_edge_height = float(params.get("terrain_edge_height", 0.0))
+    parent_name = params.get("parent_name")
+    location = (
+        float(location_raw[0]),
+        float(location_raw[1]),
+        float(location_raw[2]) if len(location_raw) >= 3 else 0.0,
+    )
+
+    parent_obj = bpy.data.objects.get(str(parent_name)) if parent_name else None
+    spec = generate_cave_entrance_mesh(
+        width=width,
+        height=height,
+        depth=depth,
+        arch_segments=int(params.get("arch_segments", 14)),
+        terrain_edge_height=terrain_edge_height,
+        style=style,
+        seed=seed,
+    )
+    obj = _create_mesh_object_from_spec(
+        spec,
+        object_name=object_name,
+        location=location,
+        rotation=(0.0, 0.0, rotation_z),
+        parent=parent_obj,
+        material_key=str(params.get("material_key", "stone")),
+    )
+    return {
+        "name": object_name if isinstance(obj, dict) else obj.name,
+        "style": style,
+        "width": width,
+        "height": height,
+        "depth": depth,
+        "rotation_z": rotation_z,
+        "location": [round(location[0], 4), round(location[1], 4), round(location[2], 4)],
+        "parent_name": getattr(parent_obj, "name", None),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Handler: generate_road
 # ---------------------------------------------------------------------------
@@ -2647,6 +2767,20 @@ def handle_generate_road(params: dict) -> dict:
     width = int(params.get("width", 3))
     grade_strength = params.get("grade_strength", 0.8)
     seed = params.get("seed", 0)
+    requested_surface = str(params.get("surface", params.get("material_key", "dirt"))).strip().lower()
+    road_material_key = {
+        "dirt": "dirt",
+        "dirt_path": "dirt",
+        "trail": "dirt",
+        "path": "dirt",
+        "mud": "mud",
+        "muddy": "mud",
+        "gravel": "cobblestone_floor",
+        "stone": "cobblestone_floor",
+        "cobblestone": "cobblestone_floor",
+        "cobblestone_floor": "cobblestone_floor",
+        "main_road": "cobblestone_floor",
+    }.get(requested_surface, "dirt")
 
     obj = bpy.data.objects.get(terrain_name)
     if obj is None:
@@ -2822,25 +2956,29 @@ def handle_generate_road(params: dict) -> dict:
                 if hasattr(mpi, "identity"):
                     mpi.identity()
 
-    # Apply cobblestone material
+    # Apply terrain-appropriate road material
     from .procedural_materials import create_procedural_material
     try:
-        road_mat = create_procedural_material(road_mesh_name, "cobblestone_floor")
+        road_mat = create_procedural_material(road_mesh_name, road_material_key)
         if road_mat:
             road_mesh_data.materials.append(road_mat)
     except Exception:
-        # Fallback: basic grey stone material
-        road_mat = bpy.data.materials.new(name="Road_Cobblestone")
+        road_mat = bpy.data.materials.new(name=f"Road_{road_material_key.title()}")
         road_mat.use_nodes = True
         if road_mat.node_tree:
             bsdf = road_mat.node_tree.nodes.get("Principled BSDF")
             if bsdf:
                 bc = bsdf.inputs.get("Base Color")
                 if bc:
-                    bc.default_value = (0.25, 0.22, 0.18, 1.0)
+                    if road_material_key == "mud":
+                        bc.default_value = (0.14, 0.09, 0.06, 1.0)
+                    elif road_material_key == "dirt":
+                        bc.default_value = (0.20, 0.14, 0.09, 1.0)
+                    else:
+                        bc.default_value = (0.25, 0.22, 0.18, 1.0)
                 rgh = bsdf.inputs.get("Roughness")
                 if rgh:
-                    rgh.default_value = 0.85
+                    rgh.default_value = 0.65 if road_material_key == "mud" else 0.88 if road_material_key == "dirt" else 0.85
         road_mesh_data.materials.append(road_mat)
 
     bridge_object_names: list[str] = []
@@ -2871,6 +3009,7 @@ def handle_generate_road(params: dict) -> dict:
         "width": width,
         "road_width_m": road_width_world,
         "road_vertex_count": len(road_mesh_data.vertices),
+        "surface": requested_surface,
         "bridge_count": len(bridge_object_names),
         "bridge_object_names": bridge_object_names,
         "splatmap_layer": "VB_TerrainSplatmap",

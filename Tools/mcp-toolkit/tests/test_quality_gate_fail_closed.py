@@ -76,7 +76,7 @@ async def test_aaa_verify_errors_when_render_angle_produces_no_images(monkeypatc
     )
 
     raw = await blender_server.asset_pipeline(action="aaa_verify", angles=1)
-    result = json.loads(raw)
+    result = raw if isinstance(raw, dict) else json.loads(raw)
     assert result["status"] == "error"
     assert result["capture_errors"]
 
@@ -194,6 +194,55 @@ async def test_compose_map_blocks_export_when_terrain_visual_gate_fails(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_compose_map_stops_immediately_when_terrain_generation_fails(monkeypatch):
+    commands: list[str] = []
+
+    async def _handler(command, params):
+        commands.append(command)
+        if command == "clear_scene":
+            return {"status": "success"}
+        if command == "env_generate_terrain":
+            return {"status": "error", "error": "terrain exploded"}
+        raise AssertionError(f"unexpected command: {command}")
+
+    async def _fake_gate(*args, **kwargs):
+        raise AssertionError("terrain visual gate must not run when terrain generation fails")
+
+    monkeypatch.setattr(
+        blender_server,
+        "get_blender_connection",
+        lambda: _DummyBlender(_handler),
+    )
+    monkeypatch.setattr(blender_server, "_run_terrain_visual_gate", _fake_gate, raising=False)
+
+    raw = await blender_server.asset_pipeline(
+        action="compose_map",
+        map_spec={
+            "name": "BrokenTerrainMap",
+            "seed": 12,
+            "terrain": {
+                "preset": "coastal",
+                "size": 160.0,
+                "resolution": 64,
+                "height_scale": 18.0,
+            },
+            "roads": [],
+            "locations": [],
+            "props": False,
+        },
+        capture_viewport=False,
+    )
+    parsed = json.loads(raw[0])
+
+    assert parsed["status"] == "partial"
+    assert parsed["unity_export_status"] == "blocked_by_terrain_generation_failure"
+    assert any(step["step"] == "terrain" for step in parsed["steps_failed"])
+    assert "terrain_visual_verified" not in parsed["steps_completed"]
+    assert parsed["terrain_visual_verification"]["status"] == "skipped"
+    assert commands == ["clear_scene", "env_generate_terrain"]
+
+
+@pytest.mark.asyncio
 async def test_compose_map_continues_when_terrain_visual_gate_passes(monkeypatch, tmp_path):
     export_dir = tmp_path / "exports"
     export_dir.mkdir(parents=True, exist_ok=True)
@@ -272,6 +321,68 @@ async def test_compose_map_continues_when_terrain_visual_gate_passes(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_compose_map_passes_terrain_object_to_visual_gate(monkeypatch):
+    captured_kwargs: dict = {}
+
+    async def _handler(command, params):
+        if command == "clear_scene":
+            return {"status": "success"}
+        if command == "env_generate_terrain":
+            return {
+                "status": "success",
+                "name": "FramedMap_Terrain",
+                "cliff_overlays": 1,
+                "hero_cliff_overlays": 0,
+            }
+        if command == "auto_frame_camera":
+            return {"status": "success"}
+        raise AssertionError(f"unexpected command: {command}")
+
+    async def _fake_gate(*args, **kwargs):
+        captured_kwargs.update(kwargs)
+        return {
+            "status": "success",
+            "passed": True,
+            "required_profiles": ["terrain_readability"],
+            "failed_profiles": [],
+            "issues": [],
+            "capture_errors": [],
+            "screenshots": ["front.png"],
+            "angle_labels": ["front"],
+            "profile_results": [],
+        }
+
+    monkeypatch.setattr(
+        blender_server,
+        "get_blender_connection",
+        lambda: _DummyBlender(_handler),
+    )
+    monkeypatch.setattr(blender_server, "_run_terrain_visual_gate", _fake_gate, raising=False)
+
+    raw = await blender_server.asset_pipeline(
+        action="compose_map",
+        map_spec={
+            "name": "FramedMap",
+            "seed": 5,
+            "terrain": {
+                "preset": "hills",
+                "size": 160.0,
+                "resolution": 64,
+                "height_scale": 18.0,
+            },
+            "roads": [],
+            "locations": [],
+            "props": False,
+        },
+        capture_viewport=False,
+    )
+    parsed = json.loads(raw[0])
+
+    assert parsed["status"] == "review_required"
+    assert captured_kwargs["object_name"] == "FramedMap_Terrain"
+
+
+@pytest.mark.asyncio
 async def test_compose_map_waits_for_user_approval_before_export(monkeypatch):
     commands: list[str] = []
 
@@ -336,6 +447,174 @@ async def test_compose_map_waits_for_user_approval_before_export(monkeypatch):
     assert parsed["unity_export_status"] == "awaiting_user_approval"
     assert parsed["export_ready"] is True
     assert "env_export_heightmap" not in commands
+
+
+@pytest.mark.asyncio
+async def test_compose_map_creates_river_water_mesh_from_carve_result(monkeypatch):
+    commands: list[tuple[str, dict]] = []
+
+    async def _handler(command, params):
+        commands.append((command, dict(params)))
+        if command == "clear_scene":
+            return {"status": "success"}
+        if command == "env_generate_terrain":
+            return {
+                "status": "success",
+                "name": "RiverMap_Terrain",
+                "cliff_overlays": 0,
+                "hero_cliff_overlays": 0,
+            }
+        if command == "env_carve_river":
+            return {
+                "status": "success",
+                "name": "RiverMap_Terrain",
+                "path_length": 3,
+                "path_points": [
+                    [0.0, -20.0, 1.5],
+                    [5.0, 0.0, 1.25],
+                    [12.0, 20.0, 1.0],
+                ],
+            }
+        if command == "env_create_water":
+            return {"status": "success", "name": params["name"]}
+        if command == "auto_frame_camera":
+            return {"status": "success"}
+        raise AssertionError(f"unexpected command: {command}")
+
+    async def _fake_gate(*args, **kwargs):
+        return {
+            "status": "success",
+            "passed": True,
+            "required_profiles": ["terrain_readability", "terrain_river"],
+            "failed_profiles": [],
+            "issues": [],
+            "capture_errors": [],
+            "screenshots": ["front.png"],
+            "angle_labels": ["front"],
+            "profile_results": [],
+        }
+
+    monkeypatch.setattr(
+        blender_server,
+        "get_blender_connection",
+        lambda: _DummyBlender(_handler),
+    )
+    monkeypatch.setattr(blender_server, "_run_terrain_visual_gate", _fake_gate, raising=False)
+
+    raw = await blender_server.asset_pipeline(
+        action="compose_map",
+        map_spec={
+            "name": "RiverMap",
+            "seed": 13,
+            "terrain": {
+                "preset": "hills",
+                "size": 160.0,
+                "resolution": 64,
+                "height_scale": 18.0,
+            },
+            "water": {
+                "rivers": [{"source": [10, 10], "destination": [150, 140], "width": 6}],
+            },
+            "roads": [],
+            "locations": [],
+            "props": False,
+        },
+        capture_viewport=False,
+    )
+    parsed = json.loads(raw[0])
+
+    create_water_calls = [params for command, params in commands if command == "env_create_water"]
+    assert parsed["status"] == "review_required"
+    assert any(step == "river_water_0" for step in parsed["steps_completed"])
+    assert create_water_calls
+    assert create_water_calls[0]["name"] == "RiverMap_River_0"
+    assert create_water_calls[0]["path_points"][0] == [0.0, -20.0, 1.5]
+
+
+
+@pytest.mark.asyncio
+async def test_compose_map_threads_cave_candidates_into_terrain_and_creates_entrance(monkeypatch):
+    commands: list[tuple[str, dict]] = []
+
+    async def _handler(command, params):
+        commands.append((command, dict(params)))
+        if command == "clear_scene":
+            return {"status": "success"}
+        if command == "env_generate_terrain":
+            return {
+                "status": "success",
+                "name": "CaveMap_Terrain",
+                "cliff_overlays": 1,
+                "hero_cliff_overlays": 0,
+            }
+        if command == "env_create_cave_entrance":
+            return {"status": "success", "name": params["name"]}
+        if command == "world_generate_cave":
+            return {"status": "success", "name": params["name"]}
+        if command == "auto_frame_camera":
+            return {"status": "success"}
+        raise AssertionError(f"unexpected command: {command}")
+
+    async def _fake_gate(*args, **kwargs):
+        return {
+            "status": "success",
+            "passed": True,
+            "required_profiles": ["terrain_readability", "terrain_cliff", "terrain_cave"],
+            "failed_profiles": [],
+            "issues": [],
+            "capture_errors": [],
+            "screenshots": ["front.png"],
+            "angle_labels": ["front"],
+            "profile_results": [],
+        }
+
+    async def _fake_position(*args, **kwargs):
+        return None
+
+    async def _fake_sample_height(*args, **kwargs):
+        return 6.5
+
+    monkeypatch.setattr(
+        blender_server,
+        "get_blender_connection",
+        lambda: _DummyBlender(_handler),
+    )
+    monkeypatch.setattr(blender_server, "_run_terrain_visual_gate", _fake_gate, raising=False)
+    monkeypatch.setattr(blender_server, "_position_generated_object", _fake_position, raising=False)
+    monkeypatch.setattr(blender_server, "_sample_terrain_height", _fake_sample_height, raising=False)
+
+    raw = await blender_server.asset_pipeline(
+        action="compose_map",
+        map_spec={
+            "name": "CaveMap",
+            "seed": 17,
+            "terrain": {
+                "preset": "mountains",
+                "size": 160.0,
+                "resolution": 64,
+                "height_scale": 18.0,
+            },
+            "roads": [],
+            "locations": [
+                {"type": "cave", "name": "TreasureCave", "grid_size": 28},
+            ],
+            "props": False,
+        },
+        capture_viewport=False,
+    )
+    parsed = json.loads(raw[0])
+
+    terrain_calls = [params for command, params in commands if command == "env_generate_terrain"]
+    entrance_calls = [params for command, params in commands if command == "env_create_cave_entrance"]
+    chamber_calls = [params for command, params in commands if command == "world_generate_cave"]
+
+    assert parsed["status"] == "review_required"
+    assert terrain_calls
+    assert terrain_calls[0]["scene_read"]["cave_candidates"]
+    assert entrance_calls
+    assert entrance_calls[0]["name"] == "TreasureCave_Entrance"
+    assert chamber_calls
+    assert chamber_calls[0]["name"] == "TreasureCave_Chamber"
 
 
 @pytest.mark.asyncio

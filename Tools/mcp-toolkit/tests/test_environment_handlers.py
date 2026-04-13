@@ -662,6 +662,69 @@ class TestControllerTerrainPath:
         assert result["controller_ok"] is True
         assert result["hero_cliff_overlays"] == 1
 
+    def test_controller_path_threads_cave_candidates_into_pipeline(self):
+        from blender_addon.handlers import environment as env_mod
+        from blender_addon.handlers.terrain_semantics import TerrainMaskStack
+
+        height = np.zeros((3, 3), dtype=np.float64)
+        stack = TerrainMaskStack(
+            tile_size=2,
+            cell_size=1.0,
+            world_origin_x=0.0,
+            world_origin_y=0.0,
+            tile_x=0,
+            tile_y=0,
+            height=height,
+        )
+        controller_execution = {
+            "state": SimpleNamespace(mask_stack=stack),
+            "results": [],
+            "mask_stack": stack,
+            "tile_x": 0,
+            "tile_y": 0,
+        }
+        captured: dict[str, object] = {}
+
+        def _fake_execute(params):
+            captured["params"] = dict(params)
+            return controller_execution
+
+        def _fake_create_mesh(**kwargs):
+            return {
+                "name": kwargs["name"],
+                "vertex_count": int(np.asarray(kwargs["heightmap"]).size),
+                "cliff_overlays": 0,
+                "hero_cliff_overlays": 0,
+            }
+
+        with patch.object(env_mod, "_execute_terrain_pipeline", side_effect=_fake_execute), \
+             patch.object(env_mod, "_create_terrain_mesh_from_heightmap", side_effect=_fake_create_mesh):
+            result = env_mod.handle_generate_terrain(
+                {
+                    "name": "CaveControllerTerrain",
+                    "resolution": 3,
+                    "terrain_type": "mountains",
+                    "erosion": "none",
+                    "seed": 11,
+                    "scale": 32.0,
+                    "height_scale": 6.0,
+                    "use_controller": True,
+                    "object_location": (4.0, -2.0, 0.0),
+                    "scene_read": {
+                        "reviewer": "pytest",
+                        "cave_candidates": [(6.0, 3.0, 0.0)],
+                    },
+                }
+            )
+
+        params = captured["params"]
+        assert params["scene_read"]["cave_candidates"] == [(6.0, 3.0, 0.0)]
+        assert params["pipeline"] == ["macro_world", "structural_masks", "caves", "integrate_deltas", "cliffs", "validation_minimal"]
+        assert params["world_origin_x"] == pytest.approx(-12.0)
+        assert params["world_origin_y"] == pytest.approx(-18.0)
+        assert result["cave_candidates"] == [[6.0, 3.0, 0.0]]
+        assert result["cave_mask_present"] is False
+
 
 class TestWorldTerrainGeneration:
     def test_world_terrain_wraps_tile_generation(self):
