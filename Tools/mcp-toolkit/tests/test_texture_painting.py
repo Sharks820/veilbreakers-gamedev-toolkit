@@ -768,7 +768,7 @@ class TestAllProjectionsUVRange:
 
     @pytest.mark.parametrize("proj_type", ["camera", "planar", "cylindrical", "spherical"])
     def test_projection_uvs_in_range(self, proj_type):
-        kwargs: dict[str, Any] = {}
+        kwargs: dict[str, Any] = {}  # noqa: F821
         if proj_type == "camera":
             kwargs = {"camera_pos": (0, 0, 5), "camera_target": (0, 0, 0), "fov": 60}
         elif proj_type == "planar":
@@ -835,7 +835,7 @@ class TestEdgeCases:
         """Vertices covering the full sphere produce UVs spanning most of [0,1]."""
         verts = SPHERE_VERTICES
         uvs = compute_projection_uvs(verts, [], "spherical")
-        us = [u for u, v in uvs]
+        [u for u, v in uvs]
         vs = [v for u, v in uvs]
         assert min(vs) < 0.01  # south pole
         assert max(vs) > 0.99  # north pole

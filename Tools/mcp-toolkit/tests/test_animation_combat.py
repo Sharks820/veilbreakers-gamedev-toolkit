@@ -13,13 +13,9 @@ from blender_addon.handlers.animation_combat import (
     generate_combat_idle_keyframes,
     generate_command_receive_keyframes,
     generate_approach_keyframes,
-    generate_return_to_formation_keyframes,
     generate_guard_keyframes,
     generate_flee_keyframes,
     generate_target_switch_keyframes,
-    generate_synergy_activation_keyframes,
-    generate_ultimate_windup_keyframes,
-    generate_victory_pose_keyframes,
     generate_defeat_collapse_keyframes,
     validate_combat_command_params,
 )

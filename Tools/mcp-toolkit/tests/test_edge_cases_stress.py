@@ -3,7 +3,6 @@
 Tests every generator at minimum frame_count=4, every brand x slot combo,
 seamless loop verification for multi-harmonic configs, and IK math.
 """
-import math
 import pytest
 
 from blender_addon.handlers.animation_abilities import (
@@ -35,7 +34,7 @@ from blender_addon.handlers.animation_gaits import (
     FLY_HOVER_CONFIG, IDLE_CONFIG,
 )
 from blender_addon.handlers._combat_timing import (
-    BRAND_TIMING_MODIFIERS, apply_brand_timing, configure_combat_timing,
+    apply_brand_timing, configure_combat_timing,
 )
 
 

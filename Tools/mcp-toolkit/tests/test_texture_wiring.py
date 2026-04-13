@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from unittest import mock
 
-import pytest
 
 from blender_addon.handlers.texture import handle_load_extracted_textures
 from blender_addon.handlers.weathering import handle_mix_weathering_over_texture

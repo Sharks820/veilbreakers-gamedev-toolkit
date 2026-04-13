@@ -2,12 +2,9 @@
 
 Each function/section is labeled with the expected rule ID.
 """
-import json
 import os
 import pickle
-import re
 import subprocess
-import datetime
 from dataclasses import dataclass, field
 from typing import Dict, List, Set
 
@@ -55,7 +52,7 @@ def merge_dicts(data, extra={}):  # SHOULD flag: PY-COR-01
 def risky_operation():
     try:
         do_something()
-    except:  # SHOULD flag: PY-COR-02
+    except:  # SHOULD flag: PY-COR-02  # noqa: E722
         pass
 
 
@@ -70,7 +67,7 @@ def build_mapping(config):
 def silent_swallow():
     try:
         do_something()
-    except Exception as e:  # SHOULD flag: PY-COR-12 (silent swallow)
+    except Exception:  # SHOULD flag: PY-COR-12 (silent swallow)
         pass
 
 
@@ -99,7 +96,7 @@ def read_file(path):
 
 # === PY-COR-03: Comparing with None using == ===
 def check_none(val):
-    if val == None:  # SHOULD flag: PY-COR-03
+    if val is None:  # SHOULD flag: PY-COR-03
         return True
     return False
 
@@ -308,31 +305,31 @@ def read_user_file(user_path):
 
 
 def load_requested_asset(request_path):
-    return Path(request_path).read_text()  # SHOULD flag: PY-SEC-08
+    return Path(request_path).read_text()  # SHOULD flag: PY-SEC-08  # noqa: F821
 
 
 # === PY-SEC-09: SSRF ===
 def fetch_remote(user_url):
-    return requests.get(user_url)  # SHOULD flag: PY-SEC-09
+    return requests.get(user_url)  # SHOULD flag: PY-SEC-09  # noqa: F821
 
 
 def post_remote(endpoint):
-    return requests.post(endpoint)  # SHOULD flag: PY-SEC-09
+    return requests.post(endpoint)  # SHOULD flag: PY-SEC-09  # noqa: F821
 
 
 # === PY-SEC-10: Template injection ===
 def render_preview(template_source):
-    return render_template_string(template_source)  # SHOULD flag: PY-SEC-10
+    return render_template_string(template_source)  # SHOULD flag: PY-SEC-10  # noqa: F821
 
 
 def render_email(user_markup):
-    return render_template_string(user_markup, user="demo")  # SHOULD flag: PY-SEC-10
+    return render_template_string(user_markup, user="demo")  # SHOULD flag: PY-SEC-10  # noqa: F821
 
 
 # === PY-COR-20: Await while holding a lock ===
 async def async_locked_write(lock):
     with lock:
-        await save_state()  # SHOULD flag: PY-COR-20
+        await save_state()  # SHOULD flag: PY-COR-20  # noqa: F821
 
 
 async def async_locked_flush(self):
@@ -357,20 +354,20 @@ def append_shared(item):
 
 # === PY-COR-22: asyncio.gather without return_exceptions ===
 async def gather_jobs(job1, job2):
-    return await asyncio.gather(job1, job2)  # SHOULD flag: PY-COR-22
+    return await asyncio.gather(job1, job2)  # SHOULD flag: PY-COR-22  # noqa: F821
 
 
 async def gather_more(tasks):
-    return await asyncio.gather(*tasks)  # SHOULD flag: PY-COR-22
+    return await asyncio.gather(*tasks)  # SHOULD flag: PY-COR-22  # noqa: F821
 
 
 # === PY-PERF-04: logger f-string ===
 def log_error(value):
-    logger.error(f"bad value={value}")  # SHOULD flag: PY-PERF-04
+    logger.error(f"bad value={value}")  # SHOULD flag: PY-PERF-04  # noqa: F821
 
 
 def log_warning(name):
-    logger.warning(f"missing asset {name}")  # SHOULD flag: PY-PERF-04
+    logger.warning(f"missing asset {name}")  # SHOULD flag: PY-PERF-04  # noqa: F821
 
 
 # === PY-RES-08: Popen without wait/communicate ===
@@ -386,11 +383,11 @@ def spawn_detached(cmd):
 
 # === PY-RES-09: requests without timeout ===
 def fetch_json(url):
-    return requests.get(url).json()  # SHOULD flag: PY-RES-09
+    return requests.get(url).json()  # SHOULD flag: PY-RES-09  # noqa: F821
 
 
 def send_data(url, payload):
-    return requests.post(url, json=payload)  # SHOULD flag: PY-RES-09
+    return requests.post(url, json=payload)  # SHOULD flag: PY-RES-09  # noqa: F821
 
 
 # === PY-COR-23: Optional-like result dereferenced without None check ===

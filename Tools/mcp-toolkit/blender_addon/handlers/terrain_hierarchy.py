@@ -12,7 +12,6 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Iterable, List, Optional
 
-import numpy as np
 
 from .terrain_semantics import (
     HeroFeatureSpec,

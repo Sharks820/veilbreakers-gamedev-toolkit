@@ -91,7 +91,6 @@ def setup_world_background():
 
 
 def frame_selected_objects(buffer: float = 1.2):
-    deps = bpy.context.evaluated_depsgraph_get()
     objs = [
         o for o in bpy.context.scene.objects
         if o.type == "MESH" and not o.name.startswith("QA_Ground")

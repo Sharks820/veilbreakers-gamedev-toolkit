@@ -14,7 +14,7 @@ Pure Python + numpy. No bpy/bmesh imports.
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING, Any, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, List, Tuple
 
 import numpy as np
 

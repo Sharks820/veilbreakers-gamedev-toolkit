@@ -3,7 +3,6 @@
 Uses in-memory SQLite (:memory:) -- no file system needed.
 """
 
-import pytest
 
 
 # ---------------------------------------------------------------------------

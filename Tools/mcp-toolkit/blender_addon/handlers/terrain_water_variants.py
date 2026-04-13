@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import enum
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 import numpy as np

@@ -162,7 +162,7 @@ class TestComputeVolumeMeshSpec:
             assert abs(v[0] - 10) < 50 or abs(v[1] - 20) < 50
 
     def test_scale_multiplier(self):
-        s1 = compute_volume_mesh_spec("dust_motes", scale=1.0)
+        compute_volume_mesh_spec("dust_motes", scale=1.0)
         s2 = compute_volume_mesh_spec("dust_motes", scale=2.0)
         assert s2["transform"]["scale"] == 2.0
 

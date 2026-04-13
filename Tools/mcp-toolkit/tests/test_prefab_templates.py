@@ -6,7 +6,6 @@ MenuItem attributes, and correct selector resolution.
 """
 
 import json
-import pytest
 from pathlib import Path
 
 from veilbreakers_mcp.shared.unity_templates.prefab_templates import (

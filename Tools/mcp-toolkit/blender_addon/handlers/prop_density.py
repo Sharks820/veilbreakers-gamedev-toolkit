@@ -685,8 +685,8 @@ def _place_wall_props(
 
     if zone_name == "ceiling":
         # Scatter on ceiling grid
-        room_w = max_x - min_x
-        room_d = max_y - min_y
+        _room_w = max_x - min_x
+        _room_d = max_y - min_y
         z = SURFACE_ZONES["ceiling"]["z_range"][0]
         for _ in range(target_count):
             x = rng.uniform(min_x, max_x)

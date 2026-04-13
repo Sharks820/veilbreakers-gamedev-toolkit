@@ -17,7 +17,6 @@ from __future__ import annotations
 import os
 import struct
 import zlib
-from typing import Any
 
 
 # ---------------------------------------------------------------------------
@@ -69,7 +68,7 @@ def rasterize_splatmap(
 
         # Resize to target resolution using bilinear-like interpolation
         if grid_rows != target_resolution or grid_cols != target_resolution:
-            from numpy import interp as _interp
+            from numpy import interp as _interp  # noqa: F401
 
             resized = np.zeros((target_resolution, target_resolution, 4), dtype=np.float64)
             for ch in range(4):

@@ -7,7 +7,6 @@ All tests run without Blender.
 
 import math
 
-import pytest
 
 
 # ---------------------------------------------------------------------------
@@ -201,7 +200,6 @@ class TestComputeVertexCurvature:
         """L-shape: vertices on the concave (inner) edge should have curvature < 0.5."""
         from blender_addon.handlers.vertex_colors import compute_vertex_curvature
         # Vertices 2 and 3 are on the shared edge (the concave hinge)
-        l_face_normals_unused = []  # compute_vertex_curvature computes its own normals
         result = compute_vertex_curvature(L_VERTICES, L_FACES, L_EDGES)
         # The shared edge between the horizontal and vertical face is concave
         # Vertices 2, 3 have the shared-edge curvature averaged with boundary edges

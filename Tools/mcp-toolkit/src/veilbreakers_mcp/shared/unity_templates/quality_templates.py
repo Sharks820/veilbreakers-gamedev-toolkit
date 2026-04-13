@@ -391,6 +391,11 @@ def _hex_to_color_cs(hex_str: str) -> str:
     return "%.3ff, %.3ff, %.3ff, 1.0f" % (r, g, b)
 
 
+def _cs_bool(value: bool) -> str:
+    """Return a lowercase C# bool literal."""
+    return "true" if value else "false"
+
+
 def generate_master_material_script(
     output_folder: str = "Assets/Data/Materials/MasterLibrary",
     materials: list[dict] | None = None,
@@ -405,7 +410,12 @@ def generate_master_material_script(
         materials: Optional list of material dicts. Each dict must have:
             name (str), color_hex (str), metallic (float),
             roughness (float), normal_strength (float).
-            If None, uses the 7 default dark fantasy materials.
+            Optional fields: shader_name, detail_normal_strength,
+            detail_albedo_scale, occlusion_strength, height_scale,
+            emission_hex, emission_intensity, alpha_clip, cutoff,
+            surface_type ("opaque"/"transparent"), double_sided,
+            receive_shadows, queue_offset.
+            If None, uses the default dark fantasy materials.
 
     Returns:
         Complete C# source string for a Unity editor script.
@@ -419,21 +429,86 @@ def generate_master_material_script(
         name = sanitize_cs_string(mat["name"])
         safe_id = sanitize_cs_identifier(mat["name"])
         color_hex = mat.get("color_hex", "808080")
+        shader_name = sanitize_cs_string(
+            mat.get("shader_name", "Universal Render Pipeline/Lit")
+        )
         metallic = mat.get("metallic", 0.0)
         roughness = mat.get("roughness", 0.5)
         smoothness = 1.0 - roughness
         normal_strength = mat.get("normal_strength", 1.0)
+        detail_normal_strength = mat.get("detail_normal_strength", 0.35)
+        detail_albedo_scale = mat.get("detail_albedo_scale", 1.0)
+        occlusion_strength = mat.get("occlusion_strength", 1.0)
+        height_scale = mat.get("height_scale", 0.02)
+        alpha_clip = bool(mat.get("alpha_clip", False))
+        cutoff = mat.get("cutoff", 0.5)
+        surface_type = str(mat.get("surface_type", "opaque")).lower()
+        surface_value = 1.0 if surface_type == "transparent" else 0.0
+        render_type = "Transparent" if surface_type == "transparent" else "Opaque"
+        render_queue = 3000 if surface_type == "transparent" else 2000
+        double_sided = bool(mat.get("double_sided", False))
+        receive_shadows = bool(mat.get("receive_shadows", True))
+        queue_offset = int(mat.get("queue_offset", 0))
+        emission_hex = mat.get("emission_hex")
+        emission_intensity = mat.get("emission_intensity", 1.0)
         color_cs = _hex_to_color_cs(color_hex)
+        emission_cs = _hex_to_color_cs(emission_hex) if emission_hex else None
+
+        emission_block: list[str]
+        if emission_cs:
+            emission_block = [
+                '                mat.EnableKeyword("_EMISSION");',
+                '                mat.SetColor("_EmissionColor", new Color('
+                + emission_cs + ") * " + ("%.2ff" % emission_intensity) + ");",
+            ]
+        else:
+            emission_block = [
+                '                mat.DisableKeyword("_EMISSION");',
+                '                mat.SetColor("_EmissionColor", Color.black);',
+            ]
+
+        alpha_keyword = "_ALPHATEST_ON"
+        normal_keyword_block = (
+            [
+                '                mat.EnableKeyword("_NORMALMAP");',
+                '                mat.EnableKeyword("_DETAIL_MULX2");',
+            ]
+            if normal_strength > 0.0 or detail_normal_strength > 0.0
+            else ['                mat.DisableKeyword("_NORMALMAP");']
+        )
 
         block = [
             "            // " + name,
             "            {",
-            '                Material mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));',
+            '                Shader shader = Shader.Find("' + shader_name + '");',
+            "                if (shader == null)",
+            "                {",
+            '                    Debug.LogError("[VeilBreakers] Missing shader for master material: ' + name + '");',
+            "                    continue;",
+            "                }",
+            "                Material mat = new Material(shader);",
             '                mat.name = "VB_Master_' + safe_id + '";',
             '                mat.SetColor("_BaseColor", new Color(' + color_cs + '));',
             '                mat.SetFloat("_Metallic", ' + ("%.2ff" % metallic) + ");",
             '                mat.SetFloat("_Smoothness", ' + ("%.2ff" % smoothness) + ");",
             '                mat.SetFloat("_BumpScale", ' + ("%.2ff" % normal_strength) + ");",
+            '                mat.SetFloat("_OcclusionStrength", ' + ("%.2ff" % occlusion_strength) + ");",
+            '                mat.SetFloat("_DetailAlbedoMapScale", ' + ("%.2ff" % detail_albedo_scale) + ");",
+            '                mat.SetFloat("_DetailNormalMapScale", ' + ("%.2ff" % detail_normal_strength) + ");",
+            '                mat.SetFloat("_Parallax", ' + ("%.3ff" % height_scale) + ");",
+            '                mat.SetFloat("_Surface", ' + ("%.1ff" % surface_value) + ");",
+            '                mat.SetFloat("_AlphaClip", ' + ("1.0f" if alpha_clip else "0.0f") + ");",
+            '                mat.SetFloat("_Cutoff", ' + ("%.2ff" % cutoff) + ");",
+            '                mat.SetFloat("_Cull", ' + ("0.0f" if double_sided else "2.0f") + ");",
+            '                mat.SetFloat("_ReceiveShadows", ' + ("1.0f" if receive_shadows else "0.0f") + ");",
+            '                mat.SetFloat("_QueueOffset", ' + str(queue_offset) + "f);",
+            '                mat.SetOverrideTag("RenderType", "' + render_type + '");',
+            "                mat.doubleSidedGI = " + _cs_bool(double_sided) + ";",
+            "                mat.SetShaderPassEnabled(\"ShadowCaster\", " + _cs_bool(receive_shadows) + ");",
+            "                mat.renderQueue = " + str(render_queue) + " + " + str(queue_offset) + ";",
+            '                mat.' + ("EnableKeyword" if alpha_clip else "DisableKeyword") + '("' + alpha_keyword + '");',
+            *normal_keyword_block,
+            *emission_block,
             "",
             '                string matPath = folderPath + "/VB_Master_' + safe_id + '.mat";',
             "                AssetDatabase.CreateAsset(mat, matPath);",

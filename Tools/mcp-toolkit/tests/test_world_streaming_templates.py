@@ -5,9 +5,7 @@ All tests are pure Python (no Unity/Blender dependency).
 
 from __future__ import annotations
 
-import re
 
-import pytest
 
 from veilbreakers_mcp.shared.unity_templates.world_streaming_templates import (
     generate_map_streaming_script,

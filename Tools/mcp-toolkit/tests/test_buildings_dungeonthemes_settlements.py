@@ -23,7 +23,6 @@ from blender_addon.handlers.procedural_meshes import (
 # ---- Task #48: Dungeon themes ----
 from blender_addon.handlers.dungeon_themes import (
     DUNGEON_THEMES,
-    THEME_NAMES,
     get_dungeon_theme,
     list_themes,
     apply_theme_to_dungeon,
@@ -34,7 +33,6 @@ from blender_addon.handlers.dungeon_themes import (
 # ---- Task #47: Settlement templates ----
 from blender_addon.handlers.worldbuilding_layout import (
     SETTLEMENT_TEMPLATES,
-    SETTLEMENT_NAMES,
     get_settlement_template,
     list_settlement_types,
     generate_settlement_spec,

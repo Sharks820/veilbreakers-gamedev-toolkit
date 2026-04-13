@@ -8,7 +8,6 @@ Validates:
 
 from __future__ import annotations
 
-import math
 
 import pytest
 
@@ -18,8 +17,6 @@ from blender_addon.handlers.facial_topology import (
     generate_claw_hand_mesh,
     generate_hoof_mesh,
     generate_paw_mesh,
-    _FINGER_SPECS,
-    _FINGER_COUNT_MAP,
 )
 
 

@@ -171,7 +171,7 @@ class TestGenerateUxmlScreen:
         body = result.split("\n", 1)[1]
         root = ET.fromstring(body)
         # Should have a screen-root child
-        screen_root = root.find(".//{http://unity3d.com/ns}VisualElement")
+        root.find(".//{http://unity3d.com/ns}VisualElement")
         # Just verify it parsed at all
         assert root is not None
 

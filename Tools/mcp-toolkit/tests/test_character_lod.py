@@ -7,7 +7,6 @@ Validates CHAR-04 and CHAR-05 requirements:
 
 from __future__ import annotations
 
-import math
 
 import pytest
 
@@ -17,7 +16,6 @@ from blender_addon.handlers._character_lod import (
     _compute_vertex_importance,
     _compute_face_importance,
     _JOINT_SPECS,
-    _REGION_WEIGHTS,
 )
 
 
@@ -319,7 +317,7 @@ class TestSeamRingGeneration:
     def test_ring_is_closed(self):
         """The ring should form a closed loop (no gaps)."""
         result = generate_seam_ring("neck", segments=8)
-        verts = result["vertices"]
+        result["vertices"]
         # First and last vertices of each ring should be at similar angle
         # (the face winding handles closure)
         assert len(result["faces"]) == 4 * 8  # 4 face types * segments

@@ -8,7 +8,6 @@ assumed slope on flat terrain, directional gullies on gradient heightmaps.
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 
 def _make_gradient_heightmap(rows: int = 64, cols: int = 64) -> np.ndarray:

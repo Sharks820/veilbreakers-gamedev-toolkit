@@ -5,7 +5,7 @@ from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, logger,
-    _write_to_unity, STANDARD_NEXT_STEPS,
+    _write_generated_editor_response,
 )
 
 from veilbreakers_mcp.shared.unity_templates.prefab_templates import (
@@ -29,6 +29,9 @@ from veilbreakers_mcp.shared.unity_templates.prefab_templates import (
 )
 from veilbreakers_mcp.shared.unity_templates.character_templates import (
     generate_cloth_setup_script,
+)
+from veilbreakers_mcp.shared.unity_templates._cs_sanitize import (
+    sanitize_cs_identifier,
 )
 
 
@@ -169,6 +172,23 @@ async def unity_prefab(
 # ---------------------------------------------------------------------------
 
 
+async def _write_prefab_response(
+    action_name: str,
+    script: str,
+    script_path: str,
+    *,
+    menu_path: str,
+    response_fields: dict | None = None,
+) -> str:
+    return await _write_generated_editor_response(
+        action_name=action_name,
+        script_content=script,
+        rel_path=script_path,
+        menu_path=menu_path,
+        response_fields=response_fields or {},
+    )
+
+
 async def _handle_prefab_create(
     name: str, prefab_type: str, save_dir: str, components: list[dict] | None
 ) -> str:
@@ -176,15 +196,17 @@ async def _handle_prefab_create(
         return json.dumps({"status": "error", "action": "create", "message": "name is required"})
     script = generate_prefab_create_script(name, prefab_type, save_dir, components)
     script_path = "Assets/Editor/Generated/Prefab/VeilBreakers_CreatePrefab.cs"
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "create", "message": str(exc)})
-    return json.dumps({
-        "status": "success", "action": "create", "script_path": abs_path,
-        "next_steps": STANDARD_NEXT_STEPS,
-        "result_file": "Temp/vb_result.json",
-    }, indent=2)
+    return await _write_prefab_response(
+        "create",
+        script,
+        script_path,
+        menu_path="VeilBreakers/Prefab/Create Prefab",
+        response_fields={
+            "name": name,
+            "prefab_type": prefab_type,
+            "save_dir": save_dir,
+        },
+    )
 
 
 async def _handle_prefab_create_variant(
@@ -194,15 +216,17 @@ async def _handle_prefab_create_variant(
         return json.dumps({"status": "error", "action": "create_variant", "message": "base_prefab_path is required"})
     script = generate_prefab_variant_script(name, base_prefab_path, overrides)
     script_path = "Assets/Editor/Generated/Prefab/VeilBreakers_CreateVariant.cs"
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "create_variant", "message": str(exc)})
-    return json.dumps({
-        "status": "success", "action": "create_variant", "script_path": abs_path,
-        "next_steps": STANDARD_NEXT_STEPS,
-        "result_file": "Temp/vb_result.json",
-    }, indent=2)
+    return await _write_prefab_response(
+        "create_variant",
+        script,
+        script_path,
+        menu_path="VeilBreakers/Prefab/Create Variant",
+        response_fields={
+            "name": name,
+            "base_prefab_path": base_prefab_path,
+            "overrides": overrides or {},
+        },
+    )
 
 
 async def _handle_prefab_modify(
@@ -212,15 +236,16 @@ async def _handle_prefab_modify(
         return json.dumps({"status": "error", "action": "modify", "message": "prefab_path and modifications are required"})
     script = generate_prefab_modify_script(prefab_path, modifications)
     script_path = "Assets/Editor/Generated/Prefab/VeilBreakers_ModifyPrefab.cs"
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "modify", "message": str(exc)})
-    return json.dumps({
-        "status": "success", "action": "modify", "script_path": abs_path,
-        "next_steps": STANDARD_NEXT_STEPS,
-        "result_file": "Temp/vb_result.json",
-    }, indent=2)
+    return await _write_prefab_response(
+        "modify",
+        script,
+        script_path,
+        menu_path="VeilBreakers/Prefab/Modify Prefab",
+        response_fields={
+            "prefab_path": prefab_path,
+            "modifications": modifications,
+        },
+    )
 
 
 async def _handle_prefab_delete(prefab_path: str) -> str:
@@ -228,15 +253,13 @@ async def _handle_prefab_delete(prefab_path: str) -> str:
         return json.dumps({"status": "error", "action": "delete", "message": "prefab_path is required"})
     script = generate_prefab_delete_script(prefab_path)
     script_path = "Assets/Editor/Generated/Prefab/VeilBreakers_DeletePrefab.cs"
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "delete", "message": str(exc)})
-    return json.dumps({
-        "status": "success", "action": "delete", "script_path": abs_path,
-        "next_steps": STANDARD_NEXT_STEPS,
-        "result_file": "Temp/vb_result.json",
-    }, indent=2)
+    return await _write_prefab_response(
+        "delete",
+        script,
+        script_path,
+        menu_path="VeilBreakers/Prefab/Delete Prefab",
+        response_fields={"prefab_path": prefab_path},
+    )
 
 
 async def _handle_prefab_scaffold(name: str, prefab_type: str) -> str:
@@ -244,15 +267,16 @@ async def _handle_prefab_scaffold(name: str, prefab_type: str) -> str:
         return json.dumps({"status": "error", "action": "create_scaffold", "message": "name is required"})
     script = generate_scaffold_prefab_script(name, prefab_type)
     script_path = "Assets/Editor/Generated/Prefab/VeilBreakers_CreateScaffold.cs"
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "create_scaffold", "message": str(exc)})
-    return json.dumps({
-        "status": "success", "action": "create_scaffold", "script_path": abs_path,
-        "next_steps": STANDARD_NEXT_STEPS,
-        "result_file": "Temp/vb_result.json",
-    }, indent=2)
+    return await _write_prefab_response(
+        "create_scaffold",
+        script,
+        script_path,
+        menu_path="VeilBreakers/Prefab/Create Scaffold",
+        response_fields={
+            "name": name,
+            "prefab_type": prefab_type,
+        },
+    )
 
 
 async def _handle_prefab_add_component(
@@ -262,15 +286,17 @@ async def _handle_prefab_add_component(
         return json.dumps({"status": "error", "action": "add_component", "message": "selector and component_type are required"})
     script = generate_add_component_script(resolved_selector, component_type, properties)
     script_path = "Assets/Editor/Generated/Prefab/VeilBreakers_AddComponent.cs"
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "add_component", "message": str(exc)})
-    return json.dumps({
-        "status": "success", "action": "add_component", "script_path": abs_path,
-        "next_steps": STANDARD_NEXT_STEPS,
-        "result_file": "Temp/vb_result.json",
-    }, indent=2)
+    return await _write_prefab_response(
+        "add_component",
+        script,
+        script_path,
+        menu_path="VeilBreakers/Prefab/Add Component",
+        response_fields={
+            "selector": resolved_selector,
+            "component_type": component_type,
+            "properties": properties or [],
+        },
+    )
 
 
 async def _handle_prefab_remove_component(
@@ -280,15 +306,16 @@ async def _handle_prefab_remove_component(
         return json.dumps({"status": "error", "action": "remove_component", "message": "selector and component_type are required"})
     script = generate_remove_component_script(resolved_selector, component_type)
     script_path = "Assets/Editor/Generated/Prefab/VeilBreakers_RemoveComponent.cs"
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "remove_component", "message": str(exc)})
-    return json.dumps({
-        "status": "success", "action": "remove_component", "script_path": abs_path,
-        "next_steps": STANDARD_NEXT_STEPS,
-        "result_file": "Temp/vb_result.json",
-    }, indent=2)
+    return await _write_prefab_response(
+        "remove_component",
+        script,
+        script_path,
+        menu_path="VeilBreakers/Prefab/Remove Component",
+        response_fields={
+            "selector": resolved_selector,
+            "component_type": component_type,
+        },
+    )
 
 
 async def _handle_prefab_configure(
@@ -300,15 +327,17 @@ async def _handle_prefab_configure(
         return json.dumps({"status": "error", "action": "configure", "message": "properties list is required"})
     script = generate_configure_component_script(resolved_selector, component_type, properties)
     script_path = "Assets/Editor/Generated/Prefab/VeilBreakers_ConfigureComponent.cs"
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "configure", "message": str(exc)})
-    return json.dumps({
-        "status": "success", "action": "configure", "script_path": abs_path,
-        "next_steps": STANDARD_NEXT_STEPS,
-        "result_file": "Temp/vb_result.json",
-    }, indent=2)
+    return await _write_prefab_response(
+        "configure",
+        script,
+        script_path,
+        menu_path="VeilBreakers/Prefab/Configure Component",
+        response_fields={
+            "selector": resolved_selector,
+            "component_type": component_type,
+            "properties": properties,
+        },
+    )
 
 
 async def _handle_prefab_reflect(
@@ -318,15 +347,16 @@ async def _handle_prefab_reflect(
         return json.dumps({"status": "error", "action": "reflect_component", "message": "selector and component_type are required"})
     script = generate_reflect_component_script(resolved_selector, component_type)
     script_path = "Assets/Editor/Generated/Prefab/VeilBreakers_ReflectComponent.cs"
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "reflect_component", "message": str(exc)})
-    return json.dumps({
-        "status": "success", "action": "reflect_component", "script_path": abs_path,
-        "next_steps": STANDARD_NEXT_STEPS,
-        "result_file": "Temp/vb_result.json",
-    }, indent=2)
+    return await _write_prefab_response(
+        "reflect_component",
+        script,
+        script_path,
+        menu_path="VeilBreakers/Prefab/Reflect Component",
+        response_fields={
+            "selector": resolved_selector,
+            "component_type": component_type,
+        },
+    )
 
 
 async def _handle_prefab_hierarchy(
@@ -357,15 +387,22 @@ async def _handle_prefab_hierarchy(
     kwargs["enabled"] = enabled
     script = generate_hierarchy_script(operation, **kwargs)
     script_path = "Assets/Editor/Generated/Prefab/VeilBreakers_Hierarchy.cs"
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "hierarchy", "message": str(exc)})
-    return json.dumps({
-        "status": "success", "action": "hierarchy", "script_path": abs_path,
-        "next_steps": STANDARD_NEXT_STEPS,
-        "result_file": "Temp/vb_result.json",
-    }, indent=2)
+    return await _write_prefab_response(
+        "hierarchy",
+        script,
+        script_path,
+        menu_path="VeilBreakers/Prefab/Hierarchy",
+        response_fields={
+            "operation": operation,
+            "selector": resolved_selector,
+            "parent_name": parent_name,
+            "new_name": new_name,
+            "layer": layer,
+            "tag": tag,
+            "enabled": enabled,
+            "name": name,
+        },
+    )
 
 
 async def _handle_prefab_batch_configure(
@@ -377,15 +414,17 @@ async def _handle_prefab_batch_configure(
         return json.dumps({"status": "error", "action": "batch_configure", "message": "properties list is required"})
     script = generate_batch_configure_script(batch_selector, component_type, properties)
     script_path = "Assets/Editor/Generated/Prefab/VeilBreakers_BatchConfigure.cs"
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "batch_configure", "message": str(exc)})
-    return json.dumps({
-        "status": "success", "action": "batch_configure", "script_path": abs_path,
-        "next_steps": STANDARD_NEXT_STEPS,
-        "result_file": "Temp/vb_result.json",
-    }, indent=2)
+    return await _write_prefab_response(
+        "batch_configure",
+        script,
+        script_path,
+        menu_path="VeilBreakers/Prefab/Batch Configure",
+        response_fields={
+            "batch_selector": batch_selector,
+            "component_type": component_type,
+            "properties": properties,
+        },
+    )
 
 
 async def _handle_prefab_batch_job(operations: list[dict] | None) -> str:
@@ -393,15 +432,13 @@ async def _handle_prefab_batch_job(operations: list[dict] | None) -> str:
         return json.dumps({"status": "error", "action": "batch_job", "message": "operations list is required"})
     script = generate_job_script(operations)
     script_path = "Assets/Editor/Generated/Prefab/VeilBreakers_JobScript.cs"
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "batch_job", "message": str(exc)})
-    return json.dumps({
-        "status": "success", "action": "batch_job", "script_path": abs_path,
-        "next_steps": STANDARD_NEXT_STEPS,
-        "result_file": "Temp/vb_result.json",
-    }, indent=2)
+    return await _write_prefab_response(
+        "batch_job",
+        script,
+        script_path,
+        menu_path="VeilBreakers/Prefab/Execute Job Script",
+        response_fields={"operations": operations},
+    )
 
 
 async def _handle_prefab_generate_variants(
@@ -417,15 +454,19 @@ async def _handle_prefab_generate_variants(
         return json.dumps({"status": "error", "action": "generate_variants", "message": "corruption_tiers and brands must have items"})
     script = generate_variant_matrix_script(name, base_prefab_path, corruption_tiers, brands, output_dir)
     script_path = "Assets/Editor/Generated/Prefab/VeilBreakers_VariantMatrix.cs"
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "generate_variants", "message": str(exc)})
-    return json.dumps({
-        "status": "success", "action": "generate_variants", "script_path": abs_path,
-        "next_steps": STANDARD_NEXT_STEPS,
-        "result_file": "Temp/vb_result.json",
-    }, indent=2)
+    return await _write_prefab_response(
+        "generate_variants",
+        script,
+        script_path,
+        menu_path="VeilBreakers/Prefab/Generate Variant Matrix",
+        response_fields={
+            "name": name,
+            "base_prefab_path": base_prefab_path,
+            "corruption_tiers": corruption_tiers,
+            "brands": brands,
+            "output_dir": output_dir,
+        },
+    )
 
 
 async def _handle_prefab_setup_joints(
@@ -435,15 +476,17 @@ async def _handle_prefab_setup_joints(
         return json.dumps({"status": "error", "action": "setup_joints", "message": "selector and joint_type are required"})
     script = generate_joint_setup_script(resolved_selector, joint_type, joint_config or {})
     script_path = "Assets/Editor/Generated/Prefab/VeilBreakers_SetupJoint.cs"
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "setup_joints", "message": str(exc)})
-    return json.dumps({
-        "status": "success", "action": "setup_joints", "script_path": abs_path,
-        "next_steps": STANDARD_NEXT_STEPS,
-        "result_file": "Temp/vb_result.json",
-    }, indent=2)
+    return await _write_prefab_response(
+        "setup_joints",
+        script,
+        script_path,
+        menu_path="VeilBreakers/Prefab/Setup Joint",
+        response_fields={
+            "selector": resolved_selector,
+            "joint_type": joint_type,
+            "joint_config": joint_config or {},
+        },
+    )
 
 
 async def _handle_prefab_setup_navmesh(
@@ -453,15 +496,17 @@ async def _handle_prefab_setup_navmesh(
         return json.dumps({"status": "error", "action": "setup_navmesh", "message": "selector is required"})
     script = generate_navmesh_setup_script(navmesh_operation, resolved_selector, **(config or {}))
     script_path = "Assets/Editor/Generated/Prefab/VeilBreakers_NavMeshSetup.cs"
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "setup_navmesh", "message": str(exc)})
-    return json.dumps({
-        "status": "success", "action": "setup_navmesh", "script_path": abs_path,
-        "next_steps": STANDARD_NEXT_STEPS,
-        "result_file": "Temp/vb_result.json",
-    }, indent=2)
+    return await _write_prefab_response(
+        "setup_navmesh",
+        script,
+        script_path,
+        menu_path="VeilBreakers/Prefab/NavMesh Setup",
+        response_fields={
+            "selector": resolved_selector,
+            "navmesh_operation": navmesh_operation,
+            "config": config or {},
+        },
+    )
 
 
 async def _handle_prefab_setup_bone_sockets(
@@ -471,29 +516,27 @@ async def _handle_prefab_setup_bone_sockets(
         return json.dumps({"status": "error", "action": "setup_bone_sockets", "message": "prefab_path is required"})
     script = generate_bone_socket_script(prefab_path, sockets)
     script_path = "Assets/Editor/Generated/Prefab/VeilBreakers_BoneSockets.cs"
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "setup_bone_sockets", "message": str(exc)})
-    return json.dumps({
-        "status": "success", "action": "setup_bone_sockets", "script_path": abs_path,
-        "next_steps": STANDARD_NEXT_STEPS,
-        "result_file": "Temp/vb_result.json",
-    }, indent=2)
+    return await _write_prefab_response(
+        "setup_bone_sockets",
+        script,
+        script_path,
+        menu_path="VeilBreakers/Prefab/Setup Bone Sockets",
+        response_fields={
+            "prefab_path": prefab_path,
+            "sockets": sockets or [],
+        },
+    )
 
 
 async def _handle_prefab_validate_project() -> str:
     script = generate_validate_project_script()
     script_path = "Assets/Editor/Generated/Prefab/VeilBreakers_ValidateProject.cs"
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "validate_project", "message": str(exc)})
-    return json.dumps({
-        "status": "success", "action": "validate_project", "script_path": abs_path,
-        "next_steps": STANDARD_NEXT_STEPS,
-        "result_file": "Temp/vb_result.json",
-    }, indent=2)
+    return await _write_prefab_response(
+        "validate_project",
+        script,
+        script_path,
+        menu_path="VeilBreakers/Prefab/Validate Project Integrity",
+    )
 
 
 async def _handle_prefab_cloth_setup(
@@ -511,18 +554,15 @@ async def _handle_prefab_cloth_setup(
         wind_turbulence=wind_turbulence,
         collision_spheres=collision_spheres,
     )
-    safe_name = mesh_name.replace(" ", "_").replace("-", "_")
+    safe_name = sanitize_cs_identifier(mesh_name) or "CharacterCloth"
     rel_path = f"Assets/Editor/Generated/Character/VeilBreakers_Cloth_{safe_name}.cs"
-    try:
-        abs_path = _write_to_unity(script, rel_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "cloth_setup", "message": str(exc)})
-    return json.dumps({
-        "status": "success",
-        "action": "cloth_setup",
-        "script_path": abs_path,
-        "cloth_type": cloth_type,
-        "mesh_name": mesh_name,
-        "next_steps": STANDARD_NEXT_STEPS,
-        "result_file": "Temp/vb_result.json",
-    }, indent=2)
+    return await _write_prefab_response(
+        "cloth_setup",
+        script,
+        rel_path,
+        menu_path=f"VeilBreakers/Character/Setup Cloth - {safe_name}",
+        response_fields={
+            "cloth_type": cloth_type,
+            "mesh_name": mesh_name,
+        },
+    )

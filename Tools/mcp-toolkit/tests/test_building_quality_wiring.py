@@ -8,7 +8,6 @@ Tests confirm:
 - mesh_spec operations carry full vertex/face data
 """
 
-import pytest
 
 from blender_addon.handlers._building_grammar import (
     BuildingSpec,

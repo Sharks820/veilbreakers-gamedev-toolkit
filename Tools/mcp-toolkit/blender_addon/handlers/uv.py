@@ -752,7 +752,7 @@ def handle_equalize_density(params: dict) -> dict:
         for island_faces in _get_island_faces(bm2, uv_layer2):
             total_3d = sum(f.calc_area() for f in island_faces)
             total_uv = sum(
-                _polygon_area_2d([l[uv_layer2].uv.copy() for l in f.loops])
+                _polygon_area_2d([L[uv_layer2].uv.copy() for L in f.loops])
                 for f in island_faces
             )
             if total_3d > 1e-8 and total_uv > 1e-8:
@@ -904,7 +904,7 @@ def handle_set_active_uv_layer(params: dict) -> dict:
 
     uv_layers = obj.data.uv_layers
     if layer_name not in uv_layers:
-        available = [l.name for l in uv_layers]
+        available = [L.name for L in uv_layers]
         raise ValueError(
             f"UV layer '{layer_name}' not found. Available: {available}"
         )

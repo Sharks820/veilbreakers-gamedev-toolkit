@@ -8,7 +8,6 @@ from blender_addon.handlers.animation_monster import (
     generate_gnaw_loop_keyframes, generate_shadow_embrace_keyframes, generate_chorus_keyframes,
     generate_plant_growth_keyframes, generate_spawn_broodling_keyframes,
 )
-from blender_addon.handlers.animation_gaits import Keyframe
 
 
 class TestValidation:

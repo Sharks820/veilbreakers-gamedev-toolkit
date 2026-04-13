@@ -28,7 +28,6 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime, timezone
-from typing import Any
 
 _CHECKPOINT_VERSION = 1
 

@@ -7,7 +7,6 @@ world-unit scale (heights > 1.0) and do not normalize or clip to [0, 1].
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from blender_addon.handlers.terrain_advanced import (
     compute_erosion_brush,

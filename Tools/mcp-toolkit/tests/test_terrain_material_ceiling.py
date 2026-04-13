@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 import tempfile
 from pathlib import Path
-from typing import Tuple
 
 import numpy as np
 import pytest
@@ -176,7 +175,7 @@ def test_macro_color_respects_biome_id(stack):
     biome[5:10, 5:10] = 5  # snowcap
     stack.set("biome_id", biome, "test")
     color = compute_macro_color(stack)
-    snow_rgb = np.array(DARK_FANTASY_PALETTE[5], dtype=np.float32)
+    np.array(DARK_FANTASY_PALETTE[5], dtype=np.float32)
     # Snow region should be brighter than surrounding by a meaningful margin
     region_mean = color[5:10, 5:10].mean(axis=(0, 1))
     assert region_mean.mean() > 0.6
@@ -425,7 +424,6 @@ def test_pass_quixel_ingest_with_assets_param(state):
 
 def test_pass_quixel_ingest_handles_missing_paths(state):
     from blender_addon.handlers.terrain_quixel_ingest import pass_quixel_ingest
-    from dataclasses import replace
 
     state.intent.composition_hints["quixel_assets"] = [
         {"asset_path": "/definitely/not/here", "layer_id": "bad"}

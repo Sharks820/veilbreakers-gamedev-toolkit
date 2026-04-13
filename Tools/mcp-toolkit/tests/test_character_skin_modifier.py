@@ -28,8 +28,6 @@ from blender_addon.handlers.character_skin_modifier import (
     ALL_BRANDS,
     BODY_SKELETONS,
     MONSTER_SKELETONS,
-    BUILD_MULTIPLIERS,
-    GENDER_MULTIPLIERS,
     get_skeleton,
     get_monster_skeleton,
     generate_skin_body_code,
@@ -785,7 +783,7 @@ class TestElderSpineCurve:
         elder = get_skeleton("male", "elder")
 
         avg_names = average["names"]
-        eld_names = elder["names"]
+        elder["names"]
 
         # Spine1 should have forward lean in elder
         spine1_idx = avg_names.index("Spine1")

@@ -18,7 +18,7 @@ from __future__ import annotations
 import math
 import time
 from dataclasses import dataclass, field
-from typing import List, Optional, Sequence, Tuple
+from typing import Optional, Tuple
 
 import numpy as np
 

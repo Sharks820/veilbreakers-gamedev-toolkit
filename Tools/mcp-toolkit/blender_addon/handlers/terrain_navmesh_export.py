@@ -11,7 +11,6 @@ Populates:
 from __future__ import annotations
 
 import json
-import math
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -90,7 +89,7 @@ def compute_traversability(stack: TerrainMaskStack) -> np.ndarray:
         raise ValueError("compute_traversability requires stack.height")
 
     h = np.asarray(stack.height, dtype=np.float64)
-    shape = h.shape
+    _shape = h.shape
 
     slope = stack.slope
     if slope is None:
@@ -153,7 +152,9 @@ def export_navmesh_json(stack: TerrainMaskStack, output_path: Path) -> Dict[str,
         "tile_size": int(stack.tile_size),
         "cell_size_m": float(stack.cell_size),
         "world_origin": [float(stack.world_origin_x), float(stack.world_origin_y)],
-        "coordinate_system": stack.coordinate_system,
+        "unity_world_origin": [float(stack.world_origin_x), 0.0, float(stack.world_origin_y)],
+        "coordinate_system": "y-up",
+        "source_coordinate_system": stack.coordinate_system,
         "area_ids": {
             "unwalkable": NAVMESH_UNWALKABLE,
             "walkable": NAVMESH_WALKABLE,

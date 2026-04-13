@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import math
 
-import pytest
 
 from blender_addon.handlers.mesh_smoothing import (
     smooth_assembled_mesh,
@@ -286,7 +285,7 @@ class TestSmoothAssembledMesh:
             verts, faces, smooth_iterations=2, preserve_boundary=True,
         )
         # Tip (index 0) has only 2 neighbors -- should be preserved strongly
-        tip_disp = math.sqrt(sum((a - b) ** 2 for a, b in zip(verts[0], smoothed[0])))
+        math.sqrt(sum((a - b) ** 2 for a, b in zip(verts[0], smoothed[0])))
         # Base vertex (index 4) has 2 neighbors too, but tip should still
         # keep its z height well above 3.0 (original was 5.0)
         assert smoothed[0][2] > 4.0, (

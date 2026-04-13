@@ -337,8 +337,8 @@ def compute_light_budget(
         estimated_cost, recommendation.
     """
     total = len(lights)
-    shadow_count = sum(1 for l in lights if l.get("shadow", False))
-    flicker_count = sum(1 for l in lights if l.get("flicker") is not None)
+    shadow_count = sum(1 for L in lights if L.get("shadow", False))
+    flicker_count = sum(1 for L in lights if L.get("flicker") is not None)
 
     base_cost = total
     cost = base_cost + shadow_count * shadow_cost + flicker_count * flicker_cost

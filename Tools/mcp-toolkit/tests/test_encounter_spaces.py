@@ -129,8 +129,8 @@ class TestEncounterBounds:
             layout = compute_encounter_layout(name)
             bounds = layout.get("bounds", {})
             radius = bounds.get("radius")
-            b_min = bounds.get("min")
-            b_max = bounds.get("max")
+            bounds.get("min")
+            bounds.get("max")
             for pos in layout.get("cover", []):
                 if radius is not None:
                     dist = math.sqrt(pos[0] ** 2 + pos[1] ** 2)

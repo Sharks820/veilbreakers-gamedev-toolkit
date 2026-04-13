@@ -1993,7 +1993,7 @@ def handle_boolean_op(params: dict) -> dict:
         doubles_result = bmesh.ops.remove_doubles(
             bm, verts=bm.verts[:], dist=merge_distance
         )
-        doubles_removed = len(doubles_result.get("verts", []))
+        _doubles_removed = len(doubles_result.get("verts", []))
         # Recalculate normals -- same list-snapshot pattern for safety
         bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
         bm.to_mesh(target.data)

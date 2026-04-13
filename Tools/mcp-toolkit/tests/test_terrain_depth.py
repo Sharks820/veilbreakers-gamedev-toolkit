@@ -11,7 +11,6 @@ Validates that the 5 terrain depth generators produce valid mesh data:
 
 from __future__ import annotations
 
-import math
 
 import numpy as np
 import pytest
@@ -164,11 +163,12 @@ class TestCaveEntranceMesh:
         assert result["metadata"].get("category") == "terrain_depth"
 
     def test_depth_parameter(self):
-        """Depth should affect z-extent of the tunnel."""
+        """Depth should affect negative-Y tunnel penetration."""
         result = generate_cave_entrance_mesh(depth=5.0)
-        zs = [v[2] for v in result["vertices"]]
-        z_span = max(zs) - min(zs)
-        assert z_span >= 4.0, f"Z span {z_span} too small for depth=5"
+        ys = [v[1] for v in result["vertices"]]
+        y_span = max(ys) - min(ys)
+        assert y_span >= 4.0, f"Y span {y_span} too small for depth=5"
+        assert min(ys) <= -4.5, f"Cave entrance did not extend into hillside: min_y={min(ys)}"
 
     def test_different_seeds(self):
         r1 = generate_cave_entrance_mesh(seed=10)
@@ -305,7 +305,7 @@ class TestTerrainBridgeMesh:
         end = (10, 0, 0)
         result = generate_terrain_bridge_mesh(start_pos=start, end_pos=end)
         xs = [v[0] for v in result["vertices"]]
-        zs = [v[2] for v in result["vertices"]]
+        [v[2] for v in result["vertices"]]
         # The bridge should span roughly the distance between endpoints
         x_span = max(xs) - min(xs)
         # For a 10-unit span along x, the bridge length should be close

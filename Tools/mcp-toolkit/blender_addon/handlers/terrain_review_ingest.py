@@ -11,7 +11,7 @@ Pure stdlib — no bpy, no numpy required. See plan §19.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 

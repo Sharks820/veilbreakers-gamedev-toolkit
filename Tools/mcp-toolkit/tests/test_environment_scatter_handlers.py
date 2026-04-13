@@ -6,7 +6,6 @@ parameter validation. Blender-side geometry creation is not tested
 expected result dict shapes.
 """
 
-import math
 
 import numpy as np
 import pytest

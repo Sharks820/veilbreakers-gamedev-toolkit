@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 
 class TestRiverNegativeElevation:
@@ -52,6 +51,6 @@ class TestRiverNegativeElevation:
         # With the bug, negative values get smaller magnitude
         # With correct normalization, range is preserved
         correct_min = float(terrain.min())
-        buggy_min = float(buggy.min())
+        float(buggy.min())
         # The correct approach preserves the actual min
         assert correct_min < -10.0, "Fixture should have values well below zero"

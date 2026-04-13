@@ -5,7 +5,6 @@ _generate_landmark_unique_features, _apply_corruption_tint, and
 _build_landmark_result without Blender.
 """
 
-import math
 import pytest
 
 
@@ -649,7 +648,6 @@ class TestHandleGenerateLandmarkPureLogic:
 
     def test_invalid_preset_raises_valueerror(self):
         """Requesting an unknown preset name raises ValueError."""
-        from blender_addon.handlers.worldbuilding import VB_LANDMARK_PRESETS
 
         # We test the preset lookup + error path directly
         from blender_addon.handlers.worldbuilding import get_vb_landmark_preset

@@ -1,7 +1,6 @@
 """Tests for phase 58-03 fixes: dungeon Z-up, settlement height_fn, mesh_bridge logging."""
 from __future__ import annotations
 
-import math
 import unittest
 
 from blender_addon.handlers._dungeon_gen import (
@@ -82,7 +81,8 @@ class TestSettlementHeightFn(unittest.TestCase):
         self.assertEqual(_z_at(10.0, 20.0, None), 0.0)
 
     def test_z_at_with_callback(self):
-        fn = lambda x, y: x + y
+        def fn(x, y):
+            return x + y
         self.assertAlmostEqual(_z_at(3.0, 4.0, fn), 7.0)
 
     def test_road_network_flat_by_default(self):
@@ -95,7 +95,8 @@ class TestSettlementHeightFn(unittest.TestCase):
 
     def test_road_network_uses_height_fn(self):
         """With height_fn, waypoint Z values reflect terrain."""
-        fn = lambda x, y: 10.0  # flat plateau at Z=10
+        def fn(x, y):
+            return 10.0  # flat plateau at Z=10
         segs = generate_road_network_organic(
             center=(0, 0), radius=50, seed=1, height_fn=fn
         )
@@ -106,7 +107,8 @@ class TestSettlementHeightFn(unittest.TestCase):
 
     def test_road_network_variable_height(self):
         """Height varies with position."""
-        fn = lambda x, y: x * 0.1  # slope in X direction
+        def fn(x, y):
+            return x * 0.1  # slope in X direction
         segs = generate_road_network_organic(
             center=(50, 50), radius=30, seed=1, height_fn=fn
         )
@@ -127,7 +129,8 @@ class TestSettlementHeightFn(unittest.TestCase):
 
     def test_prop_manifest_uses_height_fn(self):
         """With height_fn, prop Z follows terrain."""
-        fn = lambda x, y: 5.0
+        def fn(x, y):
+            return 5.0
         segs = generate_road_network_organic(
             center=(0, 0), radius=50, seed=1, height_fn=fn
         )

@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import json
 import tempfile
-from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -405,7 +404,6 @@ def test_golden_compare_mutated_stack_raises_hard_issue():
 
 def test_golden_compare_detects_new_channel_soft():
     from blender_addon.handlers.terrain_golden_snapshots import (
-        GoldenSnapshot,
         compare_against_golden,
         save_golden_snapshot,
     )

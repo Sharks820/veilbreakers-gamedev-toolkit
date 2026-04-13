@@ -5,7 +5,7 @@ from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, logger,
-    _write_to_unity, STANDARD_NEXT_STEPS,
+    _write_to_unity, _write_generated_editor_response, STANDARD_NEXT_STEPS,
 )
 
 from veilbreakers_mcp.shared.unity_templates.build_templates import (
@@ -21,6 +21,29 @@ from veilbreakers_mcp.shared.unity_templates.build_templates import (
 )
 
 
+
+
+
+async def _write_build_editor_response(
+    *,
+    action_name: str,
+    script_content: str,
+    rel_path: str,
+    menu_path: str = "",
+    next_steps: list[str] | None = None,
+    result_file: str | None = "Temp/vb_result.json",
+    response_fields: dict | None = None,
+) -> str:
+    """Write a Unity editor script and auto-run it when a menu item exists."""
+    return await _write_generated_editor_response(
+        action_name=action_name,
+        script_content=script_content,
+        rel_path=rel_path,
+        menu_path=menu_path,
+        next_steps=next_steps,
+        result_file=result_file,
+        response_fields=response_fields,
+    )
 
 
 @mcp.tool()
@@ -83,15 +106,18 @@ async def unity_build(
                 development=development,
                 **ns_kwargs,
             )
-            abs_path = _write_to_unity(
-                script, "Assets/Editor/Generated/Build/VBMultiPlatformBuild.cs",
+            return await _write_build_editor_response(
+                action_name="build_multi_platform",
+                script_content=script,
+                rel_path="Assets/Editor/Generated/Build/VBMultiPlatformBuild.cs",
+                menu_path="VeilBreakers/Build/Multi-Platform Build",
+                next_steps=STANDARD_NEXT_STEPS,
+                result_file="Temp/vb_build_results.json",
+                response_fields={
+                    "platforms": platforms or [],
+                    "development": development,
+                },
             )
-            return json.dumps({
-                "status": "success",
-                "action": "build_multi_platform",
-                "script_path": abs_path,
-                "next_steps": STANDARD_NEXT_STEPS,
-            }, indent=2)
 
         elif action == "configure_addressables":
             script = generate_addressables_config_script(
@@ -99,15 +125,17 @@ async def unity_build(
                 build_remote=build_remote,
                 **ns_kwargs,
             )
-            abs_path = _write_to_unity(
-                script, "Assets/Editor/Generated/Build/VBAddressablesConfig.cs",
+            return await _write_build_editor_response(
+                action_name="configure_addressables",
+                script_content=script,
+                rel_path="Assets/Editor/Generated/Build/VBAddressablesConfig.cs",
+                menu_path="VeilBreakers/Build/Configure Addressables",
+                next_steps=STANDARD_NEXT_STEPS,
+                response_fields={
+                    "build_remote": build_remote,
+                    "groups": groups or [],
+                },
             )
-            return json.dumps({
-                "status": "success",
-                "action": "configure_addressables",
-                "script_path": abs_path,
-                "next_steps": STANDARD_NEXT_STEPS,
-            }, indent=2)
 
         elif action == "generate_ci_pipeline":
             # Validate ci_platforms against the allowlist before passing
@@ -160,22 +188,6 @@ async def unity_build(
             }, indent=2)
 
         elif action == "manage_version":
-            script = generate_version_management_script(
-                version=version,
-                auto_increment=auto_increment,
-                update_android=update_android,
-                update_ios=update_ios,
-                **ns_kwargs,
-            )
-            abs_path = _write_to_unity(
-                script, "Assets/Editor/Generated/Build/VBVersionManager.cs",
-            )
-            next_steps = [
-                "Call unity_editor action='recompile' to compile version manager",
-                "Execute menu item: VeilBreakers > Build > Bump Version",
-            ]
-
-            # Also generate changelog script
             changelog_script = generate_changelog(
                 project_name=project_name,
                 version=version,
@@ -185,17 +197,42 @@ async def unity_build(
                 changelog_script,
                 "Assets/Editor/Generated/Build/VBChangelogGenerator.cs",
             )
-            next_steps.append(
-                "Execute menu item: VeilBreakers > Build > Generate Changelog"
+            script = generate_version_management_script(
+                version=version,
+                auto_increment=auto_increment,
+                update_android=update_android,
+                update_ios=update_ios,
+                **ns_kwargs,
             )
-
-            return json.dumps({
-                "status": "success",
-                "action": "manage_version",
-                "script_path": abs_path,
-                "changelog_path": changelog_path,
-                "next_steps": next_steps,
-            }, indent=2)
+            result = json.loads(await _write_build_editor_response(
+                action_name="manage_version",
+                script_content=script,
+                rel_path="Assets/Editor/Generated/Build/VBVersionManager.cs",
+                menu_path="VeilBreakers/Build/Bump Version",
+                next_steps=[
+                    "Call unity_editor action='recompile' to compile version manager",
+                    "Execute menu item: VeilBreakers > Build > Bump Version",
+                ],
+                response_fields={
+                    "version": version,
+                    "auto_increment": auto_increment,
+                    "update_android": update_android,
+                    "update_ios": update_ios,
+                    "changelog_path": changelog_path,
+                    "changelog_menu_path": "VeilBreakers/Build/Generate Changelog",
+                },
+            ))
+            result.setdefault("changelog_path", changelog_path)
+            result.setdefault("changelog_menu_path", "VeilBreakers/Build/Generate Changelog")
+            if result.get("status") == "success":
+                next_steps = result.get("next_steps")
+                if not isinstance(next_steps, list):
+                    next_steps = []
+                next_steps.append(
+                    "Execute menu item: VeilBreakers > Build > Generate Changelog"
+                )
+                result["next_steps"] = next_steps
+            return json.dumps(result, indent=2)
 
         elif action == "configure_platform":
             valid_platforms = ("android", "ios", "webgl")
@@ -221,7 +258,6 @@ async def unity_build(
                 "webgl": "Assets/Editor/Generated/Build/VBWebGLConfig.cs",
             }
             output_path = platform_paths[platform]
-            abs_path = _write_to_unity(script, output_path)
 
             platform_next_steps = {
                 "android": [
@@ -240,14 +276,18 @@ async def unity_build(
                     "Build for WebGL to apply settings",
                 ],
             }
-
-            return json.dumps({
-                "status": "success",
-                "action": "configure_platform",
-                "platform": platform,
-                "script_path": abs_path,
-                "next_steps": platform_next_steps[platform],
-            }, indent=2)
+            platform_menu_paths = {
+                "android": "VeilBreakers/Build/Configure Android",
+                "webgl": "VeilBreakers/Build/Configure WebGL",
+            }
+            return await _write_build_editor_response(
+                action_name="configure_platform",
+                script_content=script,
+                rel_path=output_path,
+                menu_path=platform_menu_paths.get(platform, ""),
+                next_steps=platform_next_steps[platform],
+                response_fields={"platform": platform},
+            )
 
         elif action == "setup_shader_stripping":
             script = generate_shader_stripping_script(
@@ -255,15 +295,20 @@ async def unity_build(
                 log_stripping=log_stripping,
                 **ns_kwargs,
             )
-            abs_path = _write_to_unity(
-                script, "Assets/Editor/Generated/Build/VBShaderStripper.cs",
+            return await _write_build_editor_response(
+                action_name="setup_shader_stripping",
+                script_content=script,
+                rel_path="Assets/Editor/Generated/Build/VBShaderStripper.cs",
+                next_steps=[
+                    "Recompile: unity_editor action=recompile",
+                    "Build a player to trigger shader stripping and write Temp/vb_shader_strip_results.json",
+                ],
+                result_file="Temp/vb_shader_strip_results.json",
+                response_fields={
+                    "keywords_to_strip": keywords_to_strip or ["DEBUG", "_EDITOR"],
+                    "log_stripping": log_stripping,
+                },
             )
-            return json.dumps({
-                "status": "success",
-                "action": "setup_shader_stripping",
-                "script_path": abs_path,
-                "next_steps": STANDARD_NEXT_STEPS,
-            }, indent=2)
 
         elif action == "generate_store_metadata":
             content = generate_store_metadata(

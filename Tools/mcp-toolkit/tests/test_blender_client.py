@@ -4,7 +4,7 @@ import json
 import socket
 import struct
 import threading
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -289,7 +289,6 @@ class TestThreadSafety:
         conn = BlenderConnection()
         lock_acquired_count = 0
 
-        original_send = conn._send_on_socket
 
         def tracked_send(cmd_type, params):
             nonlocal lock_acquired_count

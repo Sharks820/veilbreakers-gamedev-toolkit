@@ -1,6 +1,5 @@
 """Tests for hair_system handler."""
 
-import math
 
 import pytest
 

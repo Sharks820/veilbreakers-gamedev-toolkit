@@ -8,7 +8,6 @@ scripts -- they must NEVER contain 'using UnityEditor;'.
 
 import json
 
-import pytest
 
 from veilbreakers_mcp.shared.unity_templates.game_templates import (
     generate_save_system_script,

@@ -1183,7 +1183,7 @@ def _generate_alleys(
                 continue
             d = _dist2d(positions[i], positions[j])
             if d <= alley_threshold:
-                mid = (
+                _mid = (
                     (positions[i][0] + positions[j][0]) / 2.0,
                     (positions[i][1] + positions[j][1]) / 2.0,
                 )

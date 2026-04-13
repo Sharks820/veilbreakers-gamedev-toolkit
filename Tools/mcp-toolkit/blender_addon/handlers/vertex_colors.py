@@ -92,7 +92,7 @@ def compute_vertex_ao(
             ao_values.append(1.0)
             continue
 
-        vn = vert_normals[vi]
+        _vn = vert_normals[vi]
         dot_sum = 0.0
         pair_count = 0
 

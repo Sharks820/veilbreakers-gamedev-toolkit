@@ -656,7 +656,7 @@ class TestLODChain:
         mesh_data = {"vertices": verts, "faces": faces}
 
         chain = generate_lod_chain(mesh_data, "prop_medium")
-        vert_counts = [len(v) for v, f, l in chain]
+        vert_counts = [len(v) for v, f, l in chain]  # noqa: E741
 
         for i in range(1, len(vert_counts)):
             assert vert_counts[i] <= vert_counts[i - 1], (

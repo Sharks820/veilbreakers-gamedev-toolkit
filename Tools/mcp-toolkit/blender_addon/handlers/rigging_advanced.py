@@ -1423,7 +1423,7 @@ def handle_setup_ragdoll(params: dict) -> dict:
             f"Invalid ragdoll spec: {'; '.join(validation['errors'])}"
         )
 
-    ctx = get_3d_context_override()
+    _ctx = get_3d_context_override()
 
     colliders: list[str] = []
     joint_count = 0

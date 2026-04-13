@@ -2,7 +2,6 @@
 
 import json
 
-import pytest
 import numpy as np
 
 from blender_addon.handlers.terrain_chunking import (

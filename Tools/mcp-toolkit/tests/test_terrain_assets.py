@@ -29,7 +29,6 @@ from blender_addon.handlers.terrain_assets import (
     cluster_rocks_for_cliffs,
     cluster_rocks_for_waterfalls,
     compute_viability,
-    pass_scatter_intelligent,
     place_assets_by_zone,
     register_bundle_e_passes,
     scatter_debris_for_caves,
@@ -398,6 +397,18 @@ def test_pass_populates_detail_density(stack, intent):
     for name, arr in detail.items():
         assert arr.shape == state.mask_stack.height.shape
         assert arr.dtype == np.float32
+
+
+def test_pass_preserves_existing_detail_density(stack, intent):
+    sentinel = np.full(stack.height.shape, 0.5, dtype=np.float32)
+    state = TerrainPipelineState(intent=intent, mask_stack=stack)
+    state.mask_stack.detail_density = {"canopy": sentinel.copy()}
+    with tempfile.TemporaryDirectory() as td:
+        controller = TerrainPassController(state, checkpoint_dir=Path(td))
+        controller.run_pass("scatter_intelligent", checkpoint=False)
+    detail = state.mask_stack.detail_density
+    assert detail is not None
+    np.testing.assert_array_equal(detail["canopy"], sentinel)
 
 
 def test_scatter_registration_declares_detail_density_output():

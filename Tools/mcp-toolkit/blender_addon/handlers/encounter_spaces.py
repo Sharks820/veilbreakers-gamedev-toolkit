@@ -309,15 +309,15 @@ def compute_encounter_layout(
         }
     elif template["shape"] in ("narrow_corridor", "long_corridor", "uphill_path"):
         w = template["width"]
-        l = template["length"]
+        length = template["length"]
         h = template.get("elevation_gain", 3.0)
         result["bounds"] = {
             "min": (-w / 2, 0, 0),
-            "max": (w / 2, l, h),
+            "max": (w / 2, length, h),
         }
     elif template["shape"] in ("square_room", "irregular_room"):
         s = template.get("size", template.get("width", 10.0))
-        l = template.get("length", s)
+        length = template.get("length", s)
         # Collect all defined positions to compute encompassing bounds
         all_y = [0.0]
         all_x = [0.0]
@@ -337,7 +337,7 @@ def compute_encounter_layout(
         x_center = (min(all_x) + max(all_x)) / 2.0
         y_center = (min(all_y) + max(all_y)) / 2.0
         half_w = max(s / 2.0, (max(all_x) - min(all_x)) / 2.0 + 1.0)
-        half_l = max(l / 2.0, (max(all_y) - min(all_y)) / 2.0 + 1.0)
+        half_l = max(length / 2.0, (max(all_y) - min(all_y)) / 2.0 + 1.0)
         result["bounds"] = {
             "min": (x_center - half_w, y_center - half_l, 0),
             "max": (x_center + half_w, y_center + half_l, 3.0),
@@ -373,12 +373,12 @@ def compute_encounter_layout(
             enemies = _resolve_ring_positions(count, radius, start_angle=start_angle)
         elif enemy_spec == "alternating_sides":
             w = template.get("width", 4.0)
-            l = template.get("length", 30.0)
+            length = template.get("length", 30.0)
             min_e = template.get("min_enemies", 4)
             max_e = template.get("max_enemies", 8)
             count = enemy_count if enemy_count is not None else rng.randint(min_e, max_e)
             count = max(min_e, min(count, max_e))
-            enemies = [pos for pos in _resolve_alternating_sides(w, l, count, rng)]
+            enemies = [pos for pos in _resolve_alternating_sides(w, length, count, rng)]
         else:
             enemies = []
     else:
@@ -447,8 +447,8 @@ def compute_encounter_layout(
     alcoves = template.get("flanking_alcoves")
     if isinstance(alcoves, str) and alcoves == "alternating_alcoves":
         w = template.get("width", 4.0)
-        l = template.get("length", 30.0)
-        alcove_list = _resolve_alternating_alcoves(w, l, 4, rng)
+        length = template.get("length", 30.0)
+        alcove_list = _resolve_alternating_alcoves(w, length, 4, rng)
         for alc in alcove_list:
             result["props"].append({
                 "type": "alcove",
@@ -476,9 +476,9 @@ def compute_encounter_layout(
     archer_spec = template.get("archer_positions")
     if isinstance(archer_spec, str) and archer_spec == "elevated_flanks":
         w = template.get("width", 5.0)
-        l = template.get("length", 25.0)
+        length = template.get("length", 25.0)
         eg = template.get("elevation_gain", 5.0)
-        archers = _resolve_elevated_flanks(w, l, eg, 4, rng)
+        archers = _resolve_elevated_flanks(w, length, eg, 4, rng)
         result["props"].extend([
             {"type": "archer_perch", "position": pos, "size": (2, 2, 1.5)}
             for pos in archers

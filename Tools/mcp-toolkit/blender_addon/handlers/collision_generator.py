@@ -164,7 +164,7 @@ def generate_collision_mesh(
     # Build convex hull via bmesh
     bm = bmesh.new()
     bm.from_mesh(obj.data)
-    result = bmesh.ops.convex_hull(bm, input=bm.verts)
+    _result = bmesh.ops.convex_hull(bm, input=bm.verts)
 
     # Create collision mesh
     col_mesh = bpy.data.meshes.new(col_name)

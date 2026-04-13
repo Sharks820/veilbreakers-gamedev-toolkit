@@ -1048,7 +1048,7 @@ def generate_mouth_interior(
         groups["tongue"] = list(range(tongue_start, len(verts)))
 
     # --- Inner cheek walls (connect upper and lower at sides) ---
-    cheek_start = len(verts)
+    _cheek_start = len(verts)
     cheek_segs = 4
     for side_sign in [-1.0, 1.0]:
         side_start = len(verts)
@@ -1441,7 +1441,7 @@ def generate_paw(
         all_verts.extend(base_v)
         all_faces.extend(base_f)
         # Hooves have 1-2 "toes" (the hoof itself)
-        actual_toes = 2 if paw_type == "cloven_hoof" else 1
+        _actual_toes = 2 if paw_type == "cloven_hoof" else 1
         groups["pads"] = list(range(len(all_verts)))
         return all_verts, all_faces, groups
 
@@ -2186,7 +2186,7 @@ def generate_quadruped(
     body_start_z = snout_length + head_length + neck_length
     for i in range(6):
         t = i / 5
-        bone_z = body_start_z + t * body_length
+        _bone_z = body_start_z + t * body_length
         idx = min(int(t * (len(spine) - 1)), len(spine) - 1)
         all_bones[f"spine_{i + 1:02d}"] = spine[idx]
 
@@ -2253,7 +2253,7 @@ def generate_quadruped(
         upper_len = leg_len * upper_ratio
         lower_len = leg_len * lower_ratio
         ankle_len = leg_len * ankle_ratio
-        foot_len = leg_len * foot_ratio
+        _foot_len = leg_len * foot_ratio
 
         leg_segs = [
             {

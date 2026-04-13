@@ -14,7 +14,6 @@ variety), #55 (wind vertex colors), #56 (billboard impostors),
 
 from __future__ import annotations
 
-import json
 import math
 import random as _random
 from typing import Any
@@ -1003,8 +1002,8 @@ def generate_billboard_impostor(params: dict) -> MeshSpec:
     uvs: list[tuple[float, float]] = []
 
     half_w = tree_width * 0.5
-    half_h = tree_height * 0.5
-    center_z = tree_height * 0.5
+    _half_h = tree_height * 0.5
+    _center_z = tree_height * 0.5
 
     if impostor_type == "cross":
         # Cross-billboard: 2 intersecting quads at 90 degrees

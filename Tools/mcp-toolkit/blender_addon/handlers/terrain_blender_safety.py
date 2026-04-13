@@ -13,7 +13,6 @@ See Addendum 1.A.6 for the authoritative spec.
 from __future__ import annotations
 
 import functools
-import math
 import threading
 from pathlib import Path
 from typing import Callable, List, Sequence, Tuple

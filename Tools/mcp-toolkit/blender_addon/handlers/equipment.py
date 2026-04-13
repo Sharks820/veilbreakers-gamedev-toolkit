@@ -589,7 +589,7 @@ def _create_shield_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> N
     shield_width = width * 2.0
     shield_height = length
     segs_top = 6  # rounded top half
-    segs_bottom = 3  # pointed bottom
+    _segs_bottom = 3  # pointed bottom
     depth = width * 0.05  # flat shield
 
     base_idx = len(bm.verts)
@@ -1479,7 +1479,7 @@ def _create_shuriken_mesh(bm: bmesh.types.BMesh, length: float, width: float) ->
     bm.verts.ensure_lookup_table()
     # Create triangular faces for each blade
     center_top = bm.verts[base_idx]
-    center_bot = bm.verts[base_idx + 1]
+    _center_bot = bm.verts[base_idx + 1]
     for i in range(4):
         outer_idx = base_idx + 2 + i * 4
         inner_idx = outer_idx + 2

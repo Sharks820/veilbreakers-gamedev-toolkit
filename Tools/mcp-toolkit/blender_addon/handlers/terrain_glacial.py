@@ -18,11 +18,9 @@ import numpy as np
 from .terrain_pipeline import derive_pass_seed
 from .terrain_semantics import (
     BBox,
-    PassDefinition,
     PassResult,
     TerrainMaskStack,
     TerrainPipelineState,
-    ValidationIssue,
 )
 
 
@@ -86,8 +84,8 @@ def carve_u_valley(
     dense_arr = np.array(dense)  # (N, 2)
 
     # For each cell within a bounding box of the path, find min distance.
-    rr = np.arange(H).reshape(-1, 1)
-    cc = np.arange(W).reshape(1, -1)
+    _rr = np.arange(H).reshape(-1, 1)
+    _cc = np.arange(W).reshape(1, -1)
 
     rmin = max(0, int(dense_arr[:, 0].min() - half_cells - 2))
     rmax = min(H, int(dense_arr[:, 0].max() + half_cells + 3))
@@ -224,7 +222,7 @@ def pass_glacial(
     total_delta = np.zeros((H, W), dtype=np.float64)
     glacier_paths = hints.get("glacier_paths", [])
     if glacier_paths:
-        seed = derive_pass_seed(
+        _seed = derive_pass_seed(
             state.intent.seed,
             "glacial",
             state.tile_x,

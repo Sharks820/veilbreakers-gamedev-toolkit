@@ -14,7 +14,6 @@ Covers:
 
 from __future__ import annotations
 
-import math
 import tempfile
 from pathlib import Path
 
@@ -258,6 +257,19 @@ def test_pass_waterfalls_populates_channels():
         assert stack.wet_rock is not None
         assert stack.waterfall_lip_candidate.shape == stack.height.shape
         assert result.metrics["chain_count"] >= 1
+    finally:
+        TerrainPassController.clear_registry()
+
+
+def test_waterfall_registration_declares_delta_output():
+    from blender_addon.handlers.terrain_pipeline import TerrainPassController
+    from blender_addon.handlers.terrain_waterfalls import register_bundle_c_passes
+
+    TerrainPassController.clear_registry()
+    register_bundle_c_passes()
+    try:
+        definition = TerrainPassController.PASS_REGISTRY["waterfalls"]
+        assert "waterfall_pool_delta" in definition.produces_channels
     finally:
         TerrainPassController.clear_registry()
 

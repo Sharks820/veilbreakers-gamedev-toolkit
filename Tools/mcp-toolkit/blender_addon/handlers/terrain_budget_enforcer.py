@@ -10,7 +10,7 @@ Pure numpy — no bpy. See plan §19.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 import numpy as np

@@ -332,6 +332,16 @@ class PipelineRunner:
             result["render"] = render_result
             paths = render_result.get("paths", []) if isinstance(render_result, dict) else []
             validation = validate_render_screens(paths, min_score=min_score)
+            expected_count = len(render_angles)
+            actual_count = len(paths)
+            validation_metrics = dict(validation.get("metrics", {}))
+            validation_metrics["expected_image_count"] = expected_count
+            validation["metrics"] = validation_metrics
+            if actual_count != expected_count:
+                validation.setdefault("issues", []).append(
+                    f"Expected {expected_count} screenshots, got {actual_count}"
+                )
+                validation["valid"] = False
             result["validation"] = validation
             result["valid"] = validation.get("valid", False)
             if not result["valid"]:
@@ -414,7 +424,8 @@ class PipelineRunner:
 
                 mat_check: dict = {"passed": True, "count": materials}
                 if materials == 0:
-                    mat_check["warning"] = "no materials"
+                    mat_check["passed"] = False
+                    mat_check["error"] = "no materials"
                 result["checks"]["materials"] = mat_check
 
         except (OSError, json.JSONDecodeError, ValueError, KeyError, struct.error) as exc:

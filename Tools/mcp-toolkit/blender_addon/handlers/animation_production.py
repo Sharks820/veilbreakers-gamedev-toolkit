@@ -31,12 +31,9 @@ import bpy
 from mathutils import Euler, Matrix, Quaternion, Vector
 
 from ._action_compat import (
-    get_fcurve_count,
     get_fcurves,
     get_frame_range,
-    is_layered_action,
     new_fcurve,
-    remove_fcurve,
     setup_action_for_armature,
 )
 
@@ -1043,7 +1040,7 @@ def handle_retarget_motion(params: dict) -> dict:
                 continue
 
             # Get source world-space rotation
-            src_world_mat = src_obj.matrix_world @ src_pb.matrix
+            _src_world_mat = src_obj.matrix_world @ src_pb.matrix
 
             # Compute rotation delta from rest pose
             if src_bone_name in src_rest_inv:
@@ -1624,7 +1621,7 @@ def handle_contact_solver(params: dict) -> dict:
 
         # Pass 2: Apply corrections
         # Build a height map for quick lookup
-        height_map = {f: h for f, h in bone_heights}
+        _height_map = {f: h for f, h in bone_heights}
 
         for phase_start, phase_end in phases:
             # Lock position: use the bone position at the moment of first contact

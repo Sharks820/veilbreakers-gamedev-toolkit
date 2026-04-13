@@ -34,10 +34,10 @@ def validate_social_params(params: dict) -> dict:
         raise ValueError(f"Invalid social_type: {social_type!r}")
     frame_count = int(params.get("frame_count", 48))
     if frame_count < 4:
-        raise ValueError(f"frame_count must be >= 4")
+        raise ValueError("frame_count must be >= 4")
     intensity = float(params.get("intensity", 1.0))
     if intensity <= 0:
-        raise ValueError(f"intensity must be > 0")
+        raise ValueError("intensity must be > 0")
     return {"object_name": object_name, "social_type": social_type,
             "frame_count": frame_count, "intensity": intensity}
 

@@ -520,6 +520,7 @@ _DTYPE_CONTRACT: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
     ("drainage", ("f",)),
     ("talus", ("f",)),
     ("heightmap_raw_u16", ("u",)),
+    ("terrain_normals", ("f",)),
     ("navmesh_area_id", ("i", "u")),
     ("splatmap_weights_layer", ("f",)),
 )

@@ -17,7 +17,6 @@ Requirements covered:
     VFX3-08: Boss phase transition VFX (generate_boss_transition_vfx_script)
 """
 
-import pytest
 
 from veilbreakers_mcp.shared.unity_templates.vfx_mastery_templates import (
     generate_flipbook_script,

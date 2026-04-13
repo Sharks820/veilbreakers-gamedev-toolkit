@@ -593,7 +593,7 @@ def generate_chest_armor_mesh(style: str = "plate") -> MeshSpec:
     parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
     cw = 0.20   # half-width of torso
     ch = 0.35   # chest height
-    cd = 0.12   # chest depth
+    _cd = 0.12   # chest depth
     segs = 12
 
     if style == "plate":
@@ -2087,9 +2087,9 @@ def generate_face_item_mesh(style: str = "mask") -> MeshSpec:
 
     elif style == "blindfold":
         # Cloth strip covering eyes
-        bf_w = hr * 1.8
+        _bf_w = hr * 1.8
         bf_h = hr * 0.35
-        bf_d = 0.005
+        _bf_d = 0.005
         # Main strip (curved to follow head)
         subdiv = 8
         bv: list[tuple[float, float, float]] = []

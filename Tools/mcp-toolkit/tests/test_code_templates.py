@@ -453,7 +453,7 @@ class TestEditorTools:
         for gen in generators:
             result = gen()
             assert "using UnityEditor;" in result, (
-                f"Missing 'using UnityEditor;' in generator output"
+                "Missing 'using UnityEditor;' in generator output"
             )
 
     def test_all_balanced_braces(self):

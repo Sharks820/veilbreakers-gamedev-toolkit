@@ -14,7 +14,6 @@ Reads .planning/contracts/terrain.yaml (if exists) and extracts:
 from __future__ import annotations
 
 import json
-import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, List
@@ -33,7 +32,6 @@ def _parse_yaml_lightweight(text: str) -> Dict[str, Any]:
     current_list_key: str = ""
     current_list: List[Any] = []
     current_item: Dict[str, Any] = {}
-    indent_stack: List[int] = []
 
     for line in text.splitlines():
         stripped = line.strip()

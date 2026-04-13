@@ -14,8 +14,6 @@ Verifies:
 All pure-logic -- no Blender required.
 """
 
-import math
-import types
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -570,7 +568,7 @@ class TestHandleCreateProceduralMaterial:
         with patch(
             "blender_addon.handlers.procedural_materials.bpy", mock_bpy
         ):
-            result = handle_create_procedural_material({
+            handle_create_procedural_material({
                 "material_key": "polished_wood",
             })
         mock_bpy.data.materials.new.assert_called_once_with(
@@ -821,7 +819,6 @@ class TestAdvancedMaterialProperties:
         mock_nodes = MagicMock()
 
         # Track BSDF inputs that were set
-        bsdf_inputs_set = {}
 
         def mock_new_node(type=None):
             node = MagicMock()
@@ -1046,6 +1043,6 @@ class TestDarkFantasyColorValidator:
                 if abs(clamped - orig) >= 0.02:
                     failures.append(f"{key}: {label} changed {orig:.3f} -> {clamped:.3f}")
             checked += 1
-        assert not failures, f"Dark fantasy violations:\n" + "\n".join(failures)
+        assert not failures, "Dark fantasy violations:\n" + "\n".join(failures)
         # Ensure we actually checked a meaningful number of entries
         assert checked >= 25, f"Only checked {checked} entries -- too many exemptions"

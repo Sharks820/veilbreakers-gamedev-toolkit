@@ -1888,7 +1888,7 @@ def compute_morph_deltas(
         return deltas
 
     regions = morph_def.get("regions", {})
-    rng = random.Random(hash(morph_name))
+    _rng = random.Random(hash(morph_name))
 
     for region_name, region_params in regions.items():
         mode = region_params.get("mode", "radial_expand")

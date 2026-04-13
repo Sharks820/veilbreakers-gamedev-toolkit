@@ -7,7 +7,6 @@ All camera templates generate editor scripts using Cinemachine 3.x API
 and Timeline with proper asset save ordering.
 """
 
-import pytest
 
 from veilbreakers_mcp.shared.unity_templates.camera_templates import (
     generate_cinemachine_setup_script,

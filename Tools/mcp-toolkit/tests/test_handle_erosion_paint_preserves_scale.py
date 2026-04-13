@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from blender_addon.handlers._terrain_erosion import (
     apply_hydraulic_erosion_masks,

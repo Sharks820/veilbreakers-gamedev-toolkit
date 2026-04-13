@@ -21,7 +21,6 @@ All pure-logic -- no Blender required.
 from __future__ import annotations
 
 import importlib.util
-import math
 from pathlib import Path
 
 import pytest

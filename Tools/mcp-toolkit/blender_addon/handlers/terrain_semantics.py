@@ -292,6 +292,8 @@ class TerrainMaskStack:
     splatmap_weights_layer: Optional[np.ndarray] = None
     # 16-bit quantized heightmap for Unity .raw import. uint16 shape (H, W).
     heightmap_raw_u16: Optional[np.ndarray] = None
+    # Unity-space terrain normal field. float32 shape (H, W, 3), Y-up vectors.
+    terrain_normals: Optional[np.ndarray] = None
     # Navmesh area classification: walkable/unwalkable/jump/climb per cell.
     navmesh_area_id: Optional[np.ndarray] = None
     # Physics collider tag: solid / trigger / nocollide.
@@ -384,6 +386,7 @@ class TerrainMaskStack:
             # Unity-ready channels
             "splatmap_weights_layer",
             "heightmap_raw_u16",
+            "terrain_normals",
             "navmesh_area_id",
             "physics_collider_mask",
             "lightmap_uv_chart_id",
@@ -483,6 +486,7 @@ class TerrainMaskStack:
         "height",
         "splatmap_weights_layer",
         "heightmap_raw_u16",
+        "terrain_normals",
         "navmesh_area_id",
         "physics_collider_mask",
         "lightmap_uv_chart_id",

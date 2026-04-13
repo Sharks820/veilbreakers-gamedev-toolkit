@@ -7,7 +7,6 @@ selection logic is testable without bpy.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 try:
@@ -605,7 +604,10 @@ def build_agent_tool_contract(
                 "macro_world",
                 "structural_masks",
                 "erosion",
+                "cliffs",
+                "materials_v2",
                 "navmesh",
+                "prepare_terrain_normals",
                 "prepare_heightmap_raw_u16",
                 "validation_full",
             ],
@@ -619,7 +621,10 @@ def build_agent_tool_contract(
                 "macro_world",
                 "structural_masks",
                 "erosion",
+                "cliffs",
+                "materials_v2",
                 "navmesh",
+                "prepare_terrain_normals",
                 "prepare_heightmap_raw_u16",
                 "validation_full",
             ],
@@ -630,7 +635,7 @@ def build_agent_tool_contract(
                 "Use Terrain Mixer as the primary terrain edit layer.",
                 "Use Bagapie as the primary free scatter system.",
                 "Default controller path is the 4-pass minimal sequence (macro_world -> structural_masks -> erosion -> validation_minimal).",
-                "For Unity-ready export, use terrain_pass_sequence_unity_extended which adds navmesh + prepare_heightmap_raw_u16 + validation_full.",
+                "For Unity-ready export, use terrain_pass_sequence_unity_extended which adds cliffs + materials_v2 + navmesh + prepare_terrain_normals + prepare_heightmap_raw_u16 + validation_full.",
             ],
         }
     }

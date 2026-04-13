@@ -8,7 +8,6 @@ Validates that:
 - Parse errors are reported gracefully
 """
 
-import pytest
 
 from veilbreakers_mcp.shared.unity_templates.ui_templates import (
     generate_uxml_screen,

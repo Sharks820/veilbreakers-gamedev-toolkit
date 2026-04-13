@@ -307,7 +307,7 @@ def generate_face_mesh(detail_level: str = "medium") -> MeshSpec:
     # and adjacent face topology. Each side gets a strip of quads connecting
     # consecutive fold vertices via paired inner/outer vertices.
     naso_pairs = min(nose_detail + 1, 3)
-    naso_base = len(all_verts)
+    _naso_base = len(all_verts)
     for side_idx, side_sign in enumerate([-1.0, 1.0]):
         side_start = len(all_verts)
         # Generate paired inner/outer vertices for each fold point
@@ -552,7 +552,7 @@ def generate_blend_shape_targets(
 
     # Compute face bounding box for normalization
     xs = [v[0] for v in base_vertices]
-    ys = [v[1] for v in base_vertices]
+    _ys = [v[1] for v in base_vertices]
     zs = [v[2] for v in base_vertices]
     min_x, max_x = min(xs), max(xs)
     min_z, max_z = min(zs), max(zs)
@@ -1217,7 +1217,7 @@ def generate_foot_mesh(
 
     # Bug 3 fix: record the foot's front edge vertex indices for connecting toes
     foot_front_top = foot_base + foot_sections * grid_cols
-    foot_front_bottom = foot_bottom_base + foot_sections * grid_cols
+    _foot_front_bottom = foot_bottom_base + foot_sections * grid_cols
 
     nails_generated = 0
 
@@ -1351,7 +1351,7 @@ def generate_claw_hand_mesh(
     palm_width = 0.10
     palm_depth = 0.035
     wrist_width = 0.07
-    wrist_depth = 0.04
+    _wrist_depth = 0.04
 
     all_verts: list[Vec3] = []
     all_faces: list[tuple[int, ...]] = []

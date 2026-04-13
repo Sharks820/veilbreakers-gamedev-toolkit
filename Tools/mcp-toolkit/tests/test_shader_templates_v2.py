@@ -5,7 +5,6 @@ valid ShaderLab / C# source with correct structure, URP 17 RenderGraph API
 usage, and no regressions on existing shader functions.
 """
 
-import pytest
 
 from veilbreakers_mcp.shared.unity_templates.shader_templates import (
     generate_arbitrary_shader,

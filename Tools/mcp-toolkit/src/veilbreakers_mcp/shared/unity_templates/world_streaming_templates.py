@@ -11,7 +11,6 @@ Phase 37 -- PIPE-02: Map streaming setup from Blender scene hierarchy.
 
 from __future__ import annotations
 
-from typing import Any
 
 from ._cs_sanitize import sanitize_cs_identifier
 

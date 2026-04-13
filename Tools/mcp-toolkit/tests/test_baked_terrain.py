@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 
 
-def _make_baked(size: int = 8) -> "BakedTerrain":
+def _make_baked(size: int = 8) -> "BakedTerrain":  # noqa: F821
     """Create a minimal BakedTerrain for testing."""
     from blender_addon.handlers.terrain_baked import BakedTerrain
 

@@ -20,8 +20,6 @@ import pytest
 from blender_addon.handlers.npc_characters import (
     VALID_GENDERS,
     VALID_BUILDS,
-    BUILD_PARAMS,
-    GENDER_PARAMS,
     NPC_GENERATORS,
     generate_npc_body_mesh,
     _ring,

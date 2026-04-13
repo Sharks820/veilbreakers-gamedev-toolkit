@@ -57,7 +57,7 @@ class TestUpscaleTexture:
             "veilbreakers_mcp.shared.esrgan_runner.subprocess.run",
             return_value=mock_result,
         ) as mock_run:
-            result = await upscale_texture(
+            await upscale_texture(
                 input_path=str(input_file),
                 scale=4,
                 model="realesrgan-x4plus",

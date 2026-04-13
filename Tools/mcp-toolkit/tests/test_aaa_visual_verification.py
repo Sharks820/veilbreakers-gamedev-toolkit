@@ -13,12 +13,9 @@ Covers:
 from __future__ import annotations
 
 import os
-import shutil
-import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-import pytest
 from PIL import Image, ImageDraw
 
 
@@ -387,8 +384,6 @@ class TestBattlementDimensions:
 class TestWiringIntegration:
     def test_castle_calls_battlements(self):
         """worldbuilding.py imports generate_battlements."""
-        import ast
-        import importlib.util
         wbpath = Path(__file__).parent.parent / "blender_addon" / "handlers" / "worldbuilding.py"
         source = wbpath.read_text(encoding="utf-8")
         assert "generate_battlements" in source, (

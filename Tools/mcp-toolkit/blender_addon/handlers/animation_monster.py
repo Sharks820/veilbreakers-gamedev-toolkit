@@ -170,7 +170,7 @@ def generate_spawn_broodling_keyframes(frame_count: int = 36, intensity: float =
     release = int(0.65 * frame_count)
 
     for frame in range(frame_count + 1):
-        t = frame / frame_count
+        _t = frame / frame_count
 
         if frame <= push_start:
             # Gathering/contracting
@@ -255,7 +255,7 @@ def generate_regurgitate_keyframes(
     _has_jaw = bone_names is None or "DEF-jaw" in bone_names
 
     for frame in range(frame_count + 1):
-        t = frame / frame_count
+        _t = frame / frame_count
 
         if frame <= heave_end:
             heave = frame / heave_end if heave_end > 0 else 1.0
@@ -323,7 +323,7 @@ def generate_boss_phase_transition_keyframes(frame_count: int = 60, intensity: f
     reshape_end = int(0.7 * frame_count)
 
     for frame in range(frame_count + 1):
-        t = frame / frame_count
+        _t = frame / frame_count
 
         if frame <= convulse_end:
             # Violent convulsions

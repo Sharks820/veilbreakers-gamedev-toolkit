@@ -19,7 +19,6 @@ Monster types: bipedal/quadruped/serpent/arachnid/avian/blob (6 monster archetyp
 
 from __future__ import annotations
 
-import ast
 import math
 from typing import Any
 

@@ -25,10 +25,7 @@ from ._shared_utils import safe_place_object
 from .building_quality import generate_battlements
 from .texture import handle_generate_wear_map
 from ._settlement_grammar import (
-    PROP_PROMPTS,
-    CORRUPTION_DESCS,
     get_prop_prompt,
-    generate_prop_manifest,
     ring_for_position,
     _road_segment_mesh_spec_with_curbs,
 )
@@ -560,7 +557,7 @@ def get_vb_landmark_preset(name: str) -> dict | None:
     """Return a VeilBreakers landmark preset by name, or None if not found."""
     return VB_LANDMARK_PRESETS.get(name)
 
-from ._building_grammar import (
+from ._building_grammar import (  # noqa: E402
     evaluate_building_grammar,
     generate_castle_spec,
     apply_ruins_damage,
@@ -574,46 +571,42 @@ from ._building_grammar import (
     BuildingSpec,
     STYLE_CONFIGS,
 )
-from ._dungeon_gen import generate_multi_floor_dungeon, generate_dungeon_prop_placements
-from .building_quality import (
+from ._dungeon_gen import generate_multi_floor_dungeon, generate_dungeon_prop_placements  # noqa: E402
+from .building_quality import (  # noqa: E402
     generate_stone_wall,
     generate_gothic_window,
     generate_roof,
     generate_archway,
     generate_chimney,
 )
-from ._mesh_bridge import (
+from ._mesh_bridge import (  # noqa: E402
     mesh_from_spec,
     FURNITURE_GENERATOR_MAP,
     CASTLE_ELEMENT_MAP,
     DUNGEON_PROP_MAP,
     PROP_GENERATOR_MAP,
-    CATEGORY_MATERIAL_MAP,
     get_material_for_category,
 )
-from .procedural_meshes import (
+from .procedural_meshes import (  # noqa: E402
     generate_bridge_mesh,
     generate_buttress_mesh,
     generate_column_row_mesh,
     generate_fence_mesh,
     generate_staircase_mesh,
 )
-from .settlement_generator import generate_settlement
-from .map_composer import compose_world_map
-from .encounter_spaces import compute_encounter_layout, validate_encounter_layout
-from .worldbuilding_layout import (
+from .settlement_generator import generate_settlement  # noqa: E402
+from .map_composer import compose_world_map  # noqa: E402
+from .encounter_spaces import compute_encounter_layout, validate_encounter_layout  # noqa: E402
+from .worldbuilding_layout import (  # noqa: E402
     generate_boss_arena_spec,
     generate_easter_egg_spec,
     generate_linked_interior_spec,
     generate_location_spec,
     generate_world_graph,
     _ops_to_mesh,
-    generate_market_square,
-    assign_district_zones,
     generate_concentric_castle_spec,
     generate_encounter_zone_spec,
     validate_interior_pathability_spec,
-    generate_trim_sheet_uv_spec,
 )
 
 
@@ -1127,11 +1120,11 @@ def _wall_with_openings(
 
                 # Is this v-span inside an opening?
                 is_opening = False
-                opening_for_span = None
+                _opening_for_span = None
                 for c in col_openings:
                     if v0 >= c["z"] - 1e-4 and v1 <= c["z"] + c["h"] + 1e-4:
                         is_opening = True
-                        opening_for_span = c
+                        _opening_for_span = c
                         break
 
                 if not is_opening:
@@ -2762,11 +2755,11 @@ def _create_road_with_curbs(
         for vx, vy, vz in vertices:
             terrain_z = _sample_scene_height(vx, vy, terrain_name)
             # Preserve the relative Z offset (curb height) above the terrain
-            base_z = _sample_scene_height(
+            _base_z = _sample_scene_height(
                 (sx + ex) / 2.0, (sy + ey) / 2.0, terrain_name
             )
-            z_offset = vz - (sz + (ez - sz) * 0.5)  # offset from road midpoint Z
-            snapped_z = terrain_z + 0.02 + max(0.0, vz - min(sz, ez))
+            _z_offset = vz - (sz + (ez - sz) * 0.5)  # offset from road midpoint Z
+            _snapped_z = terrain_z + 0.02 + max(0.0, vz - min(sz, ez))
             # Simpler approach: keep the curb height offsets, adjust base to terrain
             snapped_verts.append((vx, vy, terrain_z + 0.02 + (vz - sz)))
         vertices = snapped_verts
@@ -3706,7 +3699,7 @@ def _create_interior_shell(
     opening_width = min(max(1.0, width * 0.22), width * 0.38)
     opening_height = min(max(2.0, wall_height * 0.72), wall_height - 0.2)
     opening_center_x = origin_x + width * 0.5 + rng.uniform(-0.15, 0.15)
-    opening_center_y = origin_y + wall_thickness * 0.5
+    _opening_center_y = origin_y + wall_thickness * 0.5
 
     front_left_w = max(0.0, (opening_center_x - origin_x) - opening_width * 0.5)
     front_right_w = max(0.0, (origin_x + width) - (opening_center_x + opening_width * 0.5))
@@ -6075,6 +6068,7 @@ def handle_generate_location(params: dict) -> dict:
         "erosion": "both" if location_type in {"fortress", "dungeon_entrance", "monastery", "mining_town", "wizard_fortress", "cliff_keep", "sorcery_school"} else "hydraulic",
         "erosion_iterations": 5000 if location_type in {"fortress", "dungeon_entrance", "monastery", "wizard_fortress", "cliff_keep"} else 5000,
         "seed": seed,
+        "use_controller": True,
     })
     terrain_status = terrain_result.get("status") if isinstance(terrain_result, dict) else None
     if terrain_status not in (None, "success"):
@@ -6150,7 +6144,7 @@ def handle_generate_location(params: dict) -> dict:
         from .environment import handle_create_water
 
         water_size = terrain["size"] * 0.55
-        water = handle_create_water({
+        _water = handle_create_water({
             "name": f"{name}_Water",
             "water_level": 0.0,
             "width": water_size,
@@ -7940,7 +7934,7 @@ def handle_generate_landmark(params: dict) -> dict:
         parent["corruption_tint"] = str(corruption_tint["base_color"])
 
     # Furnish interior rooms
-    room_seed_offset = 1000
+    _room_seed_offset = 1000
     for room_key, layout in room_layouts.items():
         room_empty = bpy.data.objects.new(f"{name}_room_{room_key}", None)
         room_empty.empty_display_type = "CUBE"

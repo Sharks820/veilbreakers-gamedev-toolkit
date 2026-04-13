@@ -5,7 +5,6 @@ All pure-logic -- no Blender/bpy required.
 
 import ast
 import math
-import re
 
 import pytest
 

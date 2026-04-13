@@ -10,7 +10,7 @@ See Addendum 1.A.7.
 from __future__ import annotations
 
 import time
-from typing import Iterable, Optional, Sequence, Tuple
+from typing import Optional, Sequence, Tuple
 
 from .terrain_semantics import (
     BBox,

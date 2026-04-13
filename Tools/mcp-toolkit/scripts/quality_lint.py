@@ -20,7 +20,7 @@ from __future__ import annotations
 import ast
 import os
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Set
 
@@ -306,7 +306,7 @@ def check_height_writer(tree: ast.AST, filepath: str) -> List[Finding]:
                 line=node.lineno,
                 pattern_id="L2-07",
                 pattern_name="HEIGHT-WRITER",
-                message=f'Direct `stack.set("height", ...)` — use a *_delta channel instead',
+                message='Direct `stack.set("height", ...)` — use a *_delta channel instead',
             ))
     return findings
 

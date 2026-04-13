@@ -4,7 +4,6 @@ Tests GeminiReviewClient in stub mode (no API key) and verifies
 the expected return structure.
 """
 
-import pytest
 
 from veilbreakers_mcp.shared.gemini_client import GeminiReviewClient
 

@@ -77,9 +77,9 @@ from .mesh import (
     handle_face_sets,
     handle_multires,
     # Pure-logic position selection helpers (GAP-01)
-    _select_by_box,
-    _select_by_sphere,
-    _select_by_plane,
+    _select_by_box,  # noqa: F401
+    _select_by_sphere,  # noqa: F401
+    _select_by_plane,  # noqa: F401
 )
 from .mesh_enhance import (
     handle_enhance_geometry,
@@ -1121,6 +1121,7 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "env_compute_road_network": lambda params: compute_road_network(
         waypoints=[tuple(wp) for wp in params.get("waypoints", [])],
         terrain_heightmap=params.get("terrain_heightmap"),
+        terrain_bounds=tuple(params["terrain_bounds"]) if params.get("terrain_bounds") is not None else None,
         water_level=params.get("water_level", 0.0),
         seed=params.get("seed", 42),
     ),
@@ -1727,8 +1728,11 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         obj_name=params.get("object_name", params.get("obj_name", "")),
         asset_type=params.get("asset_type", "prop"),
     ),
-    # (d) Performance budget check — stub (no handler exists yet)
-    "performance_budget_check": lambda params: {"status": "ok", "budget": "not_implemented"},
+    # (d) Performance budget check — fail closed until a real collector is wired
+    "performance_budget_check": lambda params: {
+        "status": "not_available",
+        "error": "performance_budget_check_not_implemented",
+    },
     # (e) Render angle — real handler (not alias)
     "render_angle": handle_render_angle,
     # (h) Collision mesh generation

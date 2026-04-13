@@ -213,7 +213,7 @@ class TestBiomeVegetationSets:
                     assert len(sr) == 2, (
                         f"scale_range must be 2-tuple in {biome_name}/{cat}"
                     )
-                    assert sr[0] > 0, f"scale_range min must be positive"
+                    assert sr[0] > 0, "scale_range min must be positive"
                     assert sr[1] >= sr[0], (
                         f"scale_range max < min in {biome_name}/{cat}"
                     )

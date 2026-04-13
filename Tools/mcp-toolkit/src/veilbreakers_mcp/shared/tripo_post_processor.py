@@ -96,6 +96,7 @@ async def post_process_tripo_model(
             albedo_delit:         Path to de-lit albedo, or None.
             palette_validation:   {passed, issues, stats} from validate_palette.
             roughness_validation: {passed, variance, ...} from validate_roughness_map.
+            warnings:             Non-fatal pipeline degradations that occurred.
             channel_score:        Integer 0-100.
             texture_dir:          Path to the textures subdirectory.
     """
@@ -108,6 +109,7 @@ async def post_process_tripo_model(
         "albedo_delit": None,
         "palette_validation": {"passed": False, "issues": [], "stats": {}},
         "roughness_validation": {"passed": False, "variance": 0.0},
+        "warnings": [],
         "channel_score": 0,
         "texture_dir": texture_dir_str,
     }
@@ -134,8 +136,9 @@ async def post_process_tripo_model(
             if delight_result.get("correction_applied"):
                 albedo_delit_path = delit_out
                 result["albedo_delit"] = albedo_delit_path
-        except Exception:  # noqa: BLE001
-            pass  # Non-fatal; proceed with raw albedo for validation
+        except Exception as exc:  # noqa: BLE001
+            result["delight_error"] = str(exc)
+            result["warnings"].append(f"delight_failed: {exc}")
 
     # ------------------------------------------------------------------
     # Step 3: Validate palette
@@ -145,8 +148,9 @@ async def post_process_tripo_model(
     if albedo_for_validation and os.path.isfile(albedo_for_validation):
         try:
             palette_result = validate_palette(albedo_for_validation)
-        except Exception:  # noqa: BLE001
-            pass  # Non-fatal; keep default failed result
+        except Exception as exc:  # noqa: BLE001
+            result["palette_validation_error"] = str(exc)
+            result["warnings"].append(f"palette_validation_failed: {exc}")
     result["palette_validation"] = palette_result
 
     # ------------------------------------------------------------------
@@ -157,8 +161,9 @@ async def post_process_tripo_model(
     if orm_path and os.path.isfile(orm_path):
         try:
             roughness_result = validate_roughness_map(orm_path)
-        except Exception:  # noqa: BLE001
-            pass  # Non-fatal; keep default failed result
+        except Exception as exc:  # noqa: BLE001
+            result["roughness_validation_error"] = str(exc)
+            result["warnings"].append(f"roughness_validation_failed: {exc}")
     result["roughness_validation"] = roughness_result
 
     # ------------------------------------------------------------------

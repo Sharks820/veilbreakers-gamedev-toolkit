@@ -17,7 +17,6 @@ import math
 import time
 
 import numpy as np
-import pytest
 
 # ---------------------------------------------------------------------------
 # 1. Heightmap generation: performance benchmark

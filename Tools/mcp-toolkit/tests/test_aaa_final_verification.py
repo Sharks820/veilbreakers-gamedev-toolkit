@@ -18,17 +18,11 @@ Covers all 12 AAA-MAP requirements via:
 
 from __future__ import annotations
 
-import glob
-import importlib.util
 import os
-import re
 import shutil
-import sys
 import tempfile
-import types
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 from PIL import Image, ImageDraw
 

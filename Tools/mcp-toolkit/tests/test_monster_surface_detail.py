@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import math
 
-import pytest
 
 from blender_addon.handlers.monster_surface_detail import (
     compute_face_normals,

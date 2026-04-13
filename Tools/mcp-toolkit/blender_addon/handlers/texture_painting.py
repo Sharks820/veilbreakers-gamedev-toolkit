@@ -1314,7 +1314,7 @@ def _raycast_to_uv(obj: Any, position: list[float]) -> tuple[float, float] | Non
     direction = (target - origin).normalized()
 
     # Use the scene's raycast via the object's evaluated mesh
-    depsgraph = bpy.context.evaluated_depsgraph_get()
+    _depsgraph = bpy.context.evaluated_depsgraph_get()
     result, location, normal, face_index = obj.ray_cast(
         obj.matrix_world.inverted() @ origin,
         obj.matrix_world.inverted().to_3x3() @ direction,

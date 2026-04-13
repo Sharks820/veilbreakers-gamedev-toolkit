@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import tempfile
 from pathlib import Path
-from typing import Tuple
 
 import numpy as np
 import pytest
@@ -239,8 +238,8 @@ def test_wind_field_faster_at_altitude(stack):
     field = compute_wind_field(stack, 0.0, 5.0)
     speed = np.sqrt(field[..., 0] ** 2 + field[..., 1] ** 2)
     h = np.asarray(stack.height)
-    top_idx = np.unravel_index(np.argmax(h), h.shape)
-    bot_idx = np.unravel_index(np.argmin(h), h.shape)
+    np.unravel_index(np.argmax(h), h.shape)
+    np.unravel_index(np.argmin(h), h.shape)
     # Not strict — perturbation can flip locally, use means of top/bottom quartiles
     top_mask = h >= np.quantile(h, 0.9)
     bot_mask = h <= np.quantile(h, 0.1)
@@ -454,12 +453,12 @@ def test_unity_export_manifest_writes_files(state):
         manifest = export_unity_manifest(state.mask_stack, Path(td))
         out = Path(td)
         assert (out / "manifest.json").exists()
-        assert (out / "heightmap_raw_u16.npy").exists()
-        assert (out / "wind_field.npy").exists()
-        assert (out / "cloud_shadow.npy").exists()
-        assert (out / "navmesh_area_id.npy").exists()
-        assert (out / "audio_reverb_class.npy").exists()
-        assert (out / "gameplay_zone.npy").exists()
+        assert (out / "heightmap.raw").exists()
+        assert (out / "wind_field.bin").exists()
+        assert (out / "cloud_shadow.bin").exists()
+        assert (out / "navmesh_area_id.bin").exists()
+        assert (out / "audio_reverb_class.bin").exists()
+        assert (out / "gameplay_zone.bin").exists()
         assert (out / "audio_zones.json").exists()
         assert (out / "gameplay_zones.json").exists()
         assert (out / "wildlife_zones.json").exists()
@@ -467,7 +466,8 @@ def test_unity_export_manifest_writes_files(state):
         assert (out / "ecosystem_meta.json").exists()
         assert manifest["schema_version"] == "1.0"
         assert "determinism_hash" in manifest
-        assert manifest["coordinate_system"] == "z-up"
+        assert manifest["coordinate_system"] == "y-up"
+        assert manifest["source_coordinate_system"] == "z-up"
 
 
 def test_unity_export_json_schemas(state):
@@ -482,6 +482,7 @@ def test_unity_export_json_schemas(state):
         export_unity_manifest(state.mask_stack, Path(td))
         az = json.loads((Path(td) / "audio_zones.json").read_text())
         assert az["schema_version"] == "1.0"
+        assert az["coordinate_system"] == "y-up"
         assert "zones" in az
         if az["zones"]:
             z0 = az["zones"][0]
@@ -489,7 +490,26 @@ def test_unity_export_json_schemas(state):
             assert "wet_mix" in z0 and "early_reflections" in z0 and "tail_length" in z0
         gz = json.loads((Path(td) / "gameplay_zones.json").read_text())
         assert gz["schema_version"] == "1.0"
+        assert gz["coordinate_system"] == "y-up"
         assert "zones" in gz
+
+
+def test_unity_export_decals_convert_to_y_up(state):
+    from blender_addon.handlers.terrain_unity_export import export_unity_manifest
+
+    decal = np.zeros_like(state.mask_stack.height, dtype=np.float32)
+    decal[2, 3] = 1.0
+    state.mask_stack.set("decal_density", {"wet_rock": decal}, "test")
+
+    with tempfile.TemporaryDirectory() as td:
+        export_unity_manifest(state.mask_stack, Path(td))
+        decals = json.loads((Path(td) / "decals.json").read_text())
+        placement = decals["decals"]["wet_rock"][0]
+        expected_x = float(state.mask_stack.world_origin_x + 3 * state.mask_stack.cell_size)
+        expected_y = float(state.mask_stack.height[2, 3])
+        expected_z = float(state.mask_stack.world_origin_y + 2 * state.mask_stack.cell_size)
+        assert placement["position"] == pytest.approx([expected_x, expected_y, expected_z])
+        assert placement["normal"][1] > 0.0
 
 
 def test_unity_export_heightmap_u16_quantized(state):
@@ -497,9 +517,38 @@ def test_unity_export_heightmap_u16_quantized(state):
 
     with tempfile.TemporaryDirectory() as td:
         export_unity_manifest(state.mask_stack, Path(td))
-        arr = np.load(Path(td) / "heightmap_raw_u16.npy")
+        arr = np.fromfile(Path(td) / "heightmap.raw", dtype=np.uint16).reshape(
+            state.mask_stack.height.shape
+        )
         assert arr.dtype == np.uint16
         assert arr.shape == state.mask_stack.height.shape
+
+
+def test_unity_export_writes_terrain_normals(state):
+    from blender_addon.handlers.terrain_unity_export import export_unity_manifest
+
+    with tempfile.TemporaryDirectory() as td:
+        export_unity_manifest(state.mask_stack, Path(td))
+        arr = np.fromfile(Path(td) / "terrain_normals.bin", dtype=np.float32).reshape(
+            (*state.mask_stack.height.shape, 3)
+        )
+        assert arr.dtype == np.float32
+        assert arr.shape == (*state.mask_stack.height.shape, 3)
+        lengths = np.linalg.norm(arr, axis=-1)
+        assert np.allclose(lengths, 1.0, atol=1e-4)
+        assert np.all(arr[..., 1] > 0.0)
+
+
+def test_prepare_terrain_normals_pass_populates_channel(state):
+    from blender_addon.handlers.terrain_unity_export import pass_prepare_terrain_normals
+
+    result = pass_prepare_terrain_normals(state, None)
+
+    assert result.status == "ok"
+    assert state.mask_stack.terrain_normals is not None
+    assert state.mask_stack.terrain_normals.dtype == np.float32
+    assert state.mask_stack.terrain_normals.shape == (*state.mask_stack.height.shape, 3)
+    assert "terrain_normals" in result.produced_channels
 
 
 def test_prepare_heightmap_raw_u16_pass_populates_channel(state):
@@ -618,10 +667,12 @@ def test_bundle_j_populates_unity_ready_channels(state):
     from blender_addon.handlers.terrain_gameplay_zones import pass_gameplay_zones
     from blender_addon.handlers.terrain_navmesh_export import pass_navmesh
     from blender_addon.handlers.terrain_semantics import TerrainMaskStack
+    from blender_addon.handlers.terrain_unity_export import pass_prepare_terrain_normals
     from blender_addon.handlers.terrain_wind_field import pass_wind_field
 
     unity_channels = set(TerrainMaskStack.UNITY_EXPORT_CHANNELS)
     checks = [
+        (pass_prepare_terrain_normals, "terrain_normals"),
         (pass_audio_zones, "audio_reverb_class"),
         (pass_gameplay_zones, "gameplay_zone"),
         (pass_wind_field, "wind_field"),
@@ -663,4 +714,5 @@ def test_unity_export_manifest_minimal_without_optional_channels():
     with tempfile.TemporaryDirectory() as td:
         manifest = export_unity_manifest(state.mask_stack, Path(td))
         assert (Path(td) / "manifest.json").exists()
-        assert manifest["files"]["heightmap_raw_u16.npy"]["dtype"] == "uint16"
+        assert manifest["files"]["heightmap.raw"]["dtype"] == "uint16"
+        assert manifest["files"]["heightmap.raw"]["encoding"] == "raw_u16_le"

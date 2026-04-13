@@ -105,7 +105,7 @@ def test_pass_files_exist(contract: dict):
         fpath = HANDLERS_DIR / filename
         if not fpath.is_file():
             missing.append(f"{bname}/{p['name']}: {filename}")
-    assert not missing, f"Missing files:\n" + "\n".join(f"  - {m}" for m in missing)
+    assert not missing, "Missing files:\n" + "\n".join(f"  - {m}" for m in missing)
 
 
 def test_all_pass_functions_exist(contract: dict):
@@ -119,7 +119,7 @@ def test_all_pass_functions_exist(contract: dict):
         if not _function_exists(fpath, p["name"]):
             not_found.append(f"{bname}/{p['name']} not in {filename}")
     assert not not_found, (
-        f"Functions not found:\n" + "\n".join(f"  - {n}" for n in not_found)
+        "Functions not found:\n" + "\n".join(f"  - {n}" for n in not_found)
     )
 
 
@@ -129,4 +129,4 @@ def test_no_stub_passes(contract: dict):
     for bname, p in _all_passes(contract):
         if p.get("is_stub", False):
             stubs.append(f"{bname}/{p['name']}")
-    assert not stubs, f"Stub passes found:\n" + "\n".join(f"  - {s}" for s in stubs)
+    assert not stubs, "Stub passes found:\n" + "\n".join(f"  - {s}" for s in stubs)

@@ -8,7 +8,6 @@ Tests cover:
 - TestAssetPostprocessor: AssetPostprocessor C# script generation
 """
 
-import pytest
 
 from veilbreakers_mcp.shared.unity_templates.pipeline_templates import (
     generate_gitlfs_config,

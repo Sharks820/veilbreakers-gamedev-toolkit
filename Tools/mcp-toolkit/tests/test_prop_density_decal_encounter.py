@@ -11,7 +11,6 @@ import pytest
 
 from blender_addon.handlers.prop_density import (
     ROOM_DENSITY_RULES,
-    SURFACE_ZONES,
     compute_detail_prop_placements,
     get_available_room_types,
     get_zone_types,

@@ -5,12 +5,9 @@ the expected return structure. Live mode is tested with mocked SDK calls.
 """
 
 import os
-import struct
 import tempfile
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from veilbreakers_mcp.shared.elevenlabs_client import ElevenLabsAudioClient
 

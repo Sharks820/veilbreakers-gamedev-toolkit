@@ -17,7 +17,6 @@ Provides:
 from __future__ import annotations
 
 import hashlib
-import math
 from pathlib import Path
 
 import bpy

@@ -367,7 +367,7 @@ def compute_vertex_normals(
     Returns:
         List of (nx, ny, nz) normalized per-vertex normals.
     """
-    normals = [(0.0, 0.0, 0.0)] * len(vertices)
+    _normals = [(0.0, 0.0, 0.0)] * len(vertices)
     accum = [[0.0, 0.0, 0.0] for _ in range(len(vertices))]
 
     for face in faces:

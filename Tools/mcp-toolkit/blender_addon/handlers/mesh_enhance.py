@@ -639,7 +639,7 @@ def handle_bake_detail_normals(params: dict) -> dict:
 
         # Connect normal map to material if we created it
         if created_mat:
-            principled = None
+            _principled = None
             for n in nodes:
                 if n.type == "BSDF_PRINCIPLED":
                     principled = n
@@ -791,7 +791,7 @@ def handle_bake_curvature_map(params: dict) -> dict:
 
         # Temporarily replace material with curvature-capture shader
         mat = obj.data.materials[0] if obj.data.materials else None
-        had_material = mat is not None
+        _had_material = mat is not None
         if mat is None:
             mat = bpy.data.materials.new(f"{object_name}_CurvMat")
             mat.use_nodes = True
@@ -803,11 +803,11 @@ def handle_bake_curvature_map(params: dict) -> dict:
         links = mat.node_tree.links
 
         # Save existing links from Principled BSDF
-        principled = None
-        saved_color_link = None
+        _principled = None
+        _saved_color_link = None
         for n in nodes:
             if n.type == "BSDF_PRINCIPLED":
-                principled = n
+                _principled = n
                 break
 
         # Create curvature capture nodes
@@ -1030,7 +1030,7 @@ def auto_generate_lod_chain(obj_name: str, asset_type: str = "prop") -> dict:
                 # Tag the original as LOD0
                 lod_obj["lod_level"] = 0
                 lod_obj["lod_ratio"] = 1.0
-                tri_count = sum(len(p.vertices) - 2 for p in lod_obj.data.polygons)
+                _tri_count = sum(len(p.vertices) - 2 for p in lod_obj.data.polygons)
             elif asset_type == "tree" and level == len(ratios) - 1:
                 # Billboard cross for tree LOD3: 2 quads crossing at 90 degrees
                 lod_name = f"{obj_name}_LOD{level}"
@@ -1048,7 +1048,7 @@ def auto_generate_lod_chain(obj_name: str, asset_type: str = "prop") -> dict:
                 lod_obj["lod_level"] = level
                 lod_obj["lod_ratio"] = ratio
                 lod_obj["billboard"] = True
-                tri_count = 4  # 2 quads = 4 tris
+                _tri_count = 4  # 2 quads = 4 tris
             else:
                 lod_name = f"{obj_name}_LOD{level}"
                 # Duplicate object
@@ -1063,7 +1063,7 @@ def auto_generate_lod_chain(obj_name: str, asset_type: str = "prop") -> dict:
                 lod_obj["lod_level"] = level
                 lod_obj["lod_ratio"] = ratio
                 base_tris = sum(len(p.vertices) - 2 for p in obj.data.polygons)
-                tri_count = max(4, int(base_tris * ratio))
+                _tri_count = max(4, int(base_tris * ratio))
 
             # Parent to LOD group
             lod_obj.parent = group_empty
@@ -1135,7 +1135,7 @@ def enforce_topology_grade(obj_name: str, min_grade: str = "A") -> dict:
         """Return (grade, issues) for a mesh."""
         issues: list[str] = []
         polys = list(mesh_data.polygons)
-        verts = list(mesh_data.vertices)
+        _verts = list(mesh_data.vertices)
 
         if not polys:
             return "D", ["No faces found"]

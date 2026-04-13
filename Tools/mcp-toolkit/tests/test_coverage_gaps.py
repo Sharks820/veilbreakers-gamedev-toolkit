@@ -7,7 +7,6 @@ that could cause a crash, incorrect result, or security bypass in production.
 from __future__ import annotations
 
 import io
-import math
 
 import numpy as np
 import pytest

@@ -495,7 +495,7 @@ class TestLightingPlacement:
         """Doorway torch_sconces should be at ~1.6m height."""
         from blender_addon.handlers._building_grammar import generate_lighting_layout
         lights = generate_lighting_layout("tavern", 8, 6, 3.0, [], seed=42)
-        torches = [l for l in lights if l["type"] == "torch_sconce"]
+        torches = [l for l in lights if l["type"] == "torch_sconce"]  # noqa: E741
         assert len(torches) >= 2, "Need at least 2 doorway torches"
         for torch in torches:
             assert abs(torch["position"][2] - 1.6) < 0.01, \
@@ -506,7 +506,7 @@ class TestLightingPlacement:
         from blender_addon.handlers._building_grammar import generate_lighting_layout
         door_pos = [(4.0, 0.0)]  # center of front wall
         lights = generate_lighting_layout("tavern", 8, 6, 3.0, [], door_pos, seed=42)
-        torches = [l for l in lights if l["type"] == "torch_sconce"]
+        torches = [l for l in lights if l["type"] == "torch_sconce"]  # noqa: E741
         # Should have one left and one right of door
         xs = [t["position"][0] for t in torches[:2]]
         assert min(xs) < 4.0, "No torch to left of door"
@@ -519,7 +519,7 @@ class TestLightingPlacement:
         )
         layout = generate_interior_layout("tavern", 8, 6, seed=42)
         lights = generate_lighting_layout("tavern", 8, 6, 3.0, layout, seed=42)
-        candles = [l for l in lights if l["type"] == "candle"]
+        candles = [l for l in lights if l["type"] == "candle"]  # noqa: E741
         tables = [i for i in layout if i["type"] == "table"]
         if tables:
             assert len(candles) >= 1, "No candles on tables in tavern"
@@ -532,7 +532,7 @@ class TestLightingPlacement:
         layout = generate_interior_layout("tavern", 8, 6, seed=42)
         has_fireplace = any(i["type"] == "fireplace" for i in layout)
         lights = generate_lighting_layout("tavern", 8, 6, 3.0, layout, seed=42)
-        fp_lights = [l for l in lights if l["type"] == "fireplace_light"]
+        fp_lights = [l for l in lights if l["type"] == "fireplace_light"]  # noqa: E741
         if has_fireplace:
             assert len(fp_lights) >= 1, "No fireplace light despite fireplace existing"
 
@@ -659,7 +659,7 @@ class TestFullPipeline:
         layout = generate_interior_layout("storage", 3, 12, seed=42)
         assert len(layout) >= 1
 
-        clutter = generate_clutter_layout("storage", 3, 12, layout, seed=42)
+        generate_clutter_layout("storage", 3, 12, layout, seed=42)
         lights = generate_lighting_layout("storage", 3, 12, 3.0, layout, seed=42)
         assert len(lights) >= 2
 

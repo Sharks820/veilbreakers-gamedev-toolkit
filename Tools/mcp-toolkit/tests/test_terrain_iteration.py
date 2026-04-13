@@ -240,15 +240,15 @@ def test_pass_with_cache_restores_produced_channels():
 
     with _tempdir() as td:
         state = _build_state(tile_size=24)
-        controller = TerrainPassController(state, checkpoint_dir=Path(td))
+        TerrainPassController(state, checkpoint_dir=Path(td))
         pdef = TerrainPassController.get_pass("macro_world")
         cache = MaskCache()
-        r1 = pass_with_cache(pdef, state, None, cache)
+        pass_with_cache(pdef, state, None, cache)
         h1 = state.mask_stack.height.copy()
 
         # Wipe the channel and re-run via cache — should restore h1
         state.mask_stack.height[:] = 0.0
-        r2 = pass_with_cache(pdef, state, None, cache)
+        pass_with_cache(pdef, state, None, cache)
         assert cache.hits >= 1
         # The cache-hit path restores the produced channel snapshot
         np.testing.assert_array_equal(state.mask_stack.height, h1)
@@ -411,7 +411,7 @@ def test_pass_dag_from_registry_rejects_unknown_pass_names():
 def test_pass_dag_execute_parallel_propagates_worker_failures():
     from blender_addon.handlers.terrain_pass_dag import PassDAG
     from blender_addon.handlers.terrain_pipeline import TerrainPassController
-    from blender_addon.handlers.terrain_semantics import PassDefinition, PassResult
+    from blender_addon.handlers.terrain_semantics import PassDefinition
 
     def _explode(state, region):
         raise RuntimeError("boom")
@@ -574,12 +574,10 @@ def test_iteration_velocity_cache_delivers_speedup():
     """
     from blender_addon.handlers.terrain_iteration_metrics import (
         IterationMetrics,
-        record_iteration,
         speedup_factor,
     )
     from blender_addon.handlers.terrain_mask_cache import MaskCache, pass_with_cache
     from blender_addon.handlers.terrain_pipeline import TerrainPassController
-    from blender_addon.handlers.terrain_semantics import BBox
 
     with _tempdir() as td:
         state = _build_state(tile_size=48)

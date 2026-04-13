@@ -5,6 +5,7 @@ handler return dict structure via pure-logic extraction.
 """
 
 import struct
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import numpy as np
@@ -121,6 +122,140 @@ class TestValidateTerrainParams:
 
         result = _validate_terrain_params({})
         assert isinstance(result, dict)
+
+
+# ---------------------------------------------------------------------------
+# _run_height_solver_in_world_space tests
+# ---------------------------------------------------------------------------
+
+
+class TestWorldHeightSolverAdapter:
+    """World-unit path solver wrapper must preserve signed terrain ranges."""
+
+    def test_round_trips_negative_elevation_heightmap(self):
+        from blender_addon.handlers.environment import _run_height_solver_in_world_space
+
+        hmap = np.array(
+            [
+                [-40.0, -30.0],
+                [-10.0, 20.0],
+            ],
+            dtype=np.float64,
+        )
+
+        def _identity_solver(heightmap, **kwargs):
+            return [(0, 0), (1, 1)], heightmap.copy()
+
+        path, restored, transform = _run_height_solver_in_world_space(
+            hmap,
+            _identity_solver,
+        )
+
+        assert path == [(0, 0), (1, 1)]
+        np.testing.assert_allclose(restored, hmap, atol=1e-9)
+        assert transform.world_min == -40.0
+        assert transform.world_max == 20.0
+
+    def test_denormalizes_solver_output_back_to_world_units(self):
+        from blender_addon.handlers.environment import _run_height_solver_in_world_space
+
+        hmap = np.array(
+            [
+                [-40.0, -20.0],
+                [0.0, 20.0],
+            ],
+            dtype=np.float64,
+        )
+
+        def _lower_solver(heightmap, **kwargs):
+            lowered = np.clip(heightmap - 0.25, 0.0, 1.0)
+            return [(0, 0), (1, 1)], lowered
+
+        _path, restored, _transform = _run_height_solver_in_world_space(
+            hmap,
+            _lower_solver,
+        )
+
+        assert float(restored.min()) == pytest.approx(-40.0, abs=1e-9)
+        assert float(restored.max()) == pytest.approx(5.0, abs=1e-9)
+        assert np.all(restored <= 20.0)
+
+
+class TestAltitudeRuleNormalization:
+    """Biome-rule altitude normalization must preserve negative ranges."""
+
+    def test_negative_range_maps_to_unit_interval(self):
+        from blender_addon.handlers.environment import _normalize_altitude_for_rule_range
+
+        assert _normalize_altitude_for_rule_range(-40.0, range_min=-40.0, range_max=20.0) == 0.0
+        assert _normalize_altitude_for_rule_range(20.0, range_min=-40.0, range_max=20.0) == 1.0
+        assert _normalize_altitude_for_rule_range(-10.0, range_min=-40.0, range_max=20.0) == pytest.approx(0.5)
+
+    def test_clamps_values_outside_explicit_range(self):
+        from blender_addon.handlers.environment import _normalize_altitude_for_rule_range
+
+        assert _normalize_altitude_for_rule_range(-50.0, range_min=-40.0, range_max=20.0) == 0.0
+        assert _normalize_altitude_for_rule_range(30.0, range_min=-40.0, range_max=20.0) == 1.0
+
+
+class TestRoadTerrainProfiling:
+    """Road deformation helpers should create a usable crown-and-ditch profile."""
+
+    def test_apply_road_profile_raises_center_and_softens_shoulders(self):
+        from blender_addon.handlers.environment import _apply_road_profile_to_heightmap
+
+        heightmap = np.zeros((9, 9), dtype=np.float64)
+        path = [(4, 1), (4, 7)]
+
+        profiled = _apply_road_profile_to_heightmap(
+            heightmap,
+            path,
+            width_cells=3.0,
+            grade_strength=1.0,
+            crown_height_m=0.1,
+            shoulder_width_cells=2.0,
+            ditch_depth_m=0.2,
+        )
+
+        assert profiled[4, 4] > 0.0
+        assert profiled[1, 4] < 0.0
+        assert profiled[0, 0] == pytest.approx(0.0)
+
+    def test_sample_path_indices_preserves_forced_boundaries(self):
+        from blender_addon.handlers.environment import _sample_path_indices
+
+        path = [(0, c) for c in range(12)]
+        indices = _sample_path_indices(path, min_spacing_cells=3.0, forced_indices={4, 8})
+        assert indices[0] == 0
+        assert indices[-1] == len(path) - 1
+        assert 4 in indices
+        assert 8 in indices
+
+    def test_collect_bridge_spans_extends_to_banks(self):
+        from blender_addon.handlers.environment import _collect_bridge_spans
+
+        path = [(4, c) for c in range(8)]
+        base = np.full((9, 9), 2.0, dtype=np.float64)
+        base[4, 2:6] = -1.0
+        spans = _collect_bridge_spans(
+            path,
+            base_heightmap=base,
+            graded_heightmap=np.full_like(base, 0.5),
+            water_level=0.0,
+            width_m=2.0,
+            rows=9,
+            cols=9,
+            terrain_width=18.0,
+            terrain_height=18.0,
+            terrain_origin_x=0.0,
+            terrain_origin_y=0.0,
+        )
+
+        assert len(spans) == 1
+        assert spans[0]["start_index"] < 2
+        assert spans[0]["end_index"] > 5
+        assert spans[0]["style"] == "rope"
+        assert spans[0]["start_pos"][2] > 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -360,6 +495,84 @@ class TestHandlerReturnDictKeys:
         assert arr.shape == (33 * 33,)
         assert arr.min() >= 0
         assert arr.max() <= 65535
+
+
+class TestControllerTerrainPath:
+    def test_generate_terrain_uses_controller_heightmap_as_source_of_truth(self):
+        from blender_addon.handlers import environment as env_mod
+        from blender_addon.handlers.terrain_semantics import TerrainMaskStack
+
+        height = np.full((3, 3), 2.0, dtype=np.float64)
+        stack = TerrainMaskStack(
+            tile_size=2,
+            cell_size=1.0,
+            world_origin_x=0.0,
+            world_origin_y=0.0,
+            tile_x=0,
+            tile_y=0,
+            height=height,
+        )
+        stack.set("cliff_candidate", np.ones_like(height, dtype=bool), "test")
+        controller_state = SimpleNamespace(mask_stack=stack)
+        controller_results = [
+            SimpleNamespace(pass_name="macro_world", status="ok"),
+            SimpleNamespace(pass_name="structural_masks", status="ok"),
+            SimpleNamespace(pass_name="cliffs", status="ok"),
+            SimpleNamespace(pass_name="validation_minimal", status="ok"),
+        ]
+        controller_execution = {
+            "state": controller_state,
+            "results": controller_results,
+            "mask_stack": stack,
+            "tile_x": 0,
+            "tile_y": 0,
+        }
+        cliff_overlays = [
+            {
+                "cliff_id": "hero_01",
+                "tier": "hero",
+                "position": [0.0, 0.0, 2.0],
+                "rotation": [0.0, 0.0, 0.0],
+                "width": 6.0,
+                "height": 8.0,
+            }
+        ]
+        captured: dict[str, object] = {}
+
+        def _fake_create_mesh(**kwargs):
+            captured["heightmap"] = np.asarray(kwargs["heightmap"]).copy()
+            captured["controller_cliff_placements"] = kwargs.get("controller_cliff_placements")
+            return {
+                "name": kwargs["name"],
+                "vertex_count": int(np.asarray(kwargs["heightmap"]).size),
+                "cliff_overlays": len(kwargs.get("controller_cliff_placements") or []),
+                "hero_cliff_overlays": 1,
+            }
+
+        with patch.object(env_mod, "_execute_terrain_pipeline", return_value=controller_execution), \
+             patch.object(env_mod, "_create_terrain_mesh_from_heightmap", side_effect=_fake_create_mesh), \
+             patch.object(env_mod, "_cliff_structures_to_overlay_placements", return_value=cliff_overlays), \
+             patch.object(env_mod, "generate_heightmap", side_effect=AssertionError("legacy path should not run")), \
+             patch("blender_addon.handlers.terrain_cliffs.carve_cliff_system", return_value=["hero_cliff"]):
+            result = env_mod.handle_generate_terrain(
+                {
+                    "name": "ControllerTerrain",
+                    "resolution": 3,
+                    "terrain_type": "hills",
+                    "erosion": "none",
+                    "seed": 7,
+                    "scale": 32.0,
+                    "height_scale": 4.0,
+                    "use_controller": True,
+                    "cliff_overlays": True,
+                }
+            )
+
+        np.testing.assert_array_equal(captured["heightmap"], height)
+        assert captured["controller_cliff_placements"] == cliff_overlays
+        assert result["controller_used"] is True
+        assert result["controller_ok"] is True
+        assert result["hero_cliff_overlays"] == 1
 
 
 class TestWorldTerrainGeneration:

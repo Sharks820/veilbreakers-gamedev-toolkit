@@ -72,6 +72,31 @@ class TestGenerateTerrainSetupScript:
         assert "grass.png" in result
         assert "rock.png" in result
 
+    def test_rich_terrain_layer_fields(self):
+        layers = [
+            {
+                "texture_path": "Assets/Textures/grass.png",
+                "normal_path": "Assets/Textures/grass_normal.png",
+                "mask_map_path": "Assets/Textures/grass_mask.png",
+                "tiling": 10.0,
+                "tile_offset": [2.25, 3.5],
+                "normal_scale": 0.75,
+                "metallic": 0.2,
+                "smoothness": 0.65,
+                "specular_color": [0.1, 0.2, 0.3],
+            }
+        ]
+        result = generate_terrain_setup_script(
+            "Assets/Terrain/heightmap.raw", splatmap_layers=layers
+        )
+        assert "normalMapTexture = tex0Normal" in result
+        assert "maskMapTexture = tex0Mask" in result
+        assert "tileOffset = new Vector2(2.25f, 3.5f)" in result
+        assert "normalScale = 0.75f" in result
+        assert "metallic = 0.2f" in result
+        assert "smoothness = 0.65f" in result
+        assert "specular = new Color(0.1f, 0.2f, 0.3f, 1.0f)" in result
+
     def test_alphamap_path_is_supported(self):
         layers = [
             {"texture_path": "Assets/Textures/grass.png", "tiling": 10.0},
@@ -170,6 +195,39 @@ class TestGenerateTiledTerrainSetupScript:
         )
         assert "tile_0_alphamap.raw" in result
         assert "SetAlphamaps" in result
+
+    def test_rich_tiled_terrain_layer_fields(self):
+        layers = [
+            {
+                "texture_path": "Assets/Textures/grass.png",
+                "normal_path": "Assets/Textures/grass_normal.png",
+                "mask_map_path": "Assets/Textures/grass_mask.png",
+                "tiling": 10.0,
+                "tile_offset": [1.5, 2.25],
+                "normal_scale": 0.9,
+                "metallic": 0.15,
+                "smoothness": 0.55,
+                "specular_color": [0.4, 0.5, 0.6, 0.7],
+            }
+        ]
+        result = generate_tiled_terrain_setup_script(
+            [
+                {
+                    "heightmap_path": "Assets/Terrain/tile_0.raw",
+                    "grid_x": 0,
+                    "grid_y": 0,
+                    "name": "Tile_0",
+                }
+            ],
+            splatmap_layers=layers,
+        )
+        assert "tile0Layer0.normalMapTexture = tile0Tex0Normal" in result
+        assert "tile0Layer0.maskMapTexture = tile0Tex0Mask" in result
+        assert "tile0Layer0.tileOffset = new Vector2(1.5f, 2.25f)" in result
+        assert "tile0Layer0.normalScale = 0.9f" in result
+        assert "tile0Layer0.metallic = 0.15f" in result
+        assert "tile0Layer0.smoothness = 0.55f" in result
+        assert "tile0Layer0.specular = new Color(0.4f, 0.5f, 0.6f, 0.7f)" in result
 
 
 # ---------------------------------------------------------------------------

@@ -19,7 +19,6 @@ from .terrain_semantics import (
     PassResult,
     TerrainMaskStack,
     TerrainPipelineState,
-    ValidationIssue,
 )
 
 

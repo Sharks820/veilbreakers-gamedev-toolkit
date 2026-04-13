@@ -976,7 +976,7 @@ def generate_hood(
         style = "rounded"
 
     head_r = _BODY["head_radius"] * size
-    neck_r = _BODY["neck_radius"] * size
+    _neck_r = _BODY["neck_radius"] * size
     thickness = _CLOTH_THICKNESS.get(
         "chain" if style == "chain_coif" else "wool",
         0.008,
@@ -1877,7 +1877,7 @@ def generate_sash(
 
     else:  # shoulder
         shoulder_y = _BODY["torso_height"] * 0.88 * size
-        shoulder_r = _BODY["shoulder_width"] * 0.5 * size
+        _shoulder_r = _BODY["shoulder_width"] * 0.5 * size
 
         def shoulder_curve(tx: float, ty: float, z: float) -> float:
             return z + chest_r + thickness

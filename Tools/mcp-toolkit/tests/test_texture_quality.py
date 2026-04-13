@@ -8,7 +8,6 @@ testable without Blender.
 from __future__ import annotations
 
 import ast
-import math
 
 import pytest
 

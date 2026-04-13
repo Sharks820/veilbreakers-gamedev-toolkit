@@ -17,11 +17,9 @@ import numpy as np
 from .terrain_pipeline import derive_pass_seed
 from .terrain_semantics import (
     BBox,
-    PassDefinition,
     PassResult,
     TerrainMaskStack,
     TerrainPipelineState,
-    ValidationIssue,
 )
 
 
@@ -98,7 +96,7 @@ def generate_dunes(
     ys, xs = np.mgrid[0:H, 0:W].astype(np.float64)
 
     # Wind-aligned coordinate
-    u = xs * math.cos(wind_dir) + ys * math.sin(wind_dir)
+    _u = xs * math.cos(wind_dir) + ys * math.sin(wind_dir)
     # Perpendicular (dune crest) coordinate
     v = -xs * math.sin(wind_dir) + ys * math.cos(wind_dir)
 

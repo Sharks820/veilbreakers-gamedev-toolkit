@@ -367,17 +367,21 @@ class TestUnityExportContracts:
 
     def test_unity_contract_defaults(self):
         c = UnityExportContract()
-        assert c.heightmap_bit_depth == 32
-        assert c.heightmap_encoding == "float"
-        assert c.splatmap_bit_depth == 16
+        assert c.heightmap_bit_depth == 16
+        assert c.heightmap_encoding == "raw_u16_le"
+        assert c.splatmap_bit_depth == 8
+        assert c.splatmap_encoding == "raw_rgba_u8"
+        assert c.terrain_normals_bit_depth == 32
+        assert c.terrain_normals_encoding == "raw_vec3_f32_le"
         assert c.shadow_clipmap_bit_depth == 32
         assert c.mask_stack_preserves_dtype is True
 
     def test_bit_depth_contract_passes_on_compliant(self):
         c = UnityExportContract()
         meta = {
-            "heightmap.exr": {"bit_depth": 32, "encoding": "float"},
-            "splatmap.exr": {"bit_depth": 16, "encoding": "float"},
+            "heightmap.raw": {"bit_depth": 16, "encoding": "raw_u16_le"},
+            "splatmap_00.raw": {"bit_depth": 8, "encoding": "raw_rgba_u8"},
+            "terrain_normals.bin": {"bit_depth": 32, "encoding": "raw_vec3_f32_le"},
             "shadow_clipmap.exr": {"bit_depth": 32, "encoding": "float"},
         }
         assert validate_bit_depth_contract(c, meta) == []
@@ -385,7 +389,7 @@ class TestUnityExportContracts:
     def test_bit_depth_violation_detected(self):
         c = UnityExportContract()
         meta = {
-            "heightmap.exr": {"bit_depth": 8, "encoding": "float"},
+            "heightmap.raw": {"bit_depth": 8, "encoding": "raw_u16_le"},
         }
         issues = validate_bit_depth_contract(c, meta)
         assert any(i.code == "BIT_DEPTH_VIOLATION" for i in issues)
@@ -393,21 +397,37 @@ class TestUnityExportContracts:
     def test_heightmap_encoding_violation_detected(self):
         c = UnityExportContract()
         meta = {
-            "heightmap.exr": {"bit_depth": 32, "encoding": "int"},
+            "heightmap.raw": {"bit_depth": 16, "encoding": "float"},
         }
         issues = validate_bit_depth_contract(c, meta)
         assert any(i.code == "HEIGHTMAP_ENCODING_VIOLATION" for i in issues)
 
+    def test_splatmap_encoding_violation_detected(self):
+        c = UnityExportContract()
+        meta = {
+            "splatmap_00.raw": {"bit_depth": 8, "encoding": "float"},
+        }
+        issues = validate_bit_depth_contract(c, meta)
+        assert any(i.code == "SPLATMAP_ENCODING_VIOLATION" for i in issues)
+
+    def test_terrain_normals_encoding_violation_detected(self):
+        c = UnityExportContract()
+        meta = {
+            "terrain_normals.bin": {"bit_depth": 32, "encoding": "raw_rgb_u8"},
+        }
+        issues = validate_bit_depth_contract(c, meta)
+        assert any(i.code == "TERRAIN_NORMALS_ENCODING_VIOLATION" for i in issues)
+
     def test_write_export_manifest(self, tmp_path: Path):
         files = {
-            "heightmap.exr": {"bit_depth": 32, "channels": 1, "encoding": "float"},
-            "splatmap.exr": {"bit_depth": 16, "channels": 4, "encoding": "float"},
+            "heightmap.raw": {"bit_depth": 16, "channels": 1, "encoding": "raw_u16_le"},
+            "splatmap_00.raw": {"bit_depth": 8, "channels": 4, "encoding": "raw_rgba_u8"},
         }
         manifest_path = write_export_manifest(tmp_path, files)
         assert manifest_path.exists()
         payload = json.loads(manifest_path.read_text())
         assert "files" in payload
-        assert "heightmap.exr" in payload["files"]
+        assert "heightmap.raw" in payload["files"]
 
     def test_write_export_manifest_rejects_missing_keys(self, tmp_path: Path):
         with pytest.raises(ValueError):

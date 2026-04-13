@@ -26,7 +26,6 @@ from veilbreakers_mcp.shared.unity_templates.editor_templates import (
     generate_test_runner_script,
 )
 from veilbreakers_mcp.shared.gemini_client import GeminiReviewClient
-from veilbreakers_mcp.shared.unity_client import UnityConnection, UnityCommandError
 
 
 # _try_bridge imported from _common.py (canonical location)

@@ -5,7 +5,7 @@ from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, logger,
-    _write_to_unity, STANDARD_NEXT_STEPS,
+    _write_generated_editor_response,
 )
 
 from veilbreakers_mcp.shared.unity_templates.performance_templates import (
@@ -89,6 +89,23 @@ async def unity_performance(
 # ---------------------------------------------------------------------------
 
 
+async def _write_performance_response(
+    action_name: str,
+    script: str,
+    script_path: str,
+    *,
+    menu_path: str,
+    response_fields: dict | None = None,
+) -> str:
+    return await _write_generated_editor_response(
+        action_name=action_name,
+        script_content=script,
+        rel_path=script_path,
+        menu_path=menu_path,
+        response_fields=response_fields or {},
+    )
+
+
 async def _handle_performance_profile_scene(
     target_frame_time_ms: float,
     max_draw_calls: int,
@@ -107,22 +124,12 @@ async def _handle_performance_profile_scene(
     script = generate_scene_profiler_script(budgets=budgets)
     script_path = "Assets/Editor/Generated/Performance/VeilBreakers_SceneProfiler.cs"
 
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps(
-            {"status": "error", "action": "profile_scene", "message": str(exc)}
-        )
-
-    return json.dumps(
-        {
-            "status": "success",
-            "action": "profile_scene",
-            "script_path": abs_path,
-            "next_steps": STANDARD_NEXT_STEPS,
-            "result_file": "Temp/vb_result.json",
-        },
-        indent=2,
+    return await _write_performance_response(
+        "profile_scene",
+        script,
+        script_path,
+        menu_path="VeilBreakers/Performance/Profile Scene",
+        response_fields={"budgets": budgets},
     )
 
 
@@ -142,25 +149,15 @@ async def _handle_performance_setup_lod_groups(
 
     script = generate_lod_setup_script(lod_count=lod_count, screen_percentages=pcts)
     script_path = "Assets/Editor/Generated/Performance/VeilBreakers_LODSetup.cs"
-
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps(
-            {"status": "error", "action": "setup_lod_groups", "message": str(exc)}
-        )
-
-    return json.dumps(
-        {
-            "status": "success",
-            "action": "setup_lod_groups",
-            "script_path": abs_path,
+    return await _write_performance_response(
+        "setup_lod_groups",
+        script,
+        script_path,
+        menu_path="VeilBreakers/Performance/Setup LODGroups",
+        response_fields={
             "lod_count": len(pcts),
             "screen_percentages": pcts,
-            "next_steps": STANDARD_NEXT_STEPS,
-            "result_file": "Temp/vb_result.json",
         },
-        indent=2,
     )
 
 
@@ -176,26 +173,16 @@ async def _handle_performance_bake_lightmaps(
         resolution=lightmap_resolution,
     )
     script_path = "Assets/Editor/Generated/Performance/VeilBreakers_LightmapBaker.cs"
-
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps(
-            {"status": "error", "action": "bake_lightmaps", "message": str(exc)}
-        )
-
-    return json.dumps(
-        {
-            "status": "success",
-            "action": "bake_lightmaps",
-            "script_path": abs_path,
+    return await _write_performance_response(
+        "bake_lightmaps",
+        script,
+        script_path,
+        menu_path="VeilBreakers/Performance/Bake Lightmaps",
+        response_fields={
             "quality": lightmap_quality,
             "bounces": bounces,
             "resolution": lightmap_resolution,
-            "next_steps": STANDARD_NEXT_STEPS,
-            "result_file": "Temp/vb_result.json",
         },
-        indent=2,
     )
 
 
@@ -210,25 +197,15 @@ async def _handle_performance_audit_assets(
         allowed_audio_formats=formats,
     )
     script_path = "Assets/Editor/Generated/Performance/VeilBreakers_AssetAudit.cs"
-
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps(
-            {"status": "error", "action": "audit_assets", "message": str(exc)}
-        )
-
-    return json.dumps(
-        {
-            "status": "success",
-            "action": "audit_assets",
-            "script_path": abs_path,
+    return await _write_performance_response(
+        "audit_assets",
+        script,
+        script_path,
+        menu_path="VeilBreakers/Performance/Audit Assets",
+        response_fields={
             "max_texture_size": max_texture_size,
             "allowed_audio_formats": formats,
-            "next_steps": STANDARD_NEXT_STEPS,
-            "result_file": "Temp/vb_result.json",
         },
-        indent=2,
     )
 
 
@@ -245,23 +222,14 @@ async def _handle_performance_automate_build(
         options=build_options,
     )
     script_path = "Assets/Editor/Generated/Performance/VeilBreakers_BuildAutomation.cs"
-
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps(
-            {"status": "error", "action": "automate_build", "message": str(exc)}
-        )
-
-    return json.dumps(
-        {
-            "status": "success",
-            "action": "automate_build",
-            "script_path": abs_path,
+    return await _write_performance_response(
+        "automate_build",
+        script,
+        script_path,
+        menu_path="VeilBreakers/Performance/Build With Report",
+        response_fields={
             "build_target": build_target,
             "build_options": build_options,
-            "next_steps": STANDARD_NEXT_STEPS,
-            "result_file": "Temp/vb_result.json",
+            "scenes": scene_list,
         },
-        indent=2,
     )

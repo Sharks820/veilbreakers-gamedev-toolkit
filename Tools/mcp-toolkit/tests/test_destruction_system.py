@@ -105,13 +105,13 @@ class TestDamageLevels:
 
     def test_displacement_increases_with_severity(self):
         levels = ["pristine", "worn", "damaged", "destroyed"]
-        displacements = [DAMAGE_LEVELS[l]["vertex_displacement"] for l in levels]
+        displacements = [DAMAGE_LEVELS[l]["vertex_displacement"] for l in levels]  # noqa: E741
         for i in range(len(displacements) - 1):
             assert displacements[i] <= displacements[i + 1]
 
     def test_missing_faces_increases_with_severity(self):
         levels = ["pristine", "worn", "damaged", "destroyed"]
-        missing = [DAMAGE_LEVELS[l]["missing_faces_pct"] for l in levels]
+        missing = [DAMAGE_LEVELS[l]["missing_faces_pct"] for l in levels]  # noqa: E741
         for i in range(len(missing) - 1):
             assert missing[i] <= missing[i + 1]
 

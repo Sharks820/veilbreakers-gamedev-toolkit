@@ -7,7 +7,6 @@ Tests cover:
 - TestDataAuthoring (DATA-04): IMGUI EditorWindow for batch SO authoring
 """
 
-import pytest
 
 from veilbreakers_mcp.shared.unity_templates.data_templates import (
     generate_so_definition,

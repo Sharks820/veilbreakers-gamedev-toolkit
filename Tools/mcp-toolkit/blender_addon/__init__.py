@@ -8,8 +8,8 @@ bl_info = {
     "category": "Development",
 }
 
-import bpy
-import logging
+import bpy  # noqa: E402
+import logging  # noqa: E402
 
 _server = None
 _auto_start_timer = None

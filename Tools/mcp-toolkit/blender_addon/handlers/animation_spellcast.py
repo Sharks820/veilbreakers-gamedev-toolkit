@@ -14,7 +14,6 @@ Pure-logic module (NO bpy imports). Returns keyframe data consumed by handlers.
 from __future__ import annotations
 
 import math
-from typing import NamedTuple
 
 from .animation_gaits import Keyframe
 

@@ -1,8 +1,6 @@
 """Tests for light_integration handler."""
 
-import math
 
-import pytest
 
 from blender_addon.handlers.light_integration import (
     LIGHT_PROP_MAP,

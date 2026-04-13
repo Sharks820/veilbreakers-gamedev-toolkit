@@ -4,7 +4,6 @@ Tests that each generator function produces valid C# source containing
 the expected keywords, API calls, and parameter substitutions.
 """
 
-import pytest
 
 from veilbreakers_mcp.shared.unity_templates.settings_templates import (
     generate_physics_settings_script,

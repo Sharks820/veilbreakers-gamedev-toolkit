@@ -32,14 +32,14 @@ _HANDLERS = os.path.join(
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 sys.path.insert(0, os.path.abspath(_HANDLERS))
 
-from blender_addon.handlers.procedural_materials import MATERIAL_LIBRARY
-from blender_addon.handlers.material_tiers import (
+from blender_addon.handlers.procedural_materials import MATERIAL_LIBRARY  # noqa: E402
+from blender_addon.handlers.material_tiers import (  # noqa: E402
     METAL_TIERS,
     WOOD_TIERS,
     LEATHER_TIERS,
     CLOTH_TIERS,
 )
-from blender_addon.handlers.building_quality import (
+from blender_addon.handlers.building_quality import (  # noqa: E402
     generate_stone_wall,
     generate_gothic_window,
     generate_roof,

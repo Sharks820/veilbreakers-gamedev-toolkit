@@ -176,8 +176,8 @@ def _compute_edge_convexity(
     """
     vertices = mesh_data["vertices"]
     faces = mesh_data["faces"]
-    vertex_normals = mesh_data.get("vertex_normals", [])
-    face_normals = mesh_data.get("face_normals", [])
+    _vertex_normals = mesh_data.get("vertex_normals", [])
+    _face_normals = mesh_data.get("face_normals", [])
 
     num_verts = len(vertices)
     # Accumulate angle sum per vertex from face corners

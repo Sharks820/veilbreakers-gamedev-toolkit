@@ -11,7 +11,6 @@ Fulfils character texture quality requirements (Task #52).
 
 from __future__ import annotations
 
-import math
 from typing import Any
 
 # ---------------------------------------------------------------------------
@@ -189,7 +188,7 @@ def compute_udim_tile_assignment(
 
             # Determine X position for arm detection
             centroid_x = centroid[0]
-            xs = [vertices[vi][0] for vi in face]
+            _xs = [vertices[vi][0] for vi in face]
             center_x = sum(v[0] for v in vertices) / max(len(vertices), 1)
 
             assigned = False

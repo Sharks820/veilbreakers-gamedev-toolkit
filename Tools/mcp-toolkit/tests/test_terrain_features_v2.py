@@ -5,7 +5,6 @@ All modules are pure logic (no bpy/bmesh). Tests verify mesh spec structure,
 determinism, edge cases, and feature correctness.
 """
 
-import math
 
 import pytest
 

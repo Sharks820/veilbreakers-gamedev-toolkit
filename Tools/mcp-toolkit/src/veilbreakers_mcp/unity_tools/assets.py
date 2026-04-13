@@ -5,7 +5,7 @@ from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, logger,
-    _write_to_unity, STANDARD_NEXT_STEPS,
+    _write_to_unity, STANDARD_NEXT_STEPS, _write_generated_editor_response,
 )
 
 from veilbreakers_mcp.shared.unity_templates.asset_templates import (
@@ -31,6 +31,39 @@ from veilbreakers_mcp.shared.unity_templates.asset_templates import (
 # ---------------------------------------------------------------------------
 # unity_assets compound tool -- asset pipeline operations
 # ---------------------------------------------------------------------------
+
+_ASSET_MENU_PATHS = {
+    "move": "VeilBreakers/Assets/Move Asset",
+    "rename": "VeilBreakers/Assets/Rename Asset",
+    "delete": "VeilBreakers/Assets/Delete Asset",
+    "duplicate": "VeilBreakers/Assets/Duplicate Asset",
+    "create_folder": "VeilBreakers/Assets/Create Folder",
+    "configure_fbx": "VeilBreakers/Assets/Configure FBX Import",
+    "configure_texture": "VeilBreakers/Assets/Configure Texture Import",
+    "remap_materials": "VeilBreakers/Assets/Remap Materials",
+    "auto_materials": "VeilBreakers/Assets/Auto Generate Materials",
+    "create_preset": "VeilBreakers/Assets/Create Preset",
+    "apply_preset": "VeilBreakers/Assets/Apply Preset",
+    "scan_references": "VeilBreakers/Assets/Scan References",
+    "atomic_import": "VeilBreakers/Assets/Atomic Import",
+}
+
+
+async def _write_asset_script(
+    action: str,
+    script: str,
+    script_path: str,
+    *,
+    response_fields: dict | None = None,
+) -> str:
+    """Write an asset editor script and auto-run it via the Unity bridge."""
+    return await _write_generated_editor_response(
+        action_name=action,
+        script_content=script,
+        rel_path=script_path,
+        menu_path=_ASSET_MENU_PATHS[action],
+        response_fields=response_fields,
+    )
 
 
 @mcp.tool()
@@ -84,6 +117,7 @@ async def unity_assets(
     texture_dir: str = "",
     shader_name: str = "Universal Render Pipeline/Lit",
     material_name: str = "",
+    master_material_path: str = "",
     # Asmdef params
     asmdef_name: str = "",
     root_dir: str = "",
@@ -164,7 +198,7 @@ async def unity_assets(
                 return json.dumps(
                     {"status": "error", "action": action, "message": "fbx_path and texture_dir are required"}
                 )
-            return await _handle_assets_auto_materials(fbx_path, texture_dir, shader_name)
+            return await _handle_assets_auto_materials(fbx_path, texture_dir, shader_name, master_material_path)
         elif action == "create_asmdef":
             if not asmdef_name or not root_dir:
                 return json.dumps(
@@ -198,7 +232,7 @@ async def unity_assets(
                     {"status": "error", "action": action, "message": "texture_paths, material_name, and fbx_path are required"}
                 )
             return await _handle_assets_atomic_import(
-                texture_paths, material_name, fbx_path, shader_name, remappings,
+                texture_paths, material_name, fbx_path, shader_name, master_material_path, remappings,
             )
         else:
             return json.dumps({"status": "error", "message": f"Unknown action: {action}"})
@@ -216,76 +250,40 @@ async def _handle_assets_move(asset_path: str, new_path: str) -> str:
     """Generate and write the asset move script."""
     script = generate_asset_move_script(asset_path, new_path)
     script_path = "Assets/Editor/Generated/Assets/VeilBreakers_MoveAsset.cs"
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "move", "message": str(exc)})
-    return json.dumps({
-        "status": "success", "action": "move", "script_path": abs_path,
-        "next_steps": STANDARD_NEXT_STEPS,
-        "result_file": "Temp/vb_result.json",
-    }, indent=2)
+    return await _write_asset_script("move", script, script_path)
 
 
 async def _handle_assets_rename(asset_path: str, new_name: str) -> str:
     """Generate and write the asset rename script."""
     script = generate_asset_rename_script(asset_path, new_name)
     script_path = "Assets/Editor/Generated/Assets/VeilBreakers_RenameAsset.cs"
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "rename", "message": str(exc)})
-    return json.dumps({
-        "status": "success", "action": "rename", "script_path": abs_path,
-        "next_steps": STANDARD_NEXT_STEPS,
-        "result_file": "Temp/vb_result.json",
-    }, indent=2)
+    return await _write_asset_script("rename", script, script_path)
 
 
 async def _handle_assets_delete(asset_path: str, safe_delete: bool) -> str:
     """Generate and write the asset delete script."""
     script = generate_asset_delete_script(asset_path, safe_delete=safe_delete)
     script_path = "Assets/Editor/Generated/Assets/VeilBreakers_DeleteAsset.cs"
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "delete", "message": str(exc)})
-    return json.dumps({
-        "status": "success", "action": "delete", "script_path": abs_path,
-        "safe_delete": safe_delete,
-        "next_steps": STANDARD_NEXT_STEPS,
-        "result_file": "Temp/vb_result.json",
-    }, indent=2)
+    return await _write_asset_script(
+        "delete",
+        script,
+        script_path,
+        response_fields={"safe_delete": safe_delete},
+    )
 
 
 async def _handle_assets_duplicate(source_path: str, dest_path: str) -> str:
     """Generate and write the asset duplicate script."""
     script = generate_asset_duplicate_script(source_path, dest_path)
     script_path = "Assets/Editor/Generated/Assets/VeilBreakers_DuplicateAsset.cs"
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "duplicate", "message": str(exc)})
-    return json.dumps({
-        "status": "success", "action": "duplicate", "script_path": abs_path,
-        "next_steps": STANDARD_NEXT_STEPS,
-        "result_file": "Temp/vb_result.json",
-    }, indent=2)
+    return await _write_asset_script("duplicate", script, script_path)
 
 
 async def _handle_assets_create_folder(folder_path: str) -> str:
     """Generate and write the create folder script."""
     script = generate_create_folder_script(folder_path)
     script_path = "Assets/Editor/Generated/Assets/VeilBreakers_CreateFolder.cs"
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "create_folder", "message": str(exc)})
-    return json.dumps({
-        "status": "success", "action": "create_folder", "script_path": abs_path,
-        "next_steps": STANDARD_NEXT_STEPS,
-        "result_file": "Temp/vb_result.json",
-    }, indent=2)
+    return await _write_asset_script("create_folder", script, script_path)
 
 
 async def _handle_assets_configure_fbx(
@@ -302,16 +300,12 @@ async def _handle_assets_configure_fbx(
         optimize=optimize, is_readable=is_readable, preset_type=preset_type,
     )
     script_path = "Assets/Editor/Generated/Assets/VeilBreakers_ConfigureFBX.cs"
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "configure_fbx", "message": str(exc)})
-    return json.dumps({
-        "status": "success", "action": "configure_fbx", "script_path": abs_path,
-        "preset_type": preset_type if preset_type else "custom",
-        "next_steps": STANDARD_NEXT_STEPS,
-        "result_file": "Temp/vb_result.json",
-    }, indent=2)
+    return await _write_asset_script(
+        "configure_fbx",
+        script,
+        script_path,
+        response_fields={"preset_type": preset_type if preset_type else "custom"},
+    )
 
 
 async def _handle_assets_configure_texture(
@@ -328,50 +322,35 @@ async def _handle_assets_configure_texture(
         auto_detect_srgb=auto_detect_srgb,
     )
     script_path = "Assets/Editor/Generated/Assets/VeilBreakers_ConfigureTexture.cs"
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "configure_texture", "message": str(exc)})
-    return json.dumps({
-        "status": "success", "action": "configure_texture", "script_path": abs_path,
-        "preset_type": preset_type if preset_type else "custom",
-        "next_steps": STANDARD_NEXT_STEPS,
-        "result_file": "Temp/vb_result.json",
-    }, indent=2)
+    return await _write_asset_script(
+        "configure_texture",
+        script,
+        script_path,
+        response_fields={"preset_type": preset_type if preset_type else "custom"},
+    )
 
 
 async def _handle_assets_remap_materials(fbx_path: str, remappings: dict) -> str:
     """Generate and write the material remap script."""
     script = generate_material_remap_script(fbx_path, remappings)
     script_path = "Assets/Editor/Generated/Assets/VeilBreakers_RemapMaterials.cs"
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "remap_materials", "message": str(exc)})
-    return json.dumps({
-        "status": "success", "action": "remap_materials", "script_path": abs_path,
-        "next_steps": STANDARD_NEXT_STEPS,
-        "result_file": "Temp/vb_result.json",
-    }, indent=2)
+    return await _write_asset_script("remap_materials", script, script_path)
 
 
 async def _handle_assets_auto_materials(
-    fbx_path: str, texture_dir: str, shader_name: str,
+    fbx_path: str, texture_dir: str, shader_name: str, master_material_path: str,
 ) -> str:
     """Generate and write the auto material generation script."""
     script = generate_material_auto_generate_script(
-        fbx_path, texture_dir, shader_name=shader_name,
+        fbx_path, texture_dir, shader_name=shader_name, master_material_path=master_material_path,
     )
     script_path = "Assets/Editor/Generated/Assets/VeilBreakers_AutoMaterials.cs"
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "auto_materials", "message": str(exc)})
-    return json.dumps({
-        "status": "success", "action": "auto_materials", "script_path": abs_path,
-        "next_steps": STANDARD_NEXT_STEPS,
-        "result_file": "Temp/vb_result.json",
-    }, indent=2)
+    return await _write_asset_script(
+        "auto_materials",
+        script,
+        script_path,
+        response_fields={"master_material_path": master_material_path} if master_material_path else None,
+    )
 
 
 async def _handle_assets_create_asmdef(
@@ -408,63 +387,36 @@ async def _handle_assets_create_preset(
         preset_name, source_asset_path, save_dir=save_dir,
     )
     script_path = "Assets/Editor/Generated/Assets/VeilBreakers_CreatePreset.cs"
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "create_preset", "message": str(exc)})
-    return json.dumps({
-        "status": "success", "action": "create_preset", "script_path": abs_path,
-        "next_steps": STANDARD_NEXT_STEPS,
-        "result_file": "Temp/vb_result.json",
-    }, indent=2)
+    return await _write_asset_script("create_preset", script, script_path)
 
 
 async def _handle_assets_apply_preset(preset_path: str, target_path: str) -> str:
     """Generate and write the preset apply script."""
     script = generate_preset_apply_script(preset_path, target_path)
     script_path = "Assets/Editor/Generated/Assets/VeilBreakers_ApplyPreset.cs"
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "apply_preset", "message": str(exc)})
-    return json.dumps({
-        "status": "success", "action": "apply_preset", "script_path": abs_path,
-        "next_steps": STANDARD_NEXT_STEPS,
-        "result_file": "Temp/vb_result.json",
-    }, indent=2)
+    return await _write_asset_script("apply_preset", script, script_path)
 
 
 async def _handle_assets_scan_references(asset_path: str) -> str:
     """Generate and write the reference scan script."""
     script = generate_reference_scan_script(asset_path)
     script_path = "Assets/Editor/Generated/Assets/VeilBreakers_ScanReferences.cs"
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "scan_references", "message": str(exc)})
-    return json.dumps({
-        "status": "success", "action": "scan_references", "script_path": abs_path,
-        "next_steps": STANDARD_NEXT_STEPS,
-        "result_file": "Temp/vb_result.json",
-    }, indent=2)
+    return await _write_asset_script("scan_references", script, script_path)
 
 
 async def _handle_assets_atomic_import(
     texture_paths: list[str], material_name: str, fbx_path: str,
-    shader_name: str, remappings: dict | None,
+    shader_name: str, master_material_path: str, remappings: dict | None,
 ) -> str:
     """Generate and write the atomic import script."""
     script = generate_atomic_import_script(
         texture_paths, material_name, fbx_path,
-        shader_name=shader_name, remappings=remappings,
+        shader_name=shader_name, master_material_path=master_material_path, remappings=remappings,
     )
     script_path = "Assets/Editor/Generated/Assets/VeilBreakers_AtomicImport.cs"
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "atomic_import", "message": str(exc)})
-    return json.dumps({
-        "status": "success", "action": "atomic_import", "script_path": abs_path,
-        "next_steps": STANDARD_NEXT_STEPS,
-        "result_file": "Temp/vb_result.json",
-    }, indent=2)
+    return await _write_asset_script(
+        "atomic_import",
+        script,
+        script_path,
+        response_fields={"master_material_path": master_material_path} if master_material_path else None,
+    )

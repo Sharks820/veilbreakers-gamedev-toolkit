@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import math
 from collections import deque
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, asdict
 from typing import Any
 
 import numpy as np
@@ -878,8 +878,8 @@ class WaterNetwork:
                 if seg.waypoints:
                     mid = seg.waypoints[len(seg.waypoints) // 2]
                     if x_min <= mid[0] <= x_max and y_min <= mid[1] <= y_max:
-                        src_node = self.nodes.get(seg.source_node_id)
-                        tgt_node = self.nodes.get(seg.target_node_id)
+                        __src_node = self.nodes.get(seg.source_node_id)
+                        __tgt_node = self.nodes.get(seg.target_node_id)
                         waterfalls.append({
                             "top": seg.waypoints[0],
                             "bottom": seg.waypoints[-1],

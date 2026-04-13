@@ -186,8 +186,8 @@ def _make_torus(
     for i in range(major_seg):
         theta = 2.0 * math.pi * i / major_seg
         ct, st = math.cos(theta), math.sin(theta)
-        tcx = cx + major_r * ct
-        tcz = cz + major_r * st
+        _tcx = cx + major_r * ct
+        _tcz = cz + major_r * st
         for j in range(minor_seg):
             phi = 2.0 * math.pi * j / minor_seg
             cp, sp = math.cos(phi), math.sin(phi)
@@ -644,7 +644,7 @@ def generate_door(
     - Portcullis: vertical bars with cross-bars (slides vertically)
     - Double door: two panels with independent hinges
     """
-    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    _parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
     empties: dict[str, tuple[float, float, float]] = {}
     vertex_groups: dict[str, list[int]] = {}
     all_uvs: list[tuple[float, float]] = []
@@ -1222,7 +1222,7 @@ def generate_flag(
     The flag mesh is a regular grid of quads for cloth simulation.
     'pinned' vertex group contains vertices along the pole edge.
     """
-    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    _parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
     empties: dict[str, tuple[float, float, float]] = {}
     vertex_groups: dict[str, list[int]] = {}
     all_uvs: list[tuple[float, float]] = []
@@ -2551,7 +2551,7 @@ def generate_windmill(
     tower_f.append(tuple(range(tower_seg - 1, -1, -1)))
 
     parts.append((tower_v, tower_f))
-    tower_vert_count = len(tower_v)
+    _tower_vert_count = len(tower_v)
 
     # --- WINDOW OPENINGS with shutters ---
     window_count = 3
@@ -2896,7 +2896,7 @@ def generate_cage(
         for side_x in [-hd, hd]:
             sv, sf = _make_box(side_x, height / 2, 0,
                                 0.05, height / 2, cell_d / 2)
-            start_v_w = sum(len(p[0]) for p in parts)
+            _start_v_w = sum(len(p[0]) for p in parts)
             parts.append((sv, sf))
 
         # Floor

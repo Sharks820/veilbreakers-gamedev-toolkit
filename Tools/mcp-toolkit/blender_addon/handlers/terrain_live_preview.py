@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from .terrain_dirty_tracking import DirtyTracker, attach_dirty_tracker
-from .terrain_mask_cache import MaskCache, cache_key_for_pass, pass_with_cache
+from .terrain_mask_cache import MaskCache, pass_with_cache
 from .terrain_pipeline import TerrainPassController
 from .terrain_region_exec import execute_region
 from .terrain_semantics import BBox, PassResult, TerrainPipelineState

@@ -10,7 +10,6 @@ Checks:
 """
 
 import ast
-import json
 import os
 import sys
 from pathlib import Path
@@ -606,7 +605,7 @@ for tool_name in expected_unity_tools:
 
     # Check 1: Tool function exists with @mcp.tool()
     if tool_name not in unity_tools:
-        tool_issues.append(f"Tool function not found or missing @mcp.tool() decorator")
+        tool_issues.append("Tool function not found or missing @mcp.tool() decorator")
         issues.extend([f"{tool_name}: {i}" for i in tool_issues])
         failed_tools += 1
         print(f"  FAIL: {tool_name} -- {'; '.join(tool_issues)}")
@@ -702,7 +701,7 @@ for tool_name in expected_blender_tools:
     tool_issues = []
 
     if tool_name not in blender_tools:
-        tool_issues.append(f"Tool function not found or missing @mcp.tool() decorator")
+        tool_issues.append("Tool function not found or missing @mcp.tool() decorator")
         issues.extend([f"{tool_name}: {i}" for i in tool_issues])
         failed_tools += 1
         print(f"  FAIL: {tool_name} -- {'; '.join(tool_issues)}")
@@ -762,7 +761,7 @@ if import_issues:
         print(f"    - {issue}")
         issues.append(f"Import: {issue}")
 else:
-    print(f"  OK: All unity_templates imports verified")
+    print("  OK: All unity_templates imports verified")
 
 
 # ============================================================
@@ -793,7 +792,7 @@ if blender_import_issues:
         print(f"    - {issue}")
         issues.append(f"Import: {issue}")
 else:
-    print(f"  OK: All blender_server imports verified")
+    print("  OK: All blender_server imports verified")
 
 
 # ============================================================

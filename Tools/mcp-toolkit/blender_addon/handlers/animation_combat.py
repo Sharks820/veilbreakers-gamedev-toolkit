@@ -315,7 +315,7 @@ def generate_flee_keyframes(
     turn_end = int(0.25 * frame_count)
 
     for frame in range(frame_count + 1):
-        t = frame / frame_count
+        _t = frame / frame_count
 
         if frame <= turn_end:
             turn_t = frame / turn_end if turn_end > 0 else 1.0
@@ -368,7 +368,7 @@ def generate_target_switch_keyframes(
     pivot_end = int(0.7 * frame_count)
 
     for frame in range(frame_count + 1):
-        t = frame / frame_count
+        _t = frame / frame_count
 
         if frame <= head_end:
             # Phase 1: Head turns first (anticipation)

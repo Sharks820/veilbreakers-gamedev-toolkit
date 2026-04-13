@@ -11,8 +11,7 @@ Tests cover:
 
 import base64
 import io
-import math
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import numpy as np
 from PIL import Image as PILImage

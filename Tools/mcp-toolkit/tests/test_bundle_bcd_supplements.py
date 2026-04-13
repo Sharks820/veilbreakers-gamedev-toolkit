@@ -13,7 +13,6 @@ Covers:
 from __future__ import annotations
 
 import json
-import math
 import time
 from pathlib import Path
 
@@ -23,7 +22,6 @@ import pytest
 from blender_addon.handlers.terrain_materials_v2 import MaterialChannel
 from blender_addon.handlers.terrain_materials_ext import (
     HERO_CLIFF_MIN_FRAC,
-    SECONDARY_CLIFF_MIN_FRAC,
     MaterialChannelExt,
     compute_height_blended_weights,
     validate_cliff_silhouette_area,
@@ -31,7 +29,6 @@ from blender_addon.handlers.terrain_materials_ext import (
 )
 from blender_addon.handlers.terrain_waterfalls_volumetric import (
     FUNCTIONAL_SUFFIXES,
-    WaterfallFunctionalObjects,
     WaterfallVolumetricProfile,
     build_waterfall_functional_object_names,
     enforce_functional_object_naming,
@@ -39,9 +36,6 @@ from blender_addon.handlers.terrain_waterfalls_volumetric import (
     validate_waterfall_volumetric,
 )
 from blender_addon.handlers.terrain_quality_profiles import (
-    AAA_OPEN_WORLD_PROFILE,
-    HERO_SHOT_PROFILE,
-    PREVIEW_PROFILE,
     PRODUCTION_PROFILE,
     TerrainQualityProfile,
     list_quality_profiles,

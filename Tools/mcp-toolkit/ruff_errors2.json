@@ -1,0 +1,619 @@
+﻿[
+  {
+    "cell": null,
+    "code": "F841",
+    "end_location": {
+      "column": 14,
+      "row": 523
+    },
+    "filename": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\mcp-toolkit\\blender_addon\\handlers\\_settlement_grammar.py",
+    "fix": {
+      "applicability": "unsafe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 17,
+            "row": 523
+          },
+          "location": {
+            "column": 13,
+            "row": 523
+          }
+        }
+      ],
+      "message": "Remove assignment to unused variable `L`"
+    },
+    "location": {
+      "column": 13,
+      "row": 523
+    },
+    "message": "Local variable `L` is assigned to but never used",
+    "noqa_row": 523,
+    "url": "https://docs.astral.sh/ruff/rules/unused-variable"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 17,
+      "row": 524
+    },
+    "filename": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\mcp-toolkit\\blender_addon\\handlers\\_settlement_grammar.py",
+    "fix": null,
+    "location": {
+      "column": 16,
+      "row": 524
+    },
+    "message": "Undefined name `l`",
+    "noqa_row": 524,
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 32,
+      "row": 525
+    },
+    "filename": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\mcp-toolkit\\blender_addon\\handlers\\_settlement_grammar.py",
+    "fix": null,
+    "location": {
+      "column": 31,
+      "row": 525
+    },
+    "message": "Undefined name `l`",
+    "noqa_row": 525,
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 29,
+      "row": 316
+    },
+    "filename": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\mcp-toolkit\\blender_addon\\handlers\\encounter_spaces.py",
+    "fix": null,
+    "location": {
+      "column": 28,
+      "row": 316
+    },
+    "message": "Undefined name `l`",
+    "noqa_row": 316,
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 23,
+      "row": 340
+    },
+    "filename": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\mcp-toolkit\\blender_addon\\handlers\\encounter_spaces.py",
+    "fix": null,
+    "location": {
+      "column": 22,
+      "row": 340
+    },
+    "message": "Undefined name `l`",
+    "noqa_row": 340,
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 70,
+      "row": 381
+    },
+    "filename": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\mcp-toolkit\\blender_addon\\handlers\\encounter_spaces.py",
+    "fix": null,
+    "location": {
+      "column": 69,
+      "row": 381
+    },
+    "message": "Undefined name `l`",
+    "noqa_row": 381,
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 56,
+      "row": 451
+    },
+    "filename": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\mcp-toolkit\\blender_addon\\handlers\\encounter_spaces.py",
+    "fix": null,
+    "location": {
+      "column": 55,
+      "row": 451
+    },
+    "message": "Undefined name `l`",
+    "noqa_row": 451,
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F841",
+    "end_location": {
+      "column": 10,
+      "row": 479
+    },
+    "filename": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\mcp-toolkit\\blender_addon\\handlers\\encounter_spaces.py",
+    "fix": {
+      "applicability": "unsafe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 13,
+            "row": 479
+          },
+          "location": {
+            "column": 9,
+            "row": 479
+          }
+        }
+      ],
+      "message": "Remove assignment to unused variable `L`"
+    },
+    "location": {
+      "column": 9,
+      "row": 479
+    },
+    "message": "Local variable `L` is assigned to but never used",
+    "noqa_row": 479,
+    "url": "https://docs.astral.sh/ruff/rules/unused-variable"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 48,
+      "row": 481
+    },
+    "filename": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\mcp-toolkit\\blender_addon\\handlers\\encounter_spaces.py",
+    "fix": null,
+    "location": {
+      "column": 47,
+      "row": 481
+    },
+    "message": "Undefined name `l`",
+    "noqa_row": 481,
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F841",
+    "end_location": {
+      "column": 35,
+      "row": 732
+    },
+    "filename": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\mcp-toolkit\\blender_addon\\handlers\\legendary_weapons.py",
+    "fix": {
+      "applicability": "unsafe",
+      "edits": [
+        {
+          "content": "pass",
+          "end_location": {
+            "column": 59,
+            "row": 732
+          },
+          "location": {
+            "column": 17,
+            "row": 732
+          }
+        }
+      ],
+      "message": "Remove assignment to unused variable `parts_front_center`"
+    },
+    "location": {
+      "column": 17,
+      "row": 732
+    },
+    "message": "Local variable `parts_front_center` is assigned to but never used",
+    "noqa_row": 732,
+    "url": "https://docs.astral.sh/ruff/rules/unused-variable"
+  },
+  {
+    "cell": null,
+    "code": "F841",
+    "end_location": {
+      "column": 19,
+      "row": 806
+    },
+    "filename": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\mcp-toolkit\\blender_addon\\handlers\\mesh_enhance.py",
+    "fix": {
+      "applicability": "unsafe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 807
+          },
+          "location": {
+            "column": 1,
+            "row": 806
+          }
+        }
+      ],
+      "message": "Remove assignment to unused variable `principled`"
+    },
+    "location": {
+      "column": 9,
+      "row": 806
+    },
+    "message": "Local variable `principled` is assigned to but never used",
+    "noqa_row": 806,
+    "url": "https://docs.astral.sh/ruff/rules/unused-variable"
+  },
+  {
+    "cell": null,
+    "code": "F841",
+    "end_location": {
+      "column": 26,
+      "row": 1051
+    },
+    "filename": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\mcp-toolkit\\blender_addon\\handlers\\mesh_enhance.py",
+    "fix": {
+      "applicability": "unsafe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 1052
+          },
+          "location": {
+            "column": 1,
+            "row": 1051
+          }
+        }
+      ],
+      "message": "Remove assignment to unused variable `tri_count`"
+    },
+    "location": {
+      "column": 17,
+      "row": 1051
+    },
+    "message": "Local variable `tri_count` is assigned to but never used",
+    "noqa_row": 1051,
+    "url": "https://docs.astral.sh/ruff/rules/unused-variable"
+  },
+  {
+    "cell": null,
+    "code": "F841",
+    "end_location": {
+      "column": 22,
+      "row": 1082
+    },
+    "filename": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\mcp-toolkit\\blender_addon\\handlers\\procedural_meshes.py",
+    "fix": {
+      "applicability": "unsafe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 25,
+            "row": 1082
+          },
+          "location": {
+            "column": 13,
+            "row": 1082
+          }
+        }
+      ],
+      "message": "Remove assignment to unused variable `rotated_v`"
+    },
+    "location": {
+      "column": 13,
+      "row": 1082
+    },
+    "message": "Local variable `rotated_v` is assigned to but never used",
+    "noqa_row": 1082,
+    "url": "https://docs.astral.sh/ruff/rules/unused-variable"
+  },
+  {
+    "cell": null,
+    "code": "F841",
+    "end_location": {
+      "column": 14,
+      "row": 9204
+    },
+    "filename": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\mcp-toolkit\\blender_addon\\handlers\\procedural_meshes.py",
+    "fix": {
+      "applicability": "unsafe",
+      "edits": [
+        {
+          "content": "pass",
+          "end_location": {
+            "column": 21,
+            "row": 9204
+          },
+          "location": {
+            "column": 9,
+            "row": 9204
+          }
+        }
+      ],
+      "message": "Remove assignment to unused variable `bevel`"
+    },
+    "location": {
+      "column": 9,
+      "row": 9204
+    },
+    "message": "Local variable `bevel` is assigned to but never used",
+    "noqa_row": 9204,
+    "url": "https://docs.astral.sh/ruff/rules/unused-variable"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 17,
+      "row": 726
+    },
+    "filename": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\mcp-toolkit\\blender_addon\\handlers\\terrain_advanced.py",
+    "fix": null,
+    "location": {
+      "column": 16,
+      "row": 726
+    },
+    "message": "Undefined name `l`",
+    "noqa_row": 726,
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 27,
+      "row": 727
+    },
+    "filename": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\mcp-toolkit\\blender_addon\\handlers\\terrain_advanced.py",
+    "fix": null,
+    "location": {
+      "column": 26,
+      "row": 727
+    },
+    "message": "Undefined name `l`",
+    "noqa_row": 727,
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 27,
+      "row": 779
+    },
+    "filename": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\mcp-toolkit\\blender_addon\\handlers\\terrain_advanced.py",
+    "fix": null,
+    "location": {
+      "column": 26,
+      "row": 779
+    },
+    "message": "Undefined name `l`",
+    "noqa_row": 779,
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 49,
+      "row": 779
+    },
+    "filename": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\mcp-toolkit\\blender_addon\\handlers\\terrain_advanced.py",
+    "fix": null,
+    "location": {
+      "column": 48,
+      "row": 779
+    },
+    "message": "Undefined name `l`",
+    "noqa_row": 779,
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 31,
+      "row": 780
+    },
+    "filename": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\mcp-toolkit\\blender_addon\\handlers\\terrain_advanced.py",
+    "fix": null,
+    "location": {
+      "column": 30,
+      "row": 780
+    },
+    "message": "Undefined name `l`",
+    "noqa_row": 780,
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 57,
+      "row": 780
+    },
+    "filename": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\mcp-toolkit\\blender_addon\\handlers\\terrain_advanced.py",
+    "fix": null,
+    "location": {
+      "column": 56,
+      "row": 780
+    },
+    "message": "Undefined name `l`",
+    "noqa_row": 780,
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F841",
+    "end_location": {
+      "column": 20,
+      "row": 1230
+    },
+    "filename": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\mcp-toolkit\\blender_addon\\handlers\\terrain_features.py",
+    "fix": {
+      "applicability": "unsafe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 1231
+          },
+          "location": {
+            "column": 1,
+            "row": 1230
+          }
+        }
+      ],
+      "message": "Remove assignment to unused variable `prev_ring_count`"
+    },
+    "location": {
+      "column": 5,
+      "row": 1230
+    },
+    "message": "Local variable `prev_ring_count` is assigned to but never used",
+    "noqa_row": 1230,
+    "url": "https://docs.astral.sh/ruff/rules/unused-variable"
+  },
+  {
+    "cell": null,
+    "code": "F841",
+    "end_location": {
+      "column": 29,
+      "row": 1142
+    },
+    "filename": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\mcp-toolkit\\blender_addon\\handlers\\texture.py",
+    "fix": {
+      "applicability": "unsafe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 1143
+          },
+          "location": {
+            "column": 1,
+            "row": 1142
+          }
+        }
+      ],
+      "message": "Remove assignment to unused variable `original_link_socket`"
+    },
+    "location": {
+      "column": 9,
+      "row": 1142
+    },
+    "message": "Local variable `original_link_socket` is assigned to but never used",
+    "noqa_row": 1142,
+    "url": "https://docs.astral.sh/ruff/rules/unused-variable"
+  },
+  {
+    "cell": null,
+    "code": "F841",
+    "end_location": {
+      "column": 21,
+      "row": 675
+    },
+    "filename": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\mcp-toolkit\\blender_addon\\handlers\\weapon_quality.py",
+    "fix": {
+      "applicability": "unsafe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 24,
+            "row": 675
+          },
+          "location": {
+            "column": 17,
+            "row": 675
+          }
+        }
+      ],
+      "message": "Remove assignment to unused variable `base`"
+    },
+    "location": {
+      "column": 17,
+      "row": 675
+    },
+    "message": "Local variable `base` is assigned to but never used",
+    "noqa_row": 675,
+    "url": "https://docs.astral.sh/ruff/rules/unused-variable"
+  },
+  {
+    "cell": null,
+    "code": "F841",
+    "end_location": {
+      "column": 30,
+      "row": 1736
+    },
+    "filename": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\mcp-toolkit\\blender_addon\\handlers\\weapon_quality.py",
+    "fix": {
+      "applicability": "unsafe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 1737
+          },
+          "location": {
+            "column": 1,
+            "row": 1736
+          }
+        }
+      ],
+      "message": "Remove assignment to unused variable `detail_features_extra`"
+    },
+    "location": {
+      "column": 9,
+      "row": 1736
+    },
+    "message": "Local variable `detail_features_extra` is assigned to but never used",
+    "noqa_row": 1736,
+    "url": "https://docs.astral.sh/ruff/rules/unused-variable"
+  },
+  {
+    "cell": null,
+    "code": "F841",
+    "end_location": {
+      "column": 33,
+      "row": 1123
+    },
+    "filename": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\mcp-toolkit\\blender_addon\\handlers\\worldbuilding.py",
+    "fix": {
+      "applicability": "unsafe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 1124
+          },
+          "location": {
+            "column": 1,
+            "row": 1123
+          }
+        }
+      ],
+      "message": "Remove assignment to unused variable `opening_for_span`"
+    },
+    "location": {
+      "column": 17,
+      "row": 1123
+    },
+    "message": "Local variable `opening_for_span` is assigned to but never used",
+    "noqa_row": 1123,
+    "url": "https://docs.astral.sh/ruff/rules/unused-variable"
+  }
+]

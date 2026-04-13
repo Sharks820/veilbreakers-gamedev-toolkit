@@ -1085,12 +1085,12 @@ def generate_smart_material_code(
     has_moss = "moss_color" in p and moss_final > 0.01
     mc = p.get("moss_color", (0.06, 0.10, 0.04))
     mt = p.get("moss_threshold", 0.7)
-    mr = p.get("moss_roughness", 0.92)
+    _mr = p.get("moss_roughness", 0.92)
 
     # Rain streak parameters
-    has_rain = "rain_streak_color" in p
-    rsc = p.get("rain_streak_color", (0.08, 0.07, 0.06))
-    rss = p.get("rain_streak_scale", 6.0)
+    _has_rain = "rain_streak_color" in p
+    _rsc = p.get("rain_streak_color", (0.08, 0.07, 0.06))
+    _rss = p.get("rain_streak_scale", 6.0)
 
     code = textwrap.dedent(f"""\
     import bpy
@@ -1595,7 +1595,7 @@ def generate_detail_texture_setup_code(
     ds = max(1.0, min(100.0, float(detail_scale)))
     dstr = max(0.0, min(1.0, float(detail_strength)))
     bd = max(0.5, min(50.0, float(blend_distance)))
-    rbias = dt["roughness_bias"]
+    _rbias = dt["roughness_bias"]
 
     # Choose noise node type
     noise_node_type = {
@@ -1957,7 +1957,7 @@ def generate_seamless_noise_texture(
     octaves: int = 4,
     persistence: float = 0.5,
     seed: int = 0,
-) -> "np.ndarray":
+) -> "np.ndarray":  # noqa: F821
     """Generate a perfectly tileable 2D noise texture using 4D torus mapping.
 
     Maps 2D texture coordinates onto a 4D torus (two pairs of sin/cos) and

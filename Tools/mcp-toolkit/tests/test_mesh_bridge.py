@@ -17,7 +17,6 @@ from blender_addon.handlers._mesh_bridge import (
     VEGETATION_GENERATOR_MAP,
     DUNGEON_PROP_MAP,
     CASTLE_ELEMENT_MAP,
-    PROP_GENERATOR_MAP,
     CATEGORY_MATERIAL_MAP,
     generate_lod_specs,
     resolve_generator,

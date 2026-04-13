@@ -37,8 +37,6 @@ try:
         generate_chimney,
         generate_battlements,
         generate_roof,
-        generate_gothic_window,
-        generate_stone_wall,
         generate_flying_buttress,  # ARCH-005
     )
     _QUALITY_AVAILABLE = True
@@ -390,7 +388,7 @@ def plan_modular_facade(
     pilaster_w = max(0.16, float(rules["pilaster_width"]))
     pilaster_depth = max(0.06, float(rules["pilaster_depth"]))
     modules: list[dict] = []
-    wall_material = STYLE_CONFIGS[style]["walls"]["material"]
+    _wall_material = STYLE_CONFIGS[style]["walls"]["material"]
     foundation_material = STYLE_CONFIGS[style]["foundation"]["material"]
     roof_material = STYLE_CONFIGS[style]["roof"]["material"]
 
@@ -1130,6 +1128,9 @@ def _append_fortress_tower_kit(
     base_z: float,
     radius: float,
     height: float,
+    segments: int = 8,
+    taper: float = 0.9,
+    crown_height: float = 0.8,
     material: str,
     role: str,
 ) -> None:
@@ -1140,7 +1141,7 @@ def _append_fortress_tower_kit(
     crenellated crown with visible shoulders. This intentionally avoids the
     "cylinder with blocks" read.
     """
-    shaft_height = max(2.8, height * 0.78)
+    _shaft_height = max(2.8, height * 0.78)
     crown_height = max(0.8, height * 0.12)
     lower_h = max(0.9, height * 0.22)
     mid_h = max(1.2, height * 0.30)
@@ -1231,7 +1232,7 @@ def generate_castle_spec(
     seed: int = 0,
 ) -> BuildingSpec:
     """Generate a castle spec with curtain walls, corner towers, keep, gatehouse."""
-    rng = random.Random(seed)
+    _rng = random.Random(seed)
     ops: list[dict] = []
     wall_height = 8.0
     wall_thickness = 1.5
@@ -1300,6 +1301,9 @@ def generate_castle_spec(
             base_z=0.0,
             radius=tower_radius,
             height=tower_height,
+            segments=tower_segments,
+            taper=tower_taper,
+            crown_height=tower_crown_height,
             material="stone_fortified",
             role="tower",
         )
@@ -1546,7 +1550,7 @@ def generate_bridge_spec(
     seed: int = 0,
 ) -> BuildingSpec:
     """Generate a bridge spec with arches, road deck, and railings."""
-    rng = random.Random(seed)
+    _rng = random.Random(seed)
     ops: list[dict] = []
 
     arch_span = span / arch_count
@@ -1646,7 +1650,7 @@ def generate_fortress_spec(
     seed: int = 0,
 ) -> BuildingSpec:
     """Generate a fortress spec with outer walls, corner towers, keep, courtyard, gatehouse."""
-    rng = random.Random(seed)
+    _rng = random.Random(seed)
     ops: list[dict] = []
     wall_height = 10.0
     tower_radius = max(4.2, size * 0.08)
@@ -1705,6 +1709,9 @@ def generate_fortress_spec(
             base_z=0.0,
             radius=tower_radius,
             height=tower_height,
+            segments=tower_segments,
+            taper=tower_taper,
+            crown_height=tower_crown_height,
             material="stone_fortified",
             role="tower",
         )
@@ -3874,10 +3881,10 @@ def generate_lighting_layout(
                 tx, ty = t["position"][0], t["position"][1]
                 # Skip if a candle was already placed here by the schema conditionals
                 covered = any(
-                    l["type"] == "candle"
-                    and abs(l["position"][0] - tx) < 0.3
-                    and abs(l["position"][1] - ty) < 0.3
-                    for l in lights
+                    light["type"] == "candle"
+                    and abs(light["position"][0] - tx) < 0.3
+                    and abs(light["position"][1] - ty) < 0.3
+                    for light in lights
                 )
                 if not covered:
                     tsz = t.get("scale", [1.0, 1.0, 0.75])[2]
@@ -3892,10 +3899,10 @@ def generate_lighting_layout(
             for t in furn_lookup[ftype][:1]:
                 tx, ty = t["position"][0], t["position"][1]
                 covered = any(
-                    l["type"] == "fireplace_light"
-                    and abs(l["position"][0] - tx) < 0.5
-                    and abs(l["position"][1] - ty) < 0.5
-                    for l in lights
+                    light["type"] == "fireplace_light"
+                    and abs(light["position"][0] - tx) < 0.5
+                    and abs(light["position"][1] - ty) < 0.5
+                    for light in lights
                 )
                 if not covered:
                     tsz = t.get("scale", [1.0, 1.0, 0.8])[2]
@@ -3906,7 +3913,7 @@ def generate_lighting_layout(
 
     # ---- Geometry-triggered chandelier for large rooms ----
     if max(width, depth) > 8.0:
-        has_chandelier = any(l["type"] == "chandelier_light" for l in lights)
+        has_chandelier = any(light["type"] == "chandelier_light" for light in lights)
         if not has_chandelier:
             props = _LIGHT_TYPE_PROPS["chandelier_light"]
             lights.append(_make_light(
@@ -4664,7 +4671,7 @@ def generate_consistent_interior(
             # Validate walkability — ensure 0.8m clearance to door
             # Door is always on the wall nearest to the building entrance
             door_x = rw / 2
-            door_y = 0.1
+            _door_y = 0.1
             walkable = True
             for item in furniture:
                 ix, iy = item["position"][0], item["position"][1]

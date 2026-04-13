@@ -23,15 +23,11 @@ Coverage:
 
 from __future__ import annotations
 
-import json
 import math
-import os
 import sys
 import tempfile
-import types
 import unittest
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch, call
 
 # ---------------------------------------------------------------------------
 # Path setup — mirror conftest.py so this file works standalone too
@@ -61,7 +57,6 @@ from veilbreakers_mcp.blender_server import (  # noqa: E402
 from blender_addon.handlers.pipeline_state import (  # noqa: E402
     save_pipeline_checkpoint,
     load_pipeline_checkpoint,
-    delete_pipeline_checkpoint,
     validate_checkpoint_compatibility,
     get_remaining_steps,
 )
@@ -839,7 +834,7 @@ class TestPipelineStepOrdering(unittest.TestCase):
         for dungeon types (used by world_generate_multi_floor_dungeon).
         """
         spec = _minimal_map_spec()
-        dungeon_loc = next(l for l in spec["locations"] if l["type"] == "dungeon")
+        dungeon_loc = next(l for l in spec["locations"] if l["type"] == "dungeon")  # noqa: E741
         params = _build_location_generation_params(
             dungeon_loc, map_spec=spec, map_seed=spec["seed"], index=2
         )

@@ -841,6 +841,60 @@ public static class VeilBreakers_RemapMaterials
 
 
 # ---------------------------------------------------------------------------
+# Material Source Helpers
+# ---------------------------------------------------------------------------
+
+
+def _generate_material_source_setup(
+    action: str,
+    material_var_name: str,
+    master_material_path: str,
+    shader_name: str,
+) -> tuple[list[str], str, str]:
+    """Generate C# setup lines for a master-material-aware material source."""
+    safe_action = sanitize_cs_string(action)
+
+    if master_material_path:
+        safe_master = sanitize_cs_string(master_material_path)
+        setup_lines = [
+            f'            string masterMaterialPath = "{safe_master}";',
+            '            Material masterMaterial = AssetDatabase.LoadAssetAtPath<Material>(masterMaterialPath);',
+            '            if (masterMaterial == null)',
+            '            {',
+            f'                string json = "{{\\\"status\\\": \\\"error\\\", \\\"action\\\": \\\"{safe_action}\\\", \\\"message\\\": \\\"Master material not found: {safe_master}\\\", \\\"validation_status\\\": \\\"failed\\\"}}";',
+            '                File.WriteAllText("Temp/vb_result.json", json);',
+            '                return;',
+            '            }',
+        ]
+        creation_line = f'                Material {material_var_name} = new Material(masterMaterial);'
+        metadata_fields = (
+            f'"master_material_path": "{safe_master}", '
+            '"master_material_inherited": true, '
+            '"material_source": "master_material"'
+        )
+        return setup_lines, creation_line, metadata_fields
+
+    safe_shader = sanitize_cs_string(shader_name)
+    setup_lines = [
+        f'            string shaderName = "{safe_shader}";',
+        '            Shader shader = Shader.Find(shaderName);',
+        '            if (shader == null)',
+        '            {',
+        f'                string json = "{{\\\"status\\\": \\\"error\\\", \\\"action\\\": \\\"{safe_action}\\\", \\\"message\\\": \\\"Shader not found: {safe_shader}\\\", \\\"validation_status\\\": \\\"failed\\\"}}";',
+        '                File.WriteAllText("Temp/vb_result.json", json);',
+        '                return;',
+        '            }',
+    ]
+    creation_line = f'                Material {material_var_name} = new Material(shader);'
+    metadata_fields = (
+        '"master_material_path": "", '
+        '"master_material_inherited": false, '
+        '"material_source": "shader"'
+    )
+    return setup_lines, creation_line, metadata_fields
+
+
+# ---------------------------------------------------------------------------
 # 9. Material Auto Generate
 # ---------------------------------------------------------------------------
 
@@ -849,6 +903,7 @@ def generate_material_auto_generate_script(
     fbx_path: str,
     texture_dir: str,
     shader_name: str = "Universal Render Pipeline/Lit",
+    master_material_path: str = "",
 ) -> str:
     """Generate C# editor script to auto-generate PBR materials from textures.
 
@@ -863,13 +918,21 @@ def generate_material_auto_generate_script(
         fbx_path: FBX model asset path.
         texture_dir: Directory containing PBR textures.
         shader_name: Shader to use (default: URP Lit).
+        master_material_path: Optional master material template to clone.
 
     Returns:
         Complete C# source string.
     """
     safe_fbx = sanitize_cs_string(fbx_path)
     safe_tex_dir = sanitize_cs_string(texture_dir)
-    safe_shader = sanitize_cs_string(shader_name)
+    material_setup_lines, material_creation_line, material_metadata_fields = _generate_material_source_setup(
+        "auto_materials",
+        "mat",
+        master_material_path,
+        shader_name,
+    )
+    material_setup_block = "\n".join(material_setup_lines)
+    material_metadata_literal = material_metadata_fields.replace('"', '\\"')
 
     return f'''using UnityEngine;
 using UnityEditor;
@@ -886,7 +949,7 @@ public static class VeilBreakers_AutoMaterials
         {{
             string fbxPath = "{safe_fbx}";
             string textureDir = "{safe_tex_dir}";
-            string shaderName = "{safe_shader}";
+{material_setup_block}
 
             // Collect all textures from the directory
             string[] texGUIDs = AssetDatabase.FindAssets("t:Texture2D", new[] {{ textureDir }});
@@ -918,14 +981,6 @@ public static class VeilBreakers_AutoMaterials
             if (materialSlots.Count == 0)
                 materialSlots.Add(Path.GetFileNameWithoutExtension(fbxPath));
 
-            Shader shader = Shader.Find(shaderName);
-            if (shader == null)
-            {{
-                string json = "{{\\"status\\": \\"error\\", \\"action\\": \\"auto_materials\\", \\"message\\": \\"Shader not found: {safe_shader}\\", \\"validation_status\\": \\"failed\\"}}";
-                File.WriteAllText("Temp/vb_result.json", json);
-                return;
-            }}
-
             // Create material output directory
             string matDir = "Assets/Materials/Generated";
             EnsureFolder(matDir);
@@ -935,7 +990,7 @@ public static class VeilBreakers_AutoMaterials
             foreach (string slotName in materialSlots)
             {{
                 string slotLower = slotName.ToLowerInvariant();
-                Material mat = new Material(shader);
+{material_creation_line}
                 mat.name = slotName;
 
                 // Find textures matching this material slot by prefix
@@ -1017,7 +1072,8 @@ public static class VeilBreakers_AutoMaterials
             AssetDatabase.SaveAssets();
 
             string matList = string.Join(", ", createdMats.Select(p => "\\"" + p.Replace("\\\\", "/") + "\\""));
-            string resultJson = "{{\\"status\\": \\"success\\", \\"action\\": \\"auto_materials\\", \\"material_count\\": " + createdMats.Count + ", \\"material_paths\\": [" + matList + "], \\"fbx_path\\": \\"" + fbxPath.Replace("\\\\", "/") + "\\", \\"validation_status\\": \\"ok\\"}}";
+            string materialMetadataFields = "{material_metadata_literal}";
+            string resultJson = "{{\\"status\\": \\"success\\", \\"action\\": \\"auto_materials\\", \\"material_count\\": " + createdMats.Count + ", \\"material_paths\\": [" + matList + "], \\"fbx_path\\": \\"" + fbxPath.Replace("\\\\", "/") + "\\", " + materialMetadataFields + ", \\"validation_status\\": \\"ok\\"}}";
             File.WriteAllText("Temp/vb_result.json", resultJson);
             Debug.Log("[VeilBreakers] Auto materials generated: " + createdMats.Count + " materials for " + fbxPath);
         }}
@@ -1393,6 +1449,7 @@ def generate_atomic_import_script(
     material_name: str,
     fbx_path: str,
     shader_name: str = "Universal Render Pipeline/Lit",
+    master_material_path: str = "",
     remappings: dict[str, str] | None = None,
 ) -> str:
     """Generate C# editor script for an atomic import sequence.
@@ -1410,6 +1467,7 @@ def generate_atomic_import_script(
         material_name: Name for the generated material.
         fbx_path: FBX model asset path.
         shader_name: Shader name for the material.
+        master_material_path: Optional master material template to clone.
         remappings: Optional dict mapping FBX material names to the generated material.
 
     Returns:
@@ -1417,7 +1475,14 @@ def generate_atomic_import_script(
     """
     safe_fbx = sanitize_cs_string(fbx_path)
     safe_mat_name = sanitize_cs_string(material_name)
-    safe_shader = sanitize_cs_string(shader_name)
+    material_setup_lines, material_creation_line, material_metadata_fields = _generate_material_source_setup(
+        "atomic_import",
+        "createdMat",
+        master_material_path,
+        shader_name,
+    )
+    material_setup_block = "\n".join(material_setup_lines)
+    material_metadata_literal = material_metadata_fields.replace('"', '\\"')
 
     # Build texture path array
     tex_entries = ", ".join(
@@ -1453,7 +1518,7 @@ public static class VeilBreakers_AtomicImport
             string[] texturePaths = new string[] {{ {tex_entries} }};
             string materialName = "{safe_mat_name}";
             string fbxPath = "{safe_fbx}";
-            string shaderName = "{safe_shader}";
+{material_setup_block}
 
             // ================================================================
             // Step 1: Configure TextureImporter settings
@@ -1484,18 +1549,7 @@ public static class VeilBreakers_AtomicImport
             // ================================================================
             // Step 2: Create Material(shader) with textures
             // ================================================================
-            Shader shader = Shader.Find(shaderName);
-            if (shader == null)
-            {{
-                string errJson = "{{\\"status\\": \\"error\\", \\"action\\": \\"atomic_import\\", "
-                    + "\\"message\\": \\"Shader not found: " + shaderName + "\\", "
-                    + "\\"changed_assets\\": [" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"") + "\\"")) + "], "
-                    + "\\"validation_status\\": \\"error\\"}}";
-                File.WriteAllText("Temp/vb_result.json", errJson);
-                Debug.LogError("[VeilBreakers] Shader not found: " + shaderName);
-                return;
-            }}
-            Material createdMat = new Material(shader);
+{material_creation_line}
             Undo.RegisterCreatedObjectUndo(createdMat, "VeilBreakers Atomic Material");
 
             // Assign textures by naming convention
@@ -1566,7 +1620,8 @@ public static class VeilBreakers_AtomicImport
             assets += "\\"" + changedAssets[i].Replace("\\\\", "/") + "\\"";
         }}
 
-        string resultJson = "{{\\"status\\": \\"success\\", \\"action\\": \\"atomic_import\\", \\"material_name\\": \\"{safe_mat_name}\\", \\"fbx_path\\": \\"" + "{safe_fbx}".Replace("\\\\", "/") + "\\", \\"changed_assets\\": [" + assets + "], \\"validation_status\\": \\"ok\\"}}";
+        string materialMetadataFields = "{material_metadata_literal}";
+        string resultJson = "{{\\"status\\": \\"success\\", \\"action\\": \\"atomic_import\\", \\"material_name\\": \\"{safe_mat_name}\\", \\"fbx_path\\": \\"" + "{safe_fbx}".Replace("\\\\", "/") + "\\", " + materialMetadataFields + ", \\"changed_assets\\": [" + assets + "], \\"validation_status\\": \\"ok\\"}}";
         File.WriteAllText("Temp/vb_result.json", resultJson);
         Debug.Log("[VeilBreakers] Atomic import complete for: {safe_fbx}");
     }}
@@ -1600,6 +1655,7 @@ def generate_blender_to_unity_bridge_script(
     asset_type: str = "prop",
     texture_dir: str = "",
     shader_name: str = "Universal Render Pipeline/Lit",
+    master_material_path: str = "",
     create_prefab: bool = True,
     setup_lod: bool = True,
     validate_budget: bool = True,
@@ -1623,6 +1679,7 @@ def generate_blender_to_unity_bridge_script(
         asset_type: hero, monster, weapon, prop, or environment (selects presets).
         texture_dir: Directory with PBR textures. Empty = auto-detect (same folder as FBX).
         shader_name: Shader name for materials (default URP Lit).
+        master_material_path: Optional master material template to clone.
         create_prefab: Whether to create a prefab from the imported model.
         setup_lod: Whether to set up LODGroup from *_LOD meshes.
         validate_budget: Whether to run poly budget validation.
@@ -1634,6 +1691,27 @@ def generate_blender_to_unity_bridge_script(
     safe_shader = sanitize_cs_string(shader_name)
     safe_tex_dir = sanitize_cs_string(texture_dir)
     safe_asset_type = sanitize_cs_identifier(asset_type)
+    if master_material_path:
+        bridge_setup_lines, bridge_creation_line, _bridge_metadata_fields = _generate_material_source_setup(
+            "blender_to_unity_bridge",
+            "mat",
+            master_material_path,
+            shader_name,
+        )
+        bridge_material_setup_block = "\n".join(bridge_setup_lines)
+        bridge_material_source_block = ""
+        bridge_material_creation_line = bridge_creation_line
+        bridge_master_material_line = f'            report.masterMaterialPath = "{sanitize_cs_string(master_material_path)}";'
+    else:
+        bridge_material_setup_block = f'            string shaderName = "{safe_shader}";'
+        bridge_material_source_block = '''                    Shader shader = Shader.Find(shaderName);
+                    if (shader == null)
+                    {{
+                        report.AddWarning("Shader not found: " + shaderName + ". Using Standard shader.");
+                        shader = Shader.Find("Standard");
+                    }}'''
+        bridge_material_creation_line = '                        Material mat = new Material(shader);'
+        bridge_master_material_line = ""
 
     # Resolve preset values
     preset = _FBX_PRESETS.get(asset_type, _FBX_PRESETS["prop"])
@@ -1666,8 +1744,8 @@ public static class VeilBreakers_BlenderToUnityBridge
         try
         {{
             string fbxPath = "{safe_fbx}";
-            string shaderName = "{safe_shader}";
             string textureDir = "{safe_tex_dir}";
+{bridge_material_setup_block}
             bool doPrefab = {create_prefab_str};
             bool doLOD = {setup_lod_str};
             bool doValidate = {validate_budget_str};
@@ -1675,6 +1753,7 @@ public static class VeilBreakers_BlenderToUnityBridge
             float[] lodScreenPcts = new float[] {{ {lod_pcts} }};
 
             report.fbxPath = fbxPath;
+{bridge_master_material_line}
 
             // Auto-detect texture directory if not specified
             if (string.IsNullOrEmpty(textureDir))
@@ -1846,12 +1925,7 @@ public static class VeilBreakers_BlenderToUnityBridge
                     if (materialSlots.Count == 0)
                         materialSlots.Add(Path.GetFileNameWithoutExtension(fbxPath));
 
-                    Shader shader = Shader.Find(shaderName);
-                    if (shader == null)
-                    {{
-                        report.AddWarning("Shader not found: " + shaderName + ". Using Standard shader.");
-                        shader = Shader.Find("Standard");
-                    }}
+{bridge_material_source_block}
 
                     // Create material output directory
                     string assetName = Path.GetFileNameWithoutExtension(fbxPath);
@@ -1861,7 +1935,7 @@ public static class VeilBreakers_BlenderToUnityBridge
                     foreach (string slotName in materialSlots)
                     {{
                         string slotLower = slotName.ToLowerInvariant();
-                        Material mat = new Material(shader);
+{bridge_material_creation_line}
                         mat.name = slotName;
 
                         // Find and assign PBR textures
@@ -2167,6 +2241,7 @@ public static class VeilBreakers_BlenderToUnityBridge
         public string status = "pending";
         public string fbxPath = "";
         public string assetType = "";
+        public string masterMaterialPath = "";
         public string errorMessage = "";
         public string prefabPath = "";
 
@@ -2223,6 +2298,8 @@ public static class VeilBreakers_BlenderToUnityBridge
             sb.Append("\\"action\\": \\"blender_to_unity_bridge\\", ");
             sb.Append("\\"fbx_path\\": \\"" + Escape(fbxPath) + "\\", ");
             sb.Append("\\"asset_type\\": \\"" + Escape(assetType) + "\\", ");
+            if (!string.IsNullOrEmpty(masterMaterialPath))
+                sb.Append("\\"master_material_path\\": \\"" + Escape(masterMaterialPath) + "\\", ");
 
             if (!string.IsNullOrEmpty(errorMessage))
                 sb.Append("\\"error\\": \\"" + Escape(errorMessage) + "\\", ");

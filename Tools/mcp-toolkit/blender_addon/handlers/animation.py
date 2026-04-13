@@ -26,7 +26,6 @@ import bpy
 from .animation_gaits import (
     ATTACK_CONFIGS,
     FLY_HOVER_CONFIG,
-    IDLE_CONFIG,
     Keyframe,
     generate_attack_keyframes,
     generate_custom_keyframes,

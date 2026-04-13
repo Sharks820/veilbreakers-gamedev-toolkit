@@ -182,6 +182,80 @@ async def test_post_process_returns_partial_result_when_extraction_fails(
 
 
 # ---------------------------------------------------------------------------
+# Test 3b: non-fatal step failures surface explicit warnings/errors
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_post_process_surfaces_delight_failure(tmp_path: Path) -> None:
+    """De-light failures should be reported instead of silently swallowed."""
+    glb_path = str(tmp_path / "model.glb")
+    (tmp_path / "model.glb").write_bytes(b"fake")
+
+    mock_files = set(_MOCK_CHANNELS_FULL.values())
+
+    with (
+        mock.patch(
+            "veilbreakers_mcp.shared.tripo_post_processor.extract_glb_textures",
+            return_value=_MOCK_CHANNELS_FULL,
+        ),
+        mock.patch(
+            "veilbreakers_mcp.shared.tripo_post_processor.delight_albedo",
+            side_effect=RuntimeError("delight exploded"),
+        ),
+        mock.patch(
+            "veilbreakers_mcp.shared.tripo_post_processor.validate_palette",
+            return_value=_PALETTE_PASSED,
+        ),
+        mock.patch(
+            "veilbreakers_mcp.shared.tripo_post_processor.validate_roughness_map",
+            return_value=_ROUGHNESS_PASSED,
+        ),
+        mock.patch("os.path.isfile", side_effect=_make_mock_file_exists(mock_files)),
+    ):
+        result = await post_process_tripo_model(glb_path, str(tmp_path))
+
+    assert result["delight_error"] == "delight exploded"
+    assert any("delight_failed" in warning for warning in result["warnings"])
+    assert result["palette_validation"]["passed"] is True
+
+
+@pytest.mark.asyncio
+async def test_post_process_surfaces_validation_failures(tmp_path: Path) -> None:
+    """Palette and roughness validator exceptions should be visible in output."""
+    glb_path = str(tmp_path / "model.glb")
+    (tmp_path / "model.glb").write_bytes(b"fake")
+
+    mock_files = set(_MOCK_CHANNELS_FULL.values())
+
+    with (
+        mock.patch(
+            "veilbreakers_mcp.shared.tripo_post_processor.extract_glb_textures",
+            return_value=_MOCK_CHANNELS_FULL,
+        ),
+        mock.patch(
+            "veilbreakers_mcp.shared.tripo_post_processor.delight_albedo",
+            return_value=_DELIGHT_NOT_APPLIED,
+        ),
+        mock.patch(
+            "veilbreakers_mcp.shared.tripo_post_processor.validate_palette",
+            side_effect=RuntimeError("palette blew up"),
+        ),
+        mock.patch(
+            "veilbreakers_mcp.shared.tripo_post_processor.validate_roughness_map",
+            side_effect=RuntimeError("roughness blew up"),
+        ),
+        mock.patch("os.path.isfile", side_effect=_make_mock_file_exists(mock_files)),
+    ):
+        result = await post_process_tripo_model(glb_path, str(tmp_path))
+
+    assert result["palette_validation_error"] == "palette blew up"
+    assert result["roughness_validation_error"] == "roughness blew up"
+    assert any("palette_validation_failed" in warning for warning in result["warnings"])
+    assert any("roughness_validation_failed" in warning for warning in result["warnings"])
+    assert result["channel_score"] == 75
+
+
+# ---------------------------------------------------------------------------
 # Test 4: score_variants orders by channel_score
 # ---------------------------------------------------------------------------
 
@@ -293,8 +367,7 @@ async def test_palette_deviation_metrics_in_output(tmp_path: Path) -> None:
 
 def _make_mock_runner(tmp_path, mock_post_process_fn, mock_full_pipeline_fn):
     """Set up all patches and call generate_and_process with mocked dependencies."""
-    from unittest.mock import AsyncMock, MagicMock, patch
-    from veilbreakers_mcp.shared.pipeline_runner import PipelineRunner
+    from unittest.mock import MagicMock
 
     runner = MagicMock()
     runner.settings = MagicMock()

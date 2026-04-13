@@ -10,7 +10,6 @@ Tests:
 """
 
 import math
-import pytest
 
 
 # ---------------------------------------------------------------------------
@@ -336,7 +335,7 @@ class TestGenerateClutterLayout:
         ]
         items = generate_clutter_layout("tavern", 5.0, 5.0, furniture, seed=30, density=1.0)
         # At least some items should be above floor level (z > 0.1)
-        elevated = [i for i in items if i["position"][2] > 0.1]
+        [i for i in items if i["position"][2] > 0.1]
         # With a 2x2 table in a 5x5 room, we expect some to land on the table
         # (not guaranteed with sampling, so just check z values are consistent)
         for item in items:

@@ -641,7 +641,7 @@ def generate_boolean_preset_code(
         tree.interface.new_socket('Geometry', in_out='INPUT', socket_type='NodeSocketGeometry')
         tree.interface.new_socket('Geometry', in_out='OUTPUT', socket_type='NodeSocketGeometry')
 
-    """) + cutter_code + "\n# Link chain\n" + links_code + "\n\n" + textwrap.dedent(f"""\
+    """) + cutter_code + "\n# Link chain\n" + links_code + "\n\n" + textwrap.dedent("""\
         mod = base.modifiers.new(name="GN_Boolean", type='NODES')
         mod.node_group = tree
     """)
@@ -1299,7 +1299,7 @@ def handle_face_scatter(params: dict) -> dict:
     density = params.get("density", 1.0)
     scale_range = tuple(params.get("scale_range", [0.8, 1.2]))
     rotation_random = params.get("rotation_random", 0.0)
-    align_to_normal = params.get("align_to_normal", True)
+    _align_to_normal = params.get("align_to_normal", True)
     seed = params.get("seed", 42)
     use_gn = params.get("use_geometry_nodes", True)
 

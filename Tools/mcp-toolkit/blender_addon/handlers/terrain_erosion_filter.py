@@ -26,7 +26,6 @@ Public API:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
@@ -160,8 +159,8 @@ def phacelle_noise(
     iz0 = np.floor(cz).astype(np.int64)
 
     # Fractional position within the cell
-    fx = cx - ix0.astype(np.float64)
-    fz = cz - iz0.astype(np.float64)
+    _fx = cx - ix0.astype(np.float64)
+    _fz = cz - iz0.astype(np.float64)
 
     # Accumulators
     total_cos = np.zeros(shape, dtype=np.float64)

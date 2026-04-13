@@ -4,7 +4,6 @@ Tests that each generator function produces valid C# source containing
 the expected keywords, Unity API calls, and parameter substitutions.
 """
 
-import pytest
 
 from veilbreakers_mcp.shared.unity_templates.audio_templates import (
     generate_footstep_manager_script,

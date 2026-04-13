@@ -11,7 +11,6 @@ Validates:
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from blender_addon.handlers.terrain_advanced import (
     flatten_terrain_zone,

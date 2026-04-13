@@ -6,7 +6,6 @@ All pure-logic -- no Blender required.
 import pytest
 
 from blender_addon.handlers.animation_blob import (
-    BLOB_PSEUDOPOD_BONES,
     BLOB_SPINE_BONES,
     VALID_BLOB_TYPES,
     generate_blob_attack_keyframes,

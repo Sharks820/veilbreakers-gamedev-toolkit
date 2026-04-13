@@ -10,7 +10,6 @@ Validates that every generator in categories 11-14 returns valid mesh data:
 
 from __future__ import annotations
 
-import sys
 import importlib.util
 from pathlib import Path
 

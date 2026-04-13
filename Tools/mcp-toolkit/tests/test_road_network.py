@@ -1,8 +1,6 @@
 """Tests for road_network handler."""
 
-import math
 
-import pytest
 
 from blender_addon.handlers.road_network import (
     compute_mst_edges,
@@ -15,8 +13,10 @@ from blender_addon.handlers.road_network import (
     _segments_near,
     _classify_intersection,
     _detect_bridges,
+    _world_to_heightmap_indices,
     _road_segment_mesh_spec,
     _road_segment_mesh_spec_with_curbs,
+    _bridge_mesh_specs,
     ROAD_TYPES,
 )
 
@@ -182,6 +182,36 @@ class TestBridges:
         assert len(bridges) > 0
         assert bridges[0]["road_type"] == "main"
         assert bridges[0]["width"] == 4.0
+        assert bridges[0]["deck_start"][2] > 0.0
+        assert bridges[0]["deck_end"][2] > 0.0
+
+    def test_bridge_sampling_uses_clamped_world_mapping(self):
+        heightmap = [
+            [5.0, 5.0, 5.0, 5.0],
+            [5.0, 5.0, 5.0, 5.0],
+            [-5.0, -5.0, -5.0, -5.0],
+            [5.0, 5.0, 5.0, 5.0],
+        ]
+        segments = [((0.0, 3.2, 1.0), (4.0, 3.2, 1.0), 4.0, "main")]
+        bridges = _detect_bridges(
+            segments,
+            water_level=0.0,
+            heightmap=heightmap,
+            terrain_bounds=(0.0, 0.0, 4.0, 4.0),
+        )
+        assert len(bridges) == 0
+
+
+class TestHeightmapSampling:
+    def test_world_to_heightmap_indices_clamps_without_wrapping(self):
+        row, col = _world_to_heightmap_indices(
+            4,
+            4,
+            99.0,
+            99.0,
+            terrain_bounds=(0.0, 0.0, 4.0, 4.0),
+        )
+        assert (row, col) == (3, 3)
 
 
 # ---------------------------------------------------------------------------
@@ -227,6 +257,29 @@ class TestRoadMeshSpec:
         assert len(curb["vertices"]) > len(flat["vertices"])
 
 
+class TestBridgeMeshSpec:
+    def test_bridge_mesh_specs_generated_for_crossings(self):
+        bridges = _detect_bridges(
+            [((0, 0, -2), (10, 0, -2), 4.0, "main")],
+            water_level=0.0,
+        )
+        specs = _bridge_mesh_specs(bridges, water_level=0.0, seed=42)
+        assert len(specs) == 1
+        assert specs[0]["type"] == "terrain_bridge"
+        assert specs[0]["road_type"] == "main"
+        assert len(specs[0]["vertices"]) > 0
+        assert bridges[0]["bridge_id"] == specs[0]["bridge_id"]
+        assert bridges[0]["style"] == "stone_arch"
+
+    def test_trail_bridge_prefers_rope_style(self):
+        bridges = _detect_bridges(
+            [((0, 0, -1), (25, 0, -1), 1.0, "trail")],
+            water_level=0.0,
+        )
+        specs = _bridge_mesh_specs(bridges, water_level=0.0, seed=7)
+        assert specs[0]["style"] == "rope"
+
+
 # ---------------------------------------------------------------------------
 # Main API: compute_road_network
 # ---------------------------------------------------------------------------
@@ -254,7 +307,7 @@ class TestComputeRoadNetwork:
         waypoints = [(0, 0, 0), (10, 0, 0), (5, 10, 0)]
         result = compute_road_network(waypoints)
         for key in ("segments", "intersections", "bridges", "switchbacks",
-                     "mesh_specs", "waypoint_count", "total_length"):
+                     "mesh_specs", "bridge_mesh_specs", "waypoint_count", "total_length"):
             assert key in result
 
     def test_mesh_specs_match_segments(self):
@@ -291,3 +344,28 @@ class TestComputeRoadNetwork:
         r2 = compute_road_network(waypoints, seed=42)
         assert r1["segments"] == r2["segments"]
         assert r1["switchbacks"] == r2["switchbacks"]
+
+    def test_terrain_bounds_forward_to_bridge_detection(self):
+        waypoints = [(0.0, 0.0, 1.0), (4.0, 0.0, 1.0)]
+        heightmap = [
+            [5.0, 5.0, 5.0, 5.0],
+            [5.0, 5.0, 5.0, 5.0],
+            [5.0, 5.0, 5.0, 5.0],
+            [5.0, 5.0, 5.0, 5.0],
+        ]
+        result = compute_road_network(
+            waypoints,
+            terrain_heightmap=heightmap,
+            terrain_bounds=(0.0, 0.0, 4.0, 4.0),
+            water_level=0.0,
+            seed=42,
+        )
+        assert result["bridges"] == []
+
+    def test_water_crossing_emits_bridge_mesh_specs(self):
+        waypoints = [(0.0, 0.0, -5.0), (20.0, 0.0, -5.0)]
+        result = compute_road_network(waypoints, water_level=0.0, seed=42)
+        assert len(result["bridges"]) > 0
+        assert len(result["bridge_mesh_specs"]) == len(result["bridges"])
+        assert result["bridge_mesh_specs"][0]["type"] == "terrain_bridge"
+        assert result["bridges"][0]["deck_start"][2] > 0.0

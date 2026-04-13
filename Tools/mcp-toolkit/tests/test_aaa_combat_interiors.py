@@ -282,7 +282,7 @@ class TestMobEncounterZone(unittest.TestCase):
     def test_mob_zone_spawn_point_naming(self):
         """Spawn point names must follow 'spawn_mob_{zone_id}_{n}' pattern."""
         zone = self._zone(seed=5)
-        zone_id = zone.get("zone_id", "")
+        zone.get("zone_id", "")
         for sp in zone.get("spawn_points", []):
             self.assertIn("spawn_mob", str(sp), f"Spawn point '{sp}' missing 'spawn_mob' prefix")
 

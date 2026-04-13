@@ -1,7 +1,6 @@
 """Test performance report doesn't fake 'ok' -- Addendum 3 3.B.4 compliance."""
 from __future__ import annotations
 
-import pytest
 
 from blender_addon.handlers.terrain_performance_report import (
     TerrainPerformanceReport,

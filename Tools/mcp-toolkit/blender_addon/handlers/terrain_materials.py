@@ -32,7 +32,6 @@ except ImportError:
     bpy = None  # type: ignore[assignment]
 
 from .procedural_materials import (
-    GENERATORS,
     MATERIAL_LIBRARY,
     _add_node,
     _get_bsdf_input,
@@ -896,7 +895,7 @@ BIOME_PALETTES: dict[str, dict[str, list[str]]] = {
         "ground": ["dark_leaf_litter", "exposed_roots", "forest_soil"],
         "slopes": ["mossy_rock", "fern_patches"],
         "cliffs": ["gray_stone_vine"],
-        "water_edges": ["mud", "reeds"],
+        "water_edges": ["black_mud", "reeds"],
     },
     "corrupted_swamp": {
         "ground": ["black_mud", "toxic_pool"],
@@ -924,7 +923,7 @@ BIOME_PALETTES: dict[str, dict[str, list[str]]] = {
     },
     "ruined_fortress": {
         "ground": ["broken_cobblestone", "rubble_dirt"],
-        "slopes": ["crumbling_wall_foundation", "moss"],
+        "slopes": ["crumbling_wall_foundation", "mossy_rock"],
         "cliffs": ["damaged_stone"],
         "water_edges": ["stagnant_water"],
     },

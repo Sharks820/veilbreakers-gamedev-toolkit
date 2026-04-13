@@ -37,7 +37,6 @@ from .procedural_meshes import (
     generate_map_scroll_mesh,
     generate_holy_symbol_mesh,
     # Vegetation
-    generate_tree_mesh,
     generate_rock_mesh,
     generate_mushroom_mesh,
     generate_root_mesh,

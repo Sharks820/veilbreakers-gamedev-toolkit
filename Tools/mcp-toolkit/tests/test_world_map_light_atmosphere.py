@@ -726,7 +726,7 @@ class TestBiomeAtmosphereRules:
     """Test biome-to-atmosphere mapping."""
 
     def test_all_biomes_have_rules(self):
-        from blender_addon.handlers.atmospheric_volumes import BIOME_ATMOSPHERE_RULES, ATMOSPHERIC_VOLUMES
+        from blender_addon.handlers.atmospheric_volumes import BIOME_ATMOSPHERE_RULES
 
         # All biomes from world_map should have atmosphere rules
         assert len(BIOME_ATMOSPHERE_RULES) == 10

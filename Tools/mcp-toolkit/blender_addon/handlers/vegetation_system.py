@@ -717,7 +717,7 @@ def scatter_biome_vegetation(
     seed = params.get("seed", 42)
     max_instances = params.get("max_instances", 5000)
     season = params.get("season")
-    bake_wind_colors = params.get("bake_wind_colors", False)
+    _bake_wind_colors = params.get("bake_wind_colors", False)
     water_level = params.get("water_level", _DEFAULT_WATER_LEVEL)
     # PROP-004: exclusion zones (rectangular no-plant areas e.g. roads, buildings)
     exclusion_zones: list[dict] = params.get("exclusion_zones") or []

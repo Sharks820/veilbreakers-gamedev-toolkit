@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import socket
 import struct
 import tempfile
 import threading
@@ -19,14 +18,14 @@ from unittest.mock import MagicMock, patch
 
 _TMP_SHOT_PNG = str(Path(tempfile.gettempdir()) / "shot.png")
 
-import pytest
+import pytest  # noqa: E402
 
-from veilbreakers_mcp.shared.models import (
+from veilbreakers_mcp.shared.models import (  # noqa: E402
     UnityCommand,
     UnityError,
     UnityResponse,
 )
-from veilbreakers_mcp.shared.unity_client import (
+from veilbreakers_mcp.shared.unity_client import (  # noqa: E402
     MAX_MESSAGE_SIZE,
     UnityCommandError,
     UnityConnection,

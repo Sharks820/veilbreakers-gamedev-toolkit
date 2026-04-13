@@ -7,7 +7,6 @@ Blender-dependent tests are marked with @pytest.mark.blender and skipped by defa
 import math
 import os
 import types
-import pytest
 
 
 # ---------------------------------------------------------------------------

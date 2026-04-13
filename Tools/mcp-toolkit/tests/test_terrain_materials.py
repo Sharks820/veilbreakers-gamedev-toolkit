@@ -565,13 +565,13 @@ class TestBiomeTransition:
                 faces.append((idx, idx + 1, idx + 1 + cols, idx + cols))
                 normals.append((0.0, 0.0, 1.0))
 
-        result_no_noise = compute_biome_transition(
+        compute_biome_transition(
             verts, normals, faces,
             "thornwood_forest", "desert",
             transition_width=4.0, boundary_position=0.0,
             noise_amplitude=0.0, noise_scale=0.05,
         )
-        result_with_noise = compute_biome_transition(
+        compute_biome_transition(
             verts, normals, faces,
             "thornwood_forest", "desert",
             transition_width=4.0, boundary_position=0.0,
@@ -754,7 +754,7 @@ class TestTerrainMaterialDedup:
 
     def test_biome_material_dedup(self):
         """Calling create_biome_terrain_material twice returns same material (no .001 suffix)."""
-        from unittest.mock import MagicMock, patch, PropertyMock
+        from unittest.mock import MagicMock, patch
 
         mock_bpy = MagicMock()
 
@@ -786,9 +786,9 @@ class TestTerrainMaterialDedup:
         with patch("blender_addon.handlers.terrain_materials.bpy", mock_bpy):
             from blender_addon.handlers.terrain_materials import create_biome_terrain_material
             # First call -- creates new
-            mat1 = create_biome_terrain_material("thornwood_forest")
+            create_biome_terrain_material("thornwood_forest")
             # Second call -- should reuse existing
-            mat2 = create_biome_terrain_material("thornwood_forest")
+            create_biome_terrain_material("thornwood_forest")
 
         # bpy.data.materials.new should only be called once
         assert call_count[0] == 1, (

@@ -9,7 +9,6 @@ Pure Python. No bpy.
 from __future__ import annotations
 
 import importlib
-import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path

@@ -10,11 +10,10 @@ import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 
 _TMP_UNITY_PROJECT = str(Path(tempfile.gettempdir()) / "UnityProject")
 
-from veilbreakers_mcp.shared.pipeline_runner import PipelineRunner
+from veilbreakers_mcp.shared.pipeline_runner import PipelineRunner  # noqa: E402
 
 
 # ---------------------------------------------------------------------------

@@ -1139,12 +1139,12 @@ def _bake_metallic_via_emission(obj: Any, image: Any, samples: int) -> None:
 
         # Find output node and store original connection
         output_node = None
-        original_link_socket = None
+        _original_link_socket = None
         for node in tree.nodes:
             if node.type == "OUTPUT_MATERIAL":
                 output_node = node
                 if output_node.inputs["Surface"].links:
-                    original_link_socket = output_node.inputs["Surface"].links[0].from_socket
+                    _original_link_socket = output_node.inputs["Surface"].links[0].from_socket
                 break
 
         if output_node is not None:
@@ -1463,7 +1463,7 @@ def handle_bake_id_map(params: dict) -> dict:
 
                 # Store original emission color
                 emit_input = _get_bsdf_input(bsdf, "emission")
-                original_color = list(emit_input.default_value)
+                _original_color = list(emit_input.default_value)
                 original_emissions.append((bsdf, emit_input, tuple(emit_input.default_value)))
 
                 # Set emission to ID color (temporarily)

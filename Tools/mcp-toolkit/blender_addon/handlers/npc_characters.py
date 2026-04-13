@@ -24,9 +24,6 @@ from .mesh_smoothing import smooth_assembled_mesh, add_organic_noise
 from .facial_topology import (
     generate_hand_mesh,
     generate_foot_mesh,
-    generate_claw_hand_mesh,
-    generate_hoof_mesh,
-    generate_paw_mesh,
 )
 
 
@@ -617,9 +614,9 @@ def generate_npc_body_mesh(
     # Vertical proportions (fractions of total height)
     feet_top = 0.045 * height
     ankle_z = 0.047 * height
-    shin_bottom = ankle_z
+    _shin_bottom = ankle_z
     knee_z = 0.28 * height
-    thigh_bottom = knee_z
+    _thigh_bottom = knee_z
     hip_z = 0.52 * height
     torso_bottom = hip_z * 0.95
     torso_top = 0.80 * height
@@ -741,7 +738,7 @@ def generate_npc_body_mesh(
 
         # Lower arm: elbow to wrist
         forearm_x = arm_x + side * 0.12
-        la_cx = (arm_x + forearm_x + side * 0.25) * 0.5
+        _la_cx = (arm_x + forearm_x + side * 0.25) * 0.5
         la_verts, la_faces = _tapered_cylinder(
             cx=forearm_x, cy=0.0,
             z_bottom=wrist_z,

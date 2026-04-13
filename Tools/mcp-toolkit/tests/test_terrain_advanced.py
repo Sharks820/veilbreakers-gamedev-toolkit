@@ -5,7 +5,6 @@ spline distance calculation.
 All pure-logic -- no Blender dependency.
 """
 
-import math
 
 import numpy as np
 import pytest

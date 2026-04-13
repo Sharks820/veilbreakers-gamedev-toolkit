@@ -16,7 +16,6 @@ import inspect
 import typing
 from typing import get_type_hints
 
-import pytest
 
 from veilbreakers_mcp.blender_server import (
     mcp,
@@ -162,14 +161,17 @@ class TestTool2BlenderObject:
 
 
 # ---------------------------------------------------------------------------
-# Tool 3: blender_material (4 actions)
+# Tool 3: blender_material (6 actions)
 # ---------------------------------------------------------------------------
 
 
 class TestTool3BlenderMaterial:
-    """blender_material: create, assign, modify, list."""
+    """blender_material: basic PBR + procedural preset actions."""
 
-    EXPECTED_ACTIONS = {"create", "assign", "modify", "list"}
+    EXPECTED_ACTIONS = {
+        "create", "assign", "modify", "list",
+        "create_procedural", "list_presets",
+    }
 
     def test_function_exists_and_is_async(self):
         assert asyncio.iscoroutinefunction(blender_material)
@@ -177,7 +179,7 @@ class TestTool3BlenderMaterial:
     def test_registered_in_mcp(self):
         assert "blender_material" in mcp._tool_manager._tools
 
-    def test_action_literal_has_4_values(self):
+    def test_action_literal_values(self):
         values = _get_literal_values(blender_material, "action")
         assert values == self.EXPECTED_ACTIONS
 
@@ -192,6 +194,8 @@ class TestTool3BlenderMaterial:
             "assign": "material_assign",
             "modify": "material_modify",
             "list": "material_list",
+            "create_procedural": "material_create_procedural",
+            "list_presets": "material_create_procedural",
         }
         for action, cmd_key in expected_commands.items():
             assert cmd_key in COMMAND_HANDLERS, (
@@ -744,6 +748,7 @@ class TestToolSignatures:
         assert "action" in params
         assert "name" in params
         assert "object_name" in params
+        assert "material_key" in params
         assert "base_color" in params
         assert "metallic" in params
         assert "roughness" in params

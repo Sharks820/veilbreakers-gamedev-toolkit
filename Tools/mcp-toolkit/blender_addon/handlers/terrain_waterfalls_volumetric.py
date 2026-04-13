@@ -16,8 +16,8 @@ from __future__ import annotations
 
 import math
 import re
-from dataclasses import dataclass, field
-from typing import List, Optional, Sequence, Tuple
+from dataclasses import dataclass
+from typing import List, Sequence, Tuple
 
 from .terrain_semantics import ValidationIssue
 
@@ -271,8 +271,8 @@ def validate_waterfall_anchor_screen_space(
     # Vantage sanity: the anchor should lie between the lip and the
     # vantage, not behind the vantage. If the dot product of (anc-lip)
     # and (vantage-lip) is negative, the anchor is on the wrong side.
-    vlip = tuple(v - l for v, l in zip(vantage_position, lip))
-    alip = tuple(a - l for a, l in zip(anc, lip))
+    vlip = tuple(v - L for v, L in zip(vantage_position, lip))
+    alip = tuple(a - L for a, L in zip(anc, lip))
     dot = sum(v * a for v, a in zip(vlip, alip))
     vmag = math.sqrt(sum(v * v for v in vlip))
     if vmag > 1e-6 and dot < 0:

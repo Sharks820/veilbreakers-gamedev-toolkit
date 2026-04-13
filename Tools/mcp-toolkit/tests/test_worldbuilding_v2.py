@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import math
 
-import pytest
 
 from blender_addon.handlers._building_grammar import (
     FURNITURE_SCALE_REFERENCE,
@@ -29,8 +28,6 @@ from blender_addon.handlers._dungeon_gen import (
 )
 from blender_addon.handlers.worldbuilding_layout import (
     WorldGraph,
-    WorldGraphEdge,
-    WorldGraphNode,
     generate_boss_arena_spec,
     generate_easter_egg_spec,
     generate_linked_interior_spec,
@@ -310,7 +307,7 @@ class TestWorldGraph:
     def test_edge_distances_near_target(self):
         """At least MST edges exist; extra edges should be near target distance."""
         target = 105.0
-        tolerance = target * 0.6  # 60% tolerance (some edges will be shorter in MST)
+        target * 0.6  # 60% tolerance (some edges will be shorter in MST)
         graph = generate_world_graph(self.LOCATIONS, target_distance=target, seed=42)
         # Not all edges will match (MST edges are shortest), but graph should be non-empty
         assert len(graph.edges) > 0
@@ -576,8 +573,8 @@ class TestOverrunVariant:
         original_count = len(layout)
         result = generate_overrun_variant(layout, 8, 6, 0.5, seed=42)
         # Original items should be a subset (possibly with 'damaged' flag)
-        original_items = [item for item in result if "type" in item and item["type"] in
-                          [l["type"] for l in layout]]
+        [item for item in result if "type" in item and item["type"] in
+                          [l["type"] for l in layout]]  # noqa: E741
         # At minimum the original items are present (possibly marked damaged)
         assert len(result) > original_count
 
@@ -728,8 +725,8 @@ class TestStorytellingProps:
         crypt_props = add_storytelling_props("crypt", 8, 6, seed=42)
         kitchen_props = add_storytelling_props("kitchen", 8, 6, seed=42)
 
-        crypt_cobwebs = sum(1 for p in crypt_props if p["prop_type"] == "cobwebs")
-        kitchen_cobwebs = sum(1 for p in kitchen_props if p["prop_type"] == "cobwebs")
+        sum(1 for p in crypt_props if p["prop_type"] == "cobwebs")
+        sum(1 for p in kitchen_props if p["prop_type"] == "cobwebs")
 
         # Crypt should have more cobwebs due to 2.0x modifier
         # (probabilistic -- use enough room size to make it reliable)

@@ -9,14 +9,12 @@ from __future__ import annotations
 import json
 import os
 import struct
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 import pytest
 
 from veilbreakers_mcp.shared.glb_texture_extractor import (
-    _read_glb_chunks,
     extract_glb_textures,
     get_glb_texture_count,
 )

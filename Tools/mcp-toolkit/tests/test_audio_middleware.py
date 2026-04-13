@@ -17,7 +17,6 @@ Requirements covered:
     AUDM-08: Procedural foley (generate_procedural_foley_script)
 """
 
-import pytest
 
 from veilbreakers_mcp.shared.unity_templates.audio_middleware_templates import (
     generate_spatial_audio_script,

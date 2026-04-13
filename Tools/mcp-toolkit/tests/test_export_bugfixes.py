@@ -6,13 +6,9 @@ terrain/interior population, and export_fbx object_names filter.
 
 from __future__ import annotations
 
-import math
 import os
-import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock
 
-import pytest
 
 
 # ---------------------------------------------------------------------------

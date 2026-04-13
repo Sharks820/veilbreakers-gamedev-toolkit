@@ -245,7 +245,7 @@ def _add_timber_frame(
     parts.append((bv, bf))
     # Diagonal brace in upper half
     # Approximated as a thin box rotated via skewed vertices
-    diag_base = len(verts) + sum(len(p[0]) for p in parts[1:])
+    _diag_base = len(verts) + sum(len(p[0]) for p in parts[1:])
     mid_x = width / 4
     bv2, bf2 = _box(mid_x, -beam_d, height / 2, width / 2, beam_d, beam_w, 0)
     parts.append((bv2, bf2))
@@ -1077,7 +1077,7 @@ def stair_spiral(
     step_h = height / total_steps
     inner_r = 0.15  # central column radius
     parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
-    rng = random.Random(seed)
+    _rng = random.Random(seed)
 
     for i in range(total_steps):
         a0 = i * angle_per_step
@@ -1411,7 +1411,7 @@ def window_pointed(
 
     # Pointed arch at top (two arcs meeting at center peak)
     cx = width / 2
-    peak_z = rect_h + arch_h
+    _peak_z = rect_h + arch_h
     arch_verts: list[tuple[float, float, float]] = []
     arch_faces: list[tuple[int, ...]] = []
     for i in range(arch_segments):
@@ -1529,7 +1529,7 @@ def column_round(
 ) -> MeshSpec:
     """Round column with base and capital."""
     parts = []
-    rng = random.Random(seed)
+    _rng = random.Random(seed)
     # Base (wider)
     base_h = 0.1
     base_r = radius * 1.4
@@ -1630,9 +1630,9 @@ def column_cluster(
 ) -> MeshSpec:
     """Cluster of small columns arranged in a group (gothic pillar)."""
     parts = []
-    segments = 6
+    _segments = 6
     spread = radius * 2.5
-    rng = random.Random(seed)
+    _rng = random.Random(seed)
     for ci in range(count):
         angle = 2.0 * math.pi * ci / count
         cx = math.cos(angle) * spread
@@ -1664,9 +1664,9 @@ def balcony_simple(
     seed: int = 42,
 ) -> MeshSpec:
     """Simple balcony platform with railing."""
-    t = _get_thickness(style)
+    _t = _get_thickness(style)
     parts = []
-    rng = random.Random(seed)
+    _rng = random.Random(seed)
     # Platform slab
     slab_h = 0.1
     parts.append(_box(0.0, 0.0, 0.0, width, depth, slab_h))
@@ -1703,7 +1703,7 @@ def balcony_ornate(
 ) -> MeshSpec:
     """Ornate balcony with balusters and corbels."""
     parts = []
-    rng = random.Random(seed)
+    _rng = random.Random(seed)
     slab_h = 0.12
     # Platform
     parts.append(_box(0.0, 0.0, 0.0, width, depth, slab_h))
@@ -1905,7 +1905,7 @@ def chimney_stack(
     cw = 0.5
     cd = 0.5
     parts = []
-    rng = random.Random(seed)
+    _rng = random.Random(seed)
     # Main shaft
     parts.append(_box(0.0, 0.0, 0.0, cw, cd, height))
     # Corbeling near top (stepped outward)
@@ -2146,7 +2146,7 @@ def dormer_gable(
     # Front wall with window opening
     parts.append(_box(0.0, 0.0, 0.0, width, t * 0.5, wall_h))
     # Mini gable roof
-    ridge_h = height - wall_h
+    _ridge_h = height - wall_h
     parts.append(_box(0.0, 0.0, wall_h, width, depth, 0.04))  # base
     # Triangle front
     tv = [

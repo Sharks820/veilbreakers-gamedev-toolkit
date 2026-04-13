@@ -23,12 +23,12 @@ import math
 import time
 
 logger = logging.getLogger(__name__)
-from dataclasses import dataclass, field
-from typing import Any, List, Optional, Tuple
+from dataclasses import dataclass, field  # noqa: E402
+from typing import Any, List, Optional, Tuple  # noqa: E402
 
-import numpy as np
+import numpy as np  # noqa: E402
 
-from .terrain_semantics import (
+from .terrain_semantics import (  # noqa: E402
     BBox,
     PassDefinition,
     PassResult,
@@ -216,7 +216,7 @@ def detect_waterfall_lip_candidates(
     if rows < 3 or cols < 3:
         return []
 
-    cs = float(stack.cell_size)
+    _cs = float(stack.cell_size)
 
     candidates: List[LipCandidate] = []
     for r in range(1, rows - 1):
@@ -792,6 +792,7 @@ def register_bundle_c_passes() -> None:
             requires_channels=("height",),
             produces_channels=(
                 "waterfall_lip_candidate",
+                "waterfall_pool_delta",
                 "foam",
                 "mist",
                 "wet_rock",

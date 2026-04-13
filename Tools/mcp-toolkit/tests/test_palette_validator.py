@@ -12,7 +12,6 @@ Tests cover:
 """
 
 import numpy as np
-import pytest
 from PIL import Image
 
 from veilbreakers_mcp.shared.palette_validator import (

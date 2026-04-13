@@ -576,7 +576,6 @@ def scatter_collapse_debris(
     Uses ``derive_pass_seed``-style integer seed (supplied by the caller).
     Debris count scales with ``floor_debris_density * interior_length_m``.
     """
-    from .terrain_pipeline import derive_pass_seed  # lazy to avoid cycles
 
     if not path:
         return []
@@ -897,7 +896,7 @@ def register_bundle_f_passes() -> None:
             name="caves",
             func=pass_caves,
             requires_channels=("height",),
-            produces_channels=("cave_candidate", "wet_rock"),
+            produces_channels=("cave_candidate", "wet_rock", "cave_height_delta"),
             seed_namespace="caves",
             requires_scene_read=True,
             may_modify_geometry=False,

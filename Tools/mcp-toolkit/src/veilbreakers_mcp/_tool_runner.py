@@ -16,11 +16,15 @@ Each tool is optional — if not installed, it's silently skipped.
 from __future__ import annotations
 
 import json
+import logging
 import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -426,8 +430,12 @@ def run_roslynator(sln_path: str) -> list[ToolFinding]:
                 description=diag.findtext("Message", ""),
                 severity=_map_severity(diag.findtext("Severity", "warning")),
             ))
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning(
+            "Failed to parse roslynator diagnostics from %s: %s",
+            output_path,
+            exc,
+        )
     finally:
         try:
             Path(output_path).unlink(missing_ok=True)

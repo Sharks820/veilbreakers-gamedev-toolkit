@@ -13,7 +13,6 @@ All pure-logic -- no Blender required.
 
 import math
 
-import pytest
 
 from blender_addon.handlers.viewport import (
     BEAUTY_CAMERA_NAME,

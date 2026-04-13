@@ -15,8 +15,11 @@ import sys
 import time
 import tempfile
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 import pytest
+from PIL import Image
+
 
 # ---------------------------------------------------------------------------
 # Path setup
@@ -29,7 +32,7 @@ _src_root = _toolkit_root / "src"
 if str(_src_root) not in sys.path:
     sys.path.insert(0, str(_src_root))
 
-from veilbreakers_mcp.shared import visual_validation
+from veilbreakers_mcp.shared import visual_validation  # noqa: E402
 
 
 # ===========================================================================
@@ -124,3 +127,72 @@ class TestScreenshotDirectory:
         for name in expected_names:
             assert name.startswith("48_"), f"Screenshot {name} doesn't follow 48_ prefix"
             assert name.endswith(".png"), f"Screenshot {name} doesn't have .png extension"
+
+
+@pytest.mark.asyncio
+async def test_asset_pipeline_aaa_verify_forwards_validation_profile(monkeypatch):
+    """asset_pipeline(action='aaa_verify') forwards validation_profile to aaa_verify_map."""
+    from veilbreakers_mcp import blender_server
+
+    mock_conn = AsyncMock()
+
+    async def _send_command(command: str, params: dict) -> dict:
+        if command == "render_angle":
+            output_path = params["output_path"]
+            Image.new("RGB", (32, 32), (80, 90, 100)).save(output_path)
+        return {"status": "success"}
+
+    mock_conn.send_command = AsyncMock(side_effect=_send_command)
+
+    captured: dict = {}
+
+    def _fake_aaa_verify_map(
+        screenshot_paths,
+        min_score=60,
+        *,
+        required_angle_count=None,
+        angle_labels=None,
+        validation_profile=None,
+    ):
+        captured["screenshot_paths"] = list(screenshot_paths)
+        captured["min_score"] = min_score
+        captured["required_angle_count"] = required_angle_count
+        captured["angle_labels"] = list(angle_labels or [])
+        captured["validation_profile"] = validation_profile
+        return {
+            "passed": True,
+            "total_score": 88.0,
+            "per_angle": [
+                {
+                    "angle_id": 0,
+                    "score": 88.0,
+                    "issues": [],
+                    "semantic_issues": [],
+                    "semantic_metrics": {"foreground_grounding": 92.0},
+                    "semantic_score": 92.0,
+                    "validation_profile": validation_profile,
+                    "passed": True,
+                }
+            ],
+            "failed_angles": [],
+            "missing_angles": [],
+            "validation_profile": validation_profile,
+            "issues": [],
+        }
+
+    with patch("veilbreakers_mcp.blender_server.get_blender_connection", return_value=mock_conn), patch(
+        "veilbreakers_mcp.blender_server.aaa_verify_map",
+        side_effect=_fake_aaa_verify_map,
+    ):
+        result = await blender_server.asset_pipeline(
+            action="aaa_verify",
+            angles=1,
+            validation_profile="terrain_cave",
+        )
+
+    assert captured["validation_profile"] == "terrain_cave"
+    assert captured["required_angle_count"] == 1
+    assert captured["angle_labels"] == ["front"]
+    assert len(captured["screenshot_paths"]) == 1
+    assert result["status"] == "success"
+    assert result["verification"]["validation_profile"] == "terrain_cave"

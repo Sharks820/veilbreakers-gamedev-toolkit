@@ -9,9 +9,7 @@ Tests pure-logic components without Blender:
 
 from __future__ import annotations
 
-import math
 
-import pytest
 
 from blender_addon.handlers.mesh_enhance import (
     ENHANCE_PROFILES,
@@ -145,7 +143,7 @@ class TestSharpEdgeDetection:
         sharp = compute_sharp_edges_pure(verts, faces, angle_threshold_deg=1.0)
         # Only boundary edges (4 outer edges are boundary)
         # The shared edge (0,2) is coplanar -> not sharp
-        boundary_count = sum(1 for e in sharp if True)
+        sum(1 for e in sharp if True)
         # 4 boundary edges + 0 sharp interior
         assert len(sharp) == 4
 

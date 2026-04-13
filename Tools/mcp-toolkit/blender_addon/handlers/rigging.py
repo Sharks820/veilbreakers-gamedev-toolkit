@@ -26,12 +26,10 @@ Pure-logic functions:
 
 from __future__ import annotations
 
-import math
 
 import bmesh
 import bpy
 
-from ._context import get_3d_context_override
 from .rigging_templates import (
     LIMB_LIBRARY,
     TEMPLATE_CATALOG,
@@ -1075,7 +1073,6 @@ def handle_edit_bone(params: dict) -> dict:
     if not arm_obj or arm_obj.type != "ARMATURE":
         raise ValueError(f"Armature not found: {arm_name}")
 
-    from ._context import get_3d_context_override
 
     bpy.context.view_layer.objects.active = arm_obj
     bpy.ops.object.select_all(action="DESELECT")

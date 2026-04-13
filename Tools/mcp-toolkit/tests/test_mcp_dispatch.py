@@ -5,10 +5,9 @@ calls the tool function directly and asserts the correct Blender
 command is dispatched (or the correct error is raised for unknown actions).
 """
 
-import json
 import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -39,7 +38,7 @@ class TestBlenderSceneDispatch:
         mock_conn = _make_mock_connection()
         with patch("veilbreakers_mcp.blender_server.get_blender_connection", return_value=mock_conn):
             from veilbreakers_mcp.blender_server import blender_scene
-            result = await blender_scene(action="inspect")
+            await blender_scene(action="inspect")
             mock_conn.send_command.assert_any_call("get_scene_info")
 
     @pytest.mark.asyncio
@@ -47,7 +46,7 @@ class TestBlenderSceneDispatch:
         mock_conn = _make_mock_connection()
         with patch("veilbreakers_mcp.blender_server.get_blender_connection", return_value=mock_conn):
             from veilbreakers_mcp.blender_server import blender_scene
-            result = await blender_scene(action="clear")
+            await blender_scene(action="clear")
             mock_conn.send_command.assert_any_call("clear_scene")
 
     @pytest.mark.asyncio
@@ -55,7 +54,7 @@ class TestBlenderSceneDispatch:
         mock_conn = _make_mock_connection()
         with patch("veilbreakers_mcp.blender_server.get_blender_connection", return_value=mock_conn):
             from veilbreakers_mcp.blender_server import blender_scene
-            result = await blender_scene(action="configure", render_engine="CYCLES")
+            await blender_scene(action="configure", render_engine="CYCLES")
             mock_conn.send_command.assert_any_call(
                 "configure_scene", {"render_engine": "CYCLES"}
             )
@@ -65,7 +64,7 @@ class TestBlenderSceneDispatch:
         mock_conn = _make_mock_connection()
         with patch("veilbreakers_mcp.blender_server.get_blender_connection", return_value=mock_conn):
             from veilbreakers_mcp.blender_server import blender_scene
-            result = await blender_scene(action="list_objects")
+            await blender_scene(action="list_objects")
             mock_conn.send_command.assert_any_call("list_objects")
 
     @pytest.mark.asyncio
@@ -73,7 +72,7 @@ class TestBlenderSceneDispatch:
         mock_conn = _make_mock_connection()
         with patch("veilbreakers_mcp.blender_server.get_blender_connection", return_value=mock_conn):
             from veilbreakers_mcp.blender_server import blender_scene
-            result = await blender_scene(action="save_project", filepath="C:/tmp/test.blend")
+            await blender_scene(action="save_project", filepath="C:/tmp/test.blend")
             mock_conn.send_command.assert_any_call(
                 "save_project",
                 {
@@ -91,7 +90,7 @@ class TestBlenderSceneDispatch:
         mock_conn = _make_mock_connection()
         with patch("veilbreakers_mcp.blender_server.get_blender_connection", return_value=mock_conn):
             from veilbreakers_mcp.blender_server import blender_scene
-            result = await blender_scene(
+            await blender_scene(
                 action="verify_project_save",
                 filepath="C:/tmp/test.blend",
                 expect_current_file=True,
@@ -117,7 +116,7 @@ class TestBlenderObjectDispatch:
         mock_conn = _make_mock_connection()
         with patch("veilbreakers_mcp.blender_server.get_blender_connection", return_value=mock_conn):
             from veilbreakers_mcp.blender_server import blender_object
-            result = await blender_object(action="create", mesh_type="cube")
+            await blender_object(action="create", mesh_type="cube")
             mock_conn.send_command.assert_called()
 
     @pytest.mark.asyncio
@@ -125,7 +124,7 @@ class TestBlenderObjectDispatch:
         mock_conn = _make_mock_connection()
         with patch("veilbreakers_mcp.blender_server.get_blender_connection", return_value=mock_conn):
             from veilbreakers_mcp.blender_server import blender_object
-            result = await blender_object(action="list")
+            await blender_object(action="list")
             mock_conn.send_command.assert_any_call("list_objects")
 
     @pytest.mark.asyncio
@@ -156,7 +155,7 @@ class TestBlenderMaterialDispatch:
         mock_conn = _make_mock_connection()
         with patch("veilbreakers_mcp.blender_server.get_blender_connection", return_value=mock_conn):
             from veilbreakers_mcp.blender_server import blender_material
-            result = await blender_material(action="create", name="TestMat")
+            await blender_material(action="create", name="TestMat")
             mock_conn.send_command.assert_called()
 
     @pytest.mark.asyncio
@@ -164,8 +163,34 @@ class TestBlenderMaterialDispatch:
         mock_conn = _make_mock_connection()
         with patch("veilbreakers_mcp.blender_server.get_blender_connection", return_value=mock_conn):
             from veilbreakers_mcp.blender_server import blender_material
-            result = await blender_material(action="list")
+            await blender_material(action="list")
             mock_conn.send_command.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_create_procedural_dispatches(self):
+        mock_conn = _make_mock_connection()
+        with patch("veilbreakers_mcp.blender_server.get_blender_connection", return_value=mock_conn):
+            from veilbreakers_mcp.blender_server import blender_material
+            await blender_material(
+                action="create_procedural",
+                material_key="rough_stone_wall",
+                name="StonePreset",
+            )
+            mock_conn.send_command.assert_called_with(
+                "material_create_procedural",
+                {"material_key": "rough_stone_wall", "name": "StonePreset"},
+            )
+
+    @pytest.mark.asyncio
+    async def test_list_presets_dispatches(self):
+        mock_conn = _make_mock_connection()
+        with patch("veilbreakers_mcp.blender_server.get_blender_connection", return_value=mock_conn):
+            from veilbreakers_mcp.blender_server import blender_material
+            await blender_material(action="list_presets")
+            mock_conn.send_command.assert_called_with(
+                "material_create_procedural",
+                {"list_available": True},
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -178,7 +203,8 @@ class TestBlenderViewportDispatch:
     async def test_screenshot_dispatches(self):
         mock_conn = _make_mock_connection()
         # Create a minimal valid 1x1 PNG so PIL can parse it
-        import struct, zlib
+        import struct
+        import zlib
         def _make_tiny_png() -> bytes:
             sig = b"\x89PNG\r\n\x1a\n"
             ihdr_data = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)
@@ -193,7 +219,7 @@ class TestBlenderViewportDispatch:
         mock_conn.capture_viewport_bytes = AsyncMock(return_value=_make_tiny_png())
         with patch("veilbreakers_mcp.blender_server.get_blender_connection", return_value=mock_conn):
             from veilbreakers_mcp.blender_server import blender_viewport
-            result = await blender_viewport(action="screenshot")
+            await blender_viewport(action="screenshot")
             # Should call capture_viewport_bytes or send_command
             assert mock_conn.send_command.called or mock_conn.capture_viewport_bytes.called
 
@@ -202,7 +228,7 @@ class TestBlenderViewportDispatch:
         mock_conn = _make_mock_connection()
         with patch("veilbreakers_mcp.blender_server.get_blender_connection", return_value=mock_conn):
             from veilbreakers_mcp.blender_server import blender_viewport
-            result = await blender_viewport(action="set_shading", shading_type="MATERIAL")
+            await blender_viewport(action="set_shading", shading_type="MATERIAL")
             mock_conn.send_command.assert_called()
 
 
@@ -221,7 +247,7 @@ class TestBlenderMeshDispatch:
         })
         with patch("veilbreakers_mcp.blender_server.get_blender_connection", return_value=mock_conn):
             from veilbreakers_mcp.blender_server import blender_mesh
-            result = await blender_mesh(action="analyze", object_name="Cube")
+            await blender_mesh(action="analyze", object_name="Cube")
             mock_conn.send_command.assert_called()
             # Should have called with mesh_analyze_topology or similar
             cmd = mock_conn.send_command.call_args[0][0]
@@ -233,7 +259,7 @@ class TestBlenderMeshDispatch:
         mock_conn.send_command = AsyncMock(return_value={"status": "success"})
         with patch("veilbreakers_mcp.blender_server.get_blender_connection", return_value=mock_conn):
             from veilbreakers_mcp.blender_server import blender_mesh
-            result = await blender_mesh(action="repair", object_name="Cube")
+            await blender_mesh(action="repair", object_name="Cube")
             mock_conn.send_command.assert_called()
 
     @pytest.mark.asyncio
@@ -244,7 +270,7 @@ class TestBlenderMeshDispatch:
         })
         with patch("veilbreakers_mcp.blender_server.get_blender_connection", return_value=mock_conn):
             from veilbreakers_mcp.blender_server import blender_mesh
-            result = await blender_mesh(action="game_check", object_name="Cube")
+            await blender_mesh(action="game_check", object_name="Cube")
             mock_conn.send_command.assert_called()
 
 
@@ -259,7 +285,7 @@ class TestBlenderUVDispatch:
         mock_conn = _make_mock_connection()
         with patch("veilbreakers_mcp.blender_server.get_blender_connection", return_value=mock_conn):
             from veilbreakers_mcp.blender_server import blender_uv
-            result = await blender_uv(action="analyze", object_name="Cube")
+            await blender_uv(action="analyze", object_name="Cube")
             mock_conn.send_command.assert_called()
 
     @pytest.mark.asyncio
@@ -267,7 +293,7 @@ class TestBlenderUVDispatch:
         mock_conn = _make_mock_connection()
         with patch("veilbreakers_mcp.blender_server.get_blender_connection", return_value=mock_conn):
             from veilbreakers_mcp.blender_server import blender_uv
-            result = await blender_uv(action="unwrap", object_name="Cube")
+            await blender_uv(action="unwrap", object_name="Cube")
             mock_conn.send_command.assert_called()
 
     @pytest.mark.asyncio
@@ -275,7 +301,7 @@ class TestBlenderUVDispatch:
         mock_conn = _make_mock_connection()
         with patch("veilbreakers_mcp.blender_server.get_blender_connection", return_value=mock_conn):
             from veilbreakers_mcp.blender_server import blender_uv
-            result = await blender_uv(action="pack", object_name="Cube")
+            await blender_uv(action="pack", object_name="Cube")
             mock_conn.send_command.assert_called()
 
 
@@ -290,7 +316,7 @@ class TestBlenderExportDispatch:
         mock_conn = _make_mock_connection()
         with patch("veilbreakers_mcp.blender_server.get_blender_connection", return_value=mock_conn):
             from veilbreakers_mcp.blender_server import blender_export
-            result = await blender_export(
+            await blender_export(
                 export_format="fbx", filepath=_TMP_TEST_FBX
             )
             mock_conn.send_command.assert_called()
@@ -307,7 +333,7 @@ class TestBlenderExecuteDispatch:
         mock_conn = _make_mock_connection()
         with patch("veilbreakers_mcp.blender_server.get_blender_connection", return_value=mock_conn):
             from veilbreakers_mcp.blender_server import blender_execute
-            result = await blender_execute(code="print('hello')")
+            await blender_execute(code="print('hello')")
             mock_conn.send_command.assert_called()
 
 
@@ -322,7 +348,7 @@ class TestConceptArtDispatch:
         with patch("veilbreakers_mcp.blender_server.generate_concept_art") as mock_gen:
             mock_gen.return_value = {"url": "http://example.com/art.png", "seed": 42}
             from veilbreakers_mcp.blender_server import concept_art
-            result = await concept_art(
+            await concept_art(
                 action="generate", prompt="a dark castle"
             )
             mock_gen.assert_called_once()
@@ -332,7 +358,7 @@ class TestConceptArtDispatch:
         with patch("veilbreakers_mcp.blender_server.extract_color_palette") as mock_pal:
             mock_pal.return_value = {"colors": ["#000"]}
             from veilbreakers_mcp.blender_server import concept_art
-            result = await concept_art(
+            await concept_art(
                 action="extract_palette", image_path=_TMP_IMG_PNG
             )
             mock_pal.assert_called_once()

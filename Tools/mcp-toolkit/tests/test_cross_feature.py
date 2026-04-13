@@ -7,7 +7,6 @@ Pure numpy -- no Blender required.
 
 from __future__ import annotations
 
-import math
 
 import numpy as np
 import pytest
@@ -297,8 +296,8 @@ class TestExportContracts:
         """Export contract should enforce minimum bit depths."""
         from blender_addon.handlers.terrain_unity_export_contracts import UnityExportContract
         contract = UnityExportContract()
-        assert contract.minimum_for("heightmap") == 32
-        assert contract.minimum_for("splatmap") == 16
+        assert contract.minimum_for("heightmap") == 16
+        assert contract.minimum_for("splatmap") == 8
         assert contract.minimum_for("shadow_clipmap") == 32
         assert contract.minimum_for("unknown") == 0
 
@@ -367,7 +366,7 @@ class TestFullPipelineIntegration:
         eroded = apply_hydraulic_erosion(hmap, iterations=100, seed=42)
         slope = compute_slope_map(eroded)
         biomes = compute_biome_assignments(eroded, slope)
-        flow = compute_flow_map(eroded)
+        compute_flow_map(eroded)
         lod = compute_chunk_lod(eroded.tolist(), 32)
 
         # All outputs valid

@@ -308,7 +308,7 @@ def generate_waterfall(
     materials = ["cliff_rock", "wet_rock", "pool_bottom", "ledge_stone", "moss"]
 
     step_height = height / max(num_steps, 1)
-    half_w = width / 2.0
+    _half_w = width / 2.0
 
     # --- Cliff face (behind waterfall) ---
     cliff_res_x = max(4, int(width * 2) + 4)
@@ -948,7 +948,7 @@ def generate_natural_arch(
         - "material_indices": per-face material index list
         - "dimensions": dict with span_width, arch_height, thickness
     """
-    rng = random.Random(seed)
+    _rng = random.Random(seed)
     vertices: list[Vec3] = []
     faces: list[tuple[int, ...]] = []
     mat_indices: list[int] = []
@@ -1144,7 +1144,7 @@ def generate_geyser(
         - "material_indices": per-face material index list
         - "dimensions": dict
     """
-    rng = random.Random(seed)
+    _rng = random.Random(seed)
     vertices: list[Vec3] = []
     faces: list[tuple[int, ...]] = []
     mat_indices: list[int] = []
@@ -1153,7 +1153,7 @@ def generate_geyser(
     materials = ["mineral_deposit", "pool_water", "vent_rock", "sulfur_crust", "terrace_mineral"]
 
     radial_res = max(16, int(pool_radius * 6))
-    total_radius = pool_radius + mineral_rim_width * 3  # 3 terrace tiers
+    _total_radius = pool_radius + mineral_rim_width * 3  # 3 terrace tiers
 
     # --- Pool bottom (concave disc) ---
     pool_start = len(vertices)
@@ -1227,7 +1227,7 @@ def generate_geyser(
     terraces: list[dict[str, Any]] = []
 
     prev_ring_start = pool_start + 1  # Pool edge ring
-    prev_ring_count = radial_res
+    _prev_ring_count = radial_res
 
     for tier in range(num_terraces):
         tier_inner_r = pool_radius + tier * mineral_rim_width
@@ -1266,7 +1266,7 @@ def generate_geyser(
         })
 
         prev_ring_start = ring_start
-        prev_ring_count = radial_res
+        __prev_ring_count = radial_res
 
     return {
         "mesh": {
@@ -1426,7 +1426,7 @@ def generate_sinkhole(
             mat_indices.append(0 if k < depth_res // 2 else 1)
 
     # --- Floor ---
-    floor_start = len(vertices)
+    _floor_start = len(vertices)
     floor_center_idx = len(vertices)
     vertices.append((0.0, 0.0, -depth))
 

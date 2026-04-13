@@ -17,7 +17,6 @@ Requirements covered:
     UIPOL-08: UI material shaders (generate_ui_material_shaders)
 """
 
-import pytest
 
 from veilbreakers_mcp.shared.unity_templates.ui_polish_templates import (
     generate_procedural_frame_script,

@@ -55,7 +55,7 @@ def validate_locomotion_params(params: dict) -> dict:
         raise ValueError(f"frame_count must be >= 4, got {frame_count}")
     intensity = float(params.get("intensity", 1.0))
     if intensity <= 0:
-        raise ValueError(f"intensity must be > 0")
+        raise ValueError("intensity must be > 0")
     return {"object_name": object_name, "loco_type": loco_type,
             "frame_count": frame_count, "intensity": intensity}
 
@@ -465,7 +465,7 @@ def generate_slide_keyframes(fc: int = 16, i: float = 1.0) -> list[Keyframe]:
     fc = max(1, fc)
     kfs: list[Keyframe] = []
     for frame in range(fc + 1):
-        t = frame / fc
+        _t = frame / fc
         kfs.append(Keyframe("DEF-spine.001", "rotation_euler", 0, frame, -0.2 * i))
         kfs.append(Keyframe("DEF-thigh.L", "rotation_euler", 0, frame, -0.3 * i))
         kfs.append(Keyframe("DEF-thigh.R", "rotation_euler", 0, frame, 0.5 * i))

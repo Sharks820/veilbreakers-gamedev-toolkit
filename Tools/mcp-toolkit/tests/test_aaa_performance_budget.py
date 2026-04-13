@@ -7,9 +7,6 @@ AAA-MAP-12: Topology grade A minimum enforced with auto-repair
 
 from __future__ import annotations
 
-import importlib.util
-import math
-import os
 import sys
 import types
 import unittest
@@ -153,7 +150,7 @@ def _restore_all_modules() -> None:
         sys.modules[name] = mod
     _SAVED_MODULES.clear()
 
-import atexit
+import atexit  # noqa: E402
 atexit.register(_restore_all_modules)
 
 # Save modules we're about to overwrite
@@ -172,8 +169,8 @@ for _save_name in ["bpy", "bmesh", "mathutils",
 # Import handler modules normally (conftest stubs handle bpy/bmesh/mathutils)
 # ---------------------------------------------------------------------------
 
-from blender_addon.handlers import mesh_enhance as _mesh_enhance
-from blender_addon.handlers import environment_scatter as _scatter_mod
+from blender_addon.handlers import mesh_enhance as _mesh_enhance  # noqa: E402
+from blender_addon.handlers import environment_scatter as _scatter_mod  # noqa: E402
 
 
 # ===========================================================================

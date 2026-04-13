@@ -7,7 +7,6 @@ guarantees (never using File.Move for asset operations).
 
 import json
 
-import pytest
 
 from veilbreakers_mcp.shared.unity_templates.asset_templates import (
     generate_asset_move_script,
@@ -397,6 +396,25 @@ class TestGenerateMaterialAutoGenerateScript:
         )
         assert '[MenuItem("VeilBreakers/Assets/Auto Generate Materials")]' in result
 
+    def test_can_inherit_master_material(self):
+        result = generate_material_auto_generate_script(
+            "Assets/Models/hero.fbx",
+            "Assets/Textures/Hero/",
+            master_material_path="Assets/Data/Materials/MasterLibrary/wet_cliff.mat",
+        )
+        assert "masterMaterialPath" in result
+        assert "LoadAssetAtPath<Material>" in result
+        assert "new Material(masterMaterial)" in result
+        assert "material_source" in result
+
+    def test_defaults_to_shader_when_no_master_material(self):
+        result = generate_material_auto_generate_script(
+            "Assets/Models/hero.fbx",
+            "Assets/Textures/Hero/",
+        )
+        assert "new Material(shader)" in result
+        assert "LoadAssetAtPath<Material>" not in result
+
 
 # ---------------------------------------------------------------------------
 # Assembly Definition (asmdef)
@@ -647,6 +665,27 @@ class TestGenerateAtomicImportScript:
         )
         assert '[MenuItem("VeilBreakers/Assets/Atomic Import")]' in result
 
+    def test_can_inherit_master_material(self):
+        result = generate_atomic_import_script(
+            texture_paths=["Assets/Textures/albedo.png"],
+            material_name="HeroSkin",
+            fbx_path="Assets/Models/hero.fbx",
+            master_material_path="Assets/Data/Materials/MasterLibrary/stone_rough.mat",
+        )
+        assert "masterMaterialPath" in result
+        assert "LoadAssetAtPath<Material>" in result
+        assert "new Material(masterMaterial)" in result
+        assert "material_source" in result
+
+    def test_defaults_to_shader_when_no_master_material(self):
+        result = generate_atomic_import_script(
+            texture_paths=["Assets/Textures/albedo.png"],
+            material_name="HeroSkin",
+            fbx_path="Assets/Models/hero.fbx",
+        )
+        assert "new Material(shader)" in result
+        assert "LoadAssetAtPath<Material>" not in result
+
 
 # ---------------------------------------------------------------------------
 # Blender-to-Unity Bridge
@@ -736,6 +775,15 @@ class TestGenerateBlenderToUnityBridgeScript:
             texture_dir="Assets/Textures/Hero",
         )
         assert "Assets/Textures/Hero" in result
+
+    def test_can_inherit_master_material(self):
+        result = generate_blender_to_unity_bridge_script(
+            "Assets/Models/hero.fbx",
+            master_material_path="Assets/Data/Materials/MasterLibrary/wet_cliff.mat",
+        )
+        assert "masterMaterialPath" in result
+        assert "new Material(masterMaterial)" in result
+        assert "LoadAssetAtPath<Material>" in result
 
     def test_contains_all_pipeline_steps(self):
         """Bridge must contain all 10 pipeline steps."""

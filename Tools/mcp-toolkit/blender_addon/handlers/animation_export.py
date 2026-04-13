@@ -22,11 +22,10 @@ import math
 import os
 
 import bpy
-from mathutils import Vector
 
 from ._action_compat import (
     get_fcurves, get_frame_range, get_fcurve_count,
-    is_layered_action, new_fcurve, remove_fcurve,
+    new_fcurve, remove_fcurve,
     setup_action_for_armature,
 )
 from ._context import get_3d_context_override
@@ -1064,7 +1063,6 @@ def _attempt_ai_motion_api(
         return None
 
     try:
-        import json
         import requests  # type: ignore[import-untyped]
 
         payload = {
@@ -1182,7 +1180,7 @@ def handle_generate_ai_motion(params: dict) -> dict:
             elif "combo" in prompt_lower or "finisher" in prompt_lower:
                 attack_type = "combo_finisher"
 
-            combat_data = generate_combat_animation_data(
+            __combat_data = generate_combat_animation_data(
                 attack_type, fps=fps,
             )
             # Append combat timing events as metadata (not keyframes)

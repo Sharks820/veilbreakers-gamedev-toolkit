@@ -623,7 +623,6 @@ class TestMaterialBuildersNormalChain:
         from blender_addon.handlers.procedural_materials import (
             build_stone_material,
             build_wood_material,
-            build_metal_material,
             build_organic_material,
             build_terrain_material,
             build_fabric_material,

@@ -5,7 +5,7 @@ from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, logger,
-    _write_to_unity, STANDARD_NEXT_STEPS,
+    _write_generated_editor_response,
 )
 
 from veilbreakers_mcp.shared.unity_templates.settings_templates import (
@@ -28,6 +28,24 @@ from veilbreakers_mcp.shared.unity_templates.settings_templates import (
 # ---------------------------------------------------------------------------
 # unity_settings compound tool -- EDIT-04/05/06/07/08/09/11
 # ---------------------------------------------------------------------------
+
+
+async def _write_settings_response(
+    action_name: str,
+    script: str,
+    script_path: str,
+    *,
+    menu_path: str,
+    response_fields: dict | None = None,
+) -> str:
+    """Write a settings editor script and bridge-execute its MenuItem."""
+    return await _write_generated_editor_response(
+        action_name=action_name,
+        script_content=script,
+        rel_path=script_path,
+        menu_path=menu_path,
+        response_fields=response_fields or {},
+    )
 
 
 @mcp.tool()
@@ -159,20 +177,11 @@ async def _handle_settings_physics(
     )
     script_path = "Assets/Editor/Generated/Settings/VeilBreakers_ConfigurePhysics.cs"
 
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "configure_physics", "message": str(exc)})
-
-    return json.dumps(
-        {
-            "status": "success",
-            "action": "configure_physics",
-            "script_path": abs_path,
-            "next_steps": STANDARD_NEXT_STEPS,
-            "result_file": "Temp/vb_result.json",
-        },
-        indent=2,
+    return await _write_settings_response(
+        "configure_physics",
+        script,
+        script_path,
+        menu_path="VeilBreakers/Settings/Configure Physics",
     )
 
 
@@ -193,21 +202,12 @@ async def _handle_settings_physics_material(
     )
     script_path = "Assets/Editor/Generated/Settings/VeilBreakers_CreatePhysicsMaterial.cs"
 
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "create_physics_material", "message": str(exc)})
-
-    return json.dumps(
-        {
-            "status": "success",
-            "action": "create_physics_material",
-            "script_path": abs_path,
-            "material_name": material_name,
-            "next_steps": STANDARD_NEXT_STEPS,
-            "result_file": "Temp/vb_result.json",
-        },
-        indent=2,
+    return await _write_settings_response(
+        "create_physics_material",
+        script,
+        script_path,
+        menu_path="VeilBreakers/Settings/Create Physics Material",
+        response_fields={"material_name": material_name},
     )
 
 
@@ -236,20 +236,11 @@ async def _handle_settings_player(
     )
     script_path = "Assets/Editor/Generated/Settings/VeilBreakers_PlayerSettings.cs"
 
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "configure_player", "message": str(exc)})
-
-    return json.dumps(
-        {
-            "status": "success",
-            "action": "configure_player",
-            "script_path": abs_path,
-            "next_steps": STANDARD_NEXT_STEPS,
-            "result_file": "Temp/vb_result.json",
-        },
-        indent=2,
+    return await _write_settings_response(
+        "configure_player",
+        script,
+        script_path,
+        menu_path="VeilBreakers/Settings/Configure Player Settings",
     )
 
 
@@ -266,20 +257,11 @@ async def _handle_settings_build(
 
     script_path = "Assets/Editor/Generated/Settings/VeilBreakers_BuildSettings.cs"
 
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "configure_build", "message": str(exc)})
-
-    return json.dumps(
-        {
-            "status": "success",
-            "action": "configure_build",
-            "script_path": abs_path,
-            "next_steps": STANDARD_NEXT_STEPS,
-            "result_file": "Temp/vb_result.json",
-        },
-        indent=2,
+    return await _write_settings_response(
+        "configure_build",
+        script,
+        script_path,
+        menu_path="VeilBreakers/Settings/Configure Build Settings",
     )
 
 
@@ -288,21 +270,12 @@ async def _handle_settings_quality(quality_levels: list[dict]) -> str:
     script = generate_quality_settings_script(levels=quality_levels)
     script_path = "Assets/Editor/Generated/Settings/VeilBreakers_QualitySettings.cs"
 
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "configure_quality", "message": str(exc)})
-
-    return json.dumps(
-        {
-            "status": "success",
-            "action": "configure_quality",
-            "script_path": abs_path,
-            "levels_count": len(quality_levels),
-            "next_steps": STANDARD_NEXT_STEPS,
-            "result_file": "Temp/vb_result.json",
-        },
-        indent=2,
+    return await _write_settings_response(
+        "configure_quality",
+        script,
+        script_path,
+        menu_path="VeilBreakers/Settings/Configure Quality Settings",
+        response_fields={"levels_count": len(quality_levels)},
     )
 
 
@@ -323,22 +296,15 @@ async def _handle_settings_install_package(
     )
     script_path = "Assets/Editor/Generated/Settings/VeilBreakers_InstallPackage.cs"
 
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "install_package", "message": str(exc)})
-
-    return json.dumps(
-        {
-            "status": "success",
-            "action": "install_package",
-            "script_path": abs_path,
+    return await _write_settings_response(
+        "install_package",
+        script,
+        script_path,
+        menu_path="VeilBreakers/Settings/Install Package",
+        response_fields={
             "package_id": package_id,
             "source": source,
-            "next_steps": STANDARD_NEXT_STEPS,
-            "result_file": "Temp/vb_result.json",
         },
-        indent=2,
     )
 
 
@@ -347,21 +313,12 @@ async def _handle_settings_remove_package(package_id: str) -> str:
     script = generate_package_remove_script(package_id=package_id)
     script_path = "Assets/Editor/Generated/Settings/VeilBreakers_RemovePackage.cs"
 
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "remove_package", "message": str(exc)})
-
-    return json.dumps(
-        {
-            "status": "success",
-            "action": "remove_package",
-            "script_path": abs_path,
-            "package_id": package_id,
-            "next_steps": STANDARD_NEXT_STEPS,
-            "result_file": "Temp/vb_result.json",
-        },
-        indent=2,
+    return await _write_settings_response(
+        "remove_package",
+        script,
+        script_path,
+        menu_path="VeilBreakers/Settings/Remove Package",
+        response_fields={"package_id": package_id},
     )
 
 
@@ -376,20 +333,11 @@ async def _handle_settings_tags_layers(
     )
     script_path = "Assets/Editor/Generated/Settings/VeilBreakers_TagsLayers.cs"
 
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "manage_tags_layers", "message": str(exc)})
-
-    return json.dumps(
-        {
-            "status": "success",
-            "action": "manage_tags_layers",
-            "script_path": abs_path,
-            "next_steps": STANDARD_NEXT_STEPS,
-            "result_file": "Temp/vb_result.json",
-        },
-        indent=2,
+    return await _write_settings_response(
+        "manage_tags_layers",
+        script,
+        script_path,
+        menu_path="VeilBreakers/Settings/Manage Tags & Layers",
     )
 
 
@@ -398,21 +346,12 @@ async def _handle_settings_sync_tags_layers(constants_cs_path: str) -> str:
     script = generate_tag_layer_sync_script(constants_cs_path=constants_cs_path)
     script_path = "Assets/Editor/Generated/Settings/VeilBreakers_SyncTagsLayers.cs"
 
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "sync_tags_layers", "message": str(exc)})
-
-    return json.dumps(
-        {
-            "status": "success",
-            "action": "sync_tags_layers",
-            "script_path": abs_path,
-            "constants_path": constants_cs_path,
-            "next_steps": STANDARD_NEXT_STEPS,
-            "result_file": "Temp/vb_result.json",
-        },
-        indent=2,
+    return await _write_settings_response(
+        "sync_tags_layers",
+        script,
+        script_path,
+        menu_path="VeilBreakers/Settings/Sync Tags & Layers from Code",
+        response_fields={"constants_path": constants_cs_path},
     )
 
 
@@ -427,20 +366,11 @@ async def _handle_settings_time(
     )
     script_path = "Assets/Editor/Generated/Settings/VeilBreakers_TimeSettings.cs"
 
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "configure_time", "message": str(exc)})
-
-    return json.dumps(
-        {
-            "status": "success",
-            "action": "configure_time",
-            "script_path": abs_path,
-            "next_steps": STANDARD_NEXT_STEPS,
-            "result_file": "Temp/vb_result.json",
-        },
-        indent=2,
+    return await _write_settings_response(
+        "configure_time",
+        script,
+        script_path,
+        menu_path="VeilBreakers/Settings/Configure Time Settings",
     )
 
 
@@ -459,18 +389,9 @@ async def _handle_settings_graphics(
     )
     script_path = "Assets/Editor/Generated/Settings/VeilBreakers_GraphicsSettings.cs"
 
-    try:
-        abs_path = _write_to_unity(script, script_path)
-    except ValueError as exc:
-        return json.dumps({"status": "error", "action": "configure_graphics", "message": str(exc)})
-
-    return json.dumps(
-        {
-            "status": "success",
-            "action": "configure_graphics",
-            "script_path": abs_path,
-            "next_steps": STANDARD_NEXT_STEPS,
-            "result_file": "Temp/vb_result.json",
-        },
-        indent=2,
+    return await _write_settings_response(
+        "configure_graphics",
+        script,
+        script_path,
+        menu_path="VeilBreakers/Settings/Configure Graphics Settings",
     )

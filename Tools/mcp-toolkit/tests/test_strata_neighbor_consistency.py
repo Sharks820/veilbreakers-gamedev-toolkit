@@ -10,7 +10,6 @@ and asserts shared-edge orientations match.
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from blender_addon.handlers.terrain_stratigraphy import (
     StratigraphyLayer,

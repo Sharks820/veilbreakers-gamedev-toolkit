@@ -23,7 +23,6 @@ from .terrain_pipeline import TerrainPassController
 from .terrain_semantics import (
     TerrainIntentState,
     TerrainMaskStack,
-    TerrainPipelineState,
     ValidationIssue,
 )
 

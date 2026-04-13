@@ -12,7 +12,6 @@ import pytest
 
 from blender_addon.handlers.terrain_semantics import (
     BBox,
-    PassResult,
     ProtectedZoneSpec,
     TerrainIntentState,
     TerrainMaskStack,

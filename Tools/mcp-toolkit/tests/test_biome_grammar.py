@@ -19,8 +19,6 @@ from blender_addon.handlers._biome_grammar import (
     WorldMapSpec,
     generate_world_map_spec,
     resolve_biome_name,
-    BIOME_ALIASES,
-    BIOME_CLIMATE_PARAMS,
 )
 
 

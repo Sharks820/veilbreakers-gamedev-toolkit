@@ -188,7 +188,6 @@ class TestBSPDungeon:
 
     def test_t_junction_cleanup_runs(self):
         """T-junction cleanup should not break grid validity."""
-        from blender_addon.handlers._dungeon_gen import _cleanup_t_junctions
         layout = generate_bsp_dungeon(64, 64, seed=42)
         # Grid values should still be valid after cleanup
         unique = set(np.unique(layout.grid))

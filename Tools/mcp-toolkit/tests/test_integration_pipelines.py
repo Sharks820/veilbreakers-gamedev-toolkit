@@ -11,11 +11,9 @@ boundaries.
 from __future__ import annotations
 
 import math
-import random
 import unittest
 
 import numpy as np
-import pytest
 
 # ---------------------------------------------------------------------------
 # Suite 1: compose_world_map integration
@@ -24,9 +22,6 @@ from blender_addon.handlers.map_composer import (
     compose_world_map,
     _sample_heightmap,
     _calculate_slope,
-    _get_biome_at,
-    _generate_world_roads,
-    _generate_world_features,
     POI_PLACEMENT_RULES,
     VB_BIOMES,
 )
@@ -37,7 +32,6 @@ from blender_addon.handlers.building_interior_binding import (
     generate_door_metadata,
     generate_interior_spec_from_building,
     get_room_types_for_building,
-    get_interior_materials,
     BUILDING_ROOM_MAP,
     STYLE_MATERIAL_MAP,
 )
@@ -45,16 +39,12 @@ from blender_addon.handlers.building_interior_binding import (
 # Suite 3: Building generation correctness
 from blender_addon.handlers._building_grammar import (
     evaluate_building_grammar,
-    generate_castle_spec,
-    generate_tower_spec,
     BuildingSpec,
     STYLE_CONFIGS,
-    FURNITURE_SCALE_REFERENCE,
     validate_furniture_scale,
     generate_interior_layout,
     generate_clutter_layout,
     add_storytelling_props,
-    _check_collision,
     _in_bounds,
     _door_corridor_clear,
     _ROOM_CONFIGS,
@@ -1104,7 +1094,7 @@ class TestStorytellingPropsIntegration(unittest.TestCase):
         kitchen_props = add_storytelling_props("kitchen", 8.0, 8.0, seed=42)
 
         crypt_cobwebs = sum(1 for p in crypt_props if p["prop_type"] == "cobwebs")
-        kitchen_cobwebs = sum(1 for p in kitchen_props if p["prop_type"] == "cobwebs")
+        sum(1 for p in kitchen_props if p["prop_type"] == "cobwebs")
 
         # Crypt modifier for cobwebs is 2.0, so expect more
         # (This is probabilistic, so we use a generous threshold)
@@ -1230,8 +1220,8 @@ class TestBuildingToFurnitureEndToEnd(unittest.TestCase):
 
             # All placed items must fit within room bounds
             for item in layout:
-                x, y = item["position"][0], item["position"][1]
-                sx, sy = item["scale"][0], item["scale"][1]
+                x, _y = item["position"][0], item["position"][1]
+                sx, _sy = item["scale"][0], item["scale"][1]
                 # Items must be within room dimensions
                 self.assertGreaterEqual(x - sx / 2, -0.1,
                                         f"Room {room['name']}: {item['type']} "
@@ -1397,8 +1387,7 @@ if __name__ == "__main__":
 # ===========================================================================
 
 
-import os
-import tempfile
+import tempfile  # noqa: E402
 
 
 class TestComposeMapCheckpointPreservesInteriorResults(unittest.TestCase):

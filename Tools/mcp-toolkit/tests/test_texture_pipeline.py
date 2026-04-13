@@ -11,7 +11,6 @@ Pure-logic tests run without Blender. Tests that require bpy are
 tested via signature validation and configuration checks.
 """
 
-import io
 import os
 import tempfile
 
@@ -227,7 +226,7 @@ class TestChannelPack:
         os.close(fd)
 
         try:
-            result = handle_channel_pack({
+            handle_channel_pack({
                 "red_path": None,
                 "green_path": green_path,
                 "blue_path": None,

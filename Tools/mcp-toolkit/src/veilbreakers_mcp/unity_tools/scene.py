@@ -5,7 +5,7 @@ from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, logger,
-    _write_to_unity, STANDARD_NEXT_STEPS,
+    _write_generated_editor_response,
 )
 
 from veilbreakers_mcp.shared.unity_templates.scene_templates import (
@@ -29,6 +29,34 @@ from veilbreakers_mcp.shared.unity_templates.animation_templates import (
 # ---------------------------------------------------------------------------
 # Scene tool -- compound tool covering SCENE-01 through SCENE-07 plus SCENE-01b
 # ---------------------------------------------------------------------------
+
+
+def _escape_menu_path(value: str) -> str:
+    """Escape a string for use inside a Unity menu path."""
+    return (
+        value.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+    )
+
+
+async def _write_scene_script(
+    action_name: str,
+    script_content: str,
+    rel_path: str,
+    *,
+    menu_path: str,
+    response_fields: dict | None = None,
+) -> str:
+    """Write a scene editor script and bridge-execute its MenuItem."""
+    return await _write_generated_editor_response(
+        action_name=action_name,
+        script_content=script_content,
+        rel_path=rel_path,
+        menu_path=menu_path,
+        response_fields=response_fields,
+    )
 
 
 @mcp.tool()
@@ -183,25 +211,22 @@ async def _handle_scene_setup_terrain(
     script_path = "Assets/Editor/Generated/Scene/VeilBreakers_TerrainSetup.cs"
 
     try:
-        abs_path = _write_to_unity(script, script_path)
+        return await _write_scene_script(
+            "setup_terrain",
+            script,
+            script_path,
+            menu_path="VeilBreakers/Scene/Setup Terrain",
+            response_fields={
+                "heightmap_path": heightmap_path,
+                "alphamap_path": alphamap_path,
+                "terrain_size": list(size_tuple),
+                "resolution": terrain_resolution,
+            },
+        )
     except ValueError as exc:
         return json.dumps(
             {"status": "error", "action": "setup_terrain", "message": str(exc)}
         )
-
-    return json.dumps(
-        {
-            "status": "success",
-            "action": "setup_terrain",
-            "script_path": abs_path,
-            "heightmap_path": heightmap_path,
-            "terrain_size": list(size_tuple),
-            "resolution": terrain_resolution,
-            "next_steps": STANDARD_NEXT_STEPS,
-            "result_file": "Temp/vb_result.json",
-        },
-        indent=2,
-    )
 
 
 async def _handle_scene_setup_tiled_terrain(
@@ -231,25 +256,22 @@ async def _handle_scene_setup_tiled_terrain(
     script_path = "Assets/Editor/Generated/Scene/VeilBreakers_TiledTerrainSetup.cs"
 
     try:
-        abs_path = _write_to_unity(script, script_path)
+        return await _write_scene_script(
+            "setup_tiled_terrain",
+            script,
+            script_path,
+            menu_path="VeilBreakers/Scene/Setup Tiled Terrain",
+            response_fields={
+                "tile_count": len(terrain_tiles),
+                "terrain_size": list(size_tuple),
+                "resolution": terrain_resolution,
+                "tile_parent_name": tile_parent_name,
+            },
+        )
     except ValueError as exc:
         return json.dumps(
             {"status": "error", "action": "setup_tiled_terrain", "message": str(exc)}
         )
-
-    return json.dumps(
-        {
-            "status": "success",
-            "action": "setup_tiled_terrain",
-            "script_path": abs_path,
-            "tile_count": len(terrain_tiles),
-            "terrain_size": list(size_tuple),
-            "resolution": terrain_resolution,
-            "next_steps": STANDARD_NEXT_STEPS,
-            "result_file": "Temp/vb_result.json",
-        },
-        indent=2,
-    )
 
 
 async def _handle_scene_scatter_objects(
@@ -281,25 +303,25 @@ async def _handle_scene_scatter_objects(
     script_path = "Assets/Editor/Generated/Scene/VeilBreakers_ObjectScatter.cs"
 
     try:
-        abs_path = _write_to_unity(script, script_path)
+        return await _write_scene_script(
+            "scatter_objects",
+            script,
+            script_path,
+            menu_path="VeilBreakers/Scene/Scatter Objects",
+            response_fields={
+                "prefab_paths": prefab_paths,
+                "density": density,
+                "min_slope": min_slope,
+                "max_slope": max_slope,
+                "min_altitude": min_altitude,
+                "max_altitude": max_altitude,
+                "seed": seed,
+            },
+        )
     except ValueError as exc:
         return json.dumps(
             {"status": "error", "action": "scatter_objects", "message": str(exc)}
         )
-
-    return json.dumps(
-        {
-            "status": "success",
-            "action": "scatter_objects",
-            "script_path": abs_path,
-            "prefab_paths": prefab_paths,
-            "density": density,
-            "seed": seed,
-            "next_steps": STANDARD_NEXT_STEPS,
-            "result_file": "Temp/vb_result.json",
-        },
-        indent=2,
-    )
 
 
 async def _handle_scene_setup_lighting(
@@ -326,25 +348,22 @@ async def _handle_scene_setup_lighting(
     script_path = "Assets/Editor/Generated/Scene/VeilBreakers_LightingSetup.cs"
 
     try:
-        abs_path = _write_to_unity(script, script_path)
+        return await _write_scene_script(
+            "setup_lighting",
+            script,
+            script_path,
+            menu_path="VeilBreakers/Scene/Setup Lighting",
+            response_fields={
+                "time_of_day": time_of_day,
+                "fog_enabled": fog_enabled,
+                "sun_intensity": sun_intensity,
+                "fog_density": fog_density,
+            },
+        )
     except ValueError as exc:
         return json.dumps(
             {"status": "error", "action": "setup_lighting", "message": str(exc)}
         )
-
-    return json.dumps(
-        {
-            "status": "success",
-            "action": "setup_lighting",
-            "script_path": abs_path,
-            "time_of_day": time_of_day,
-            "fog_enabled": fog_enabled,
-            "sun_intensity": sun_intensity,
-            "next_steps": STANDARD_NEXT_STEPS,
-            "result_file": "Temp/vb_result.json",
-        },
-        indent=2,
-    )
 
 
 async def _handle_scene_bake_navmesh(
@@ -365,26 +384,23 @@ async def _handle_scene_bake_navmesh(
     script_path = "Assets/Editor/Generated/Scene/VeilBreakers_NavMeshBake.cs"
 
     try:
-        abs_path = _write_to_unity(script, script_path)
+        return await _write_scene_script(
+            "bake_navmesh",
+            script,
+            script_path,
+            menu_path="VeilBreakers/Scene/Bake NavMesh",
+            response_fields={
+                "agent_radius": agent_radius,
+                "agent_height": agent_height,
+                "max_slope": max_slope,
+                "step_height": step_height,
+                "nav_links": nav_links or [],
+            },
+        )
     except ValueError as exc:
         return json.dumps(
             {"status": "error", "action": "bake_navmesh", "message": str(exc)}
         )
-
-    return json.dumps(
-        {
-            "status": "success",
-            "action": "bake_navmesh",
-            "script_path": abs_path,
-            "agent_radius": agent_radius,
-            "agent_height": agent_height,
-            "max_slope": max_slope,
-            "step_height": step_height,
-            "next_steps": STANDARD_NEXT_STEPS,
-            "result_file": "Temp/vb_result.json",
-        },
-        indent=2,
-    )
 
 
 async def _handle_scene_create_animator(
@@ -413,24 +429,22 @@ async def _handle_scene_create_animator(
     script_path = f"Assets/Editor/Generated/Scene/VeilBreakers_Animator_{safe_name}.cs"
 
     try:
-        abs_path = _write_to_unity(script, script_path)
+        return await _write_scene_script(
+            "create_animator",
+            script,
+            script_path,
+            menu_path=f"VeilBreakers/Scene/Create Animator/{_escape_menu_path(name)}",
+            response_fields={
+                "name": name,
+                "state_count": len(states),
+                "transition_count": len(transitions or []),
+                "parameter_count": len(parameters or []),
+            },
+        )
     except ValueError as exc:
         return json.dumps(
             {"status": "error", "action": "create_animator", "message": str(exc)}
         )
-
-    return json.dumps(
-        {
-            "status": "success",
-            "action": "create_animator",
-            "name": name,
-            "script_path": abs_path,
-            "state_count": len(states),
-            "next_steps": STANDARD_NEXT_STEPS,
-            "result_file": "Temp/vb_result.json",
-        },
-        indent=2,
-    )
 
 
 async def _handle_scene_configure_avatar(
@@ -454,24 +468,21 @@ async def _handle_scene_configure_avatar(
     script_path = "Assets/Editor/Generated/Scene/VeilBreakers_AvatarConfig.cs"
 
     try:
-        abs_path = _write_to_unity(script, script_path)
+        return await _write_scene_script(
+            "configure_avatar",
+            script,
+            script_path,
+            menu_path="VeilBreakers/Scene/Configure Avatar",
+            response_fields={
+                "fbx_path": fbx_path,
+                "animation_type": animation_type,
+                "bone_mapping": bone_mapping or {},
+            },
+        )
     except ValueError as exc:
         return json.dumps(
             {"status": "error", "action": "configure_avatar", "message": str(exc)}
         )
-
-    return json.dumps(
-        {
-            "status": "success",
-            "action": "configure_avatar",
-            "script_path": abs_path,
-            "fbx_path": fbx_path,
-            "animation_type": animation_type,
-            "next_steps": STANDARD_NEXT_STEPS,
-            "result_file": "Temp/vb_result.json",
-        },
-        indent=2,
-    )
 
 
 async def _handle_scene_setup_animation_rigging(
@@ -494,24 +505,20 @@ async def _handle_scene_setup_animation_rigging(
     script_path = f"Assets/Editor/Generated/Scene/VeilBreakers_Rigging_{safe_name}.cs"
 
     try:
-        abs_path = _write_to_unity(script, script_path)
+        return await _write_scene_script(
+            "setup_animation_rigging",
+            script,
+            script_path,
+            menu_path=f"VeilBreakers/Scene/Setup Animation Rigging/{_escape_menu_path(name)}",
+            response_fields={
+                "name": name,
+                "constraint_count": len(constraints),
+            },
+        )
     except ValueError as exc:
         return json.dumps(
             {"status": "error", "action": "setup_animation_rigging", "message": str(exc)}
         )
-
-    return json.dumps(
-        {
-            "status": "success",
-            "action": "setup_animation_rigging",
-            "name": name,
-            "script_path": abs_path,
-            "constraint_count": len(constraints),
-            "next_steps": STANDARD_NEXT_STEPS,
-            "result_file": "Temp/vb_result.json",
-        },
-        indent=2,
-    )
 
 
 async def _handle_scene_create_blend_tree(
@@ -529,18 +536,21 @@ async def _handle_scene_create_blend_tree(
     safe_name = controller_name.replace(" ", "_").replace("-", "_")
     rel_path = f"Assets/Editor/Generated/Animation/VeilBreakers_BlendTree_{safe_name}.cs"
     try:
-        abs_path = _write_to_unity(script, rel_path)
+        return await _write_scene_script(
+            "create_blend_tree",
+            script,
+            rel_path,
+            menu_path=f"VeilBreakers/Animation/Create Blend Tree/{_escape_menu_path(controller_name)}",
+            response_fields={
+                "blend_type": blend_type,
+                "controller_name": controller_name,
+                "state_count": len(states or []),
+                "parameter_count": len(parameters or []),
+                "motion_clip_count": len(motion_clips or {}),
+            },
+        )
     except ValueError as exc:
         return json.dumps({"status": "error", "action": "create_blend_tree", "message": str(exc)})
-    return json.dumps({
-        "status": "success",
-        "action": "create_blend_tree",
-        "blend_type": blend_type,
-        "controller_name": controller_name,
-        "script_path": abs_path,
-        "next_steps": STANDARD_NEXT_STEPS,
-        "result_file": "Temp/vb_result.json",
-    }, indent=2)
 
 
 async def _handle_scene_create_additive_layer(
@@ -566,15 +576,17 @@ async def _handle_scene_create_additive_layer(
     safe_name = name.replace(" ", "_").replace("-", "_")
     rel_path = f"Assets/Editor/Generated/Animation/VeilBreakers_AdditiveLayer_{safe_name}.cs"
     try:
-        abs_path = _write_to_unity(script, rel_path)
+        return await _write_scene_script(
+            "create_additive_layer",
+            script,
+            rel_path,
+            menu_path=f"VeilBreakers/Animation/Create Additive Layers/{_escape_menu_path(name)}",
+            response_fields={
+                "controller_name": name,
+                "layer_name": layer_name,
+                "base_layer_index": base_layer_index,
+                "additive_clip_count": len(additive_clips or []),
+            },
+        )
     except ValueError as exc:
         return json.dumps({"status": "error", "action": "create_additive_layer", "message": str(exc)})
-    return json.dumps({
-        "status": "success",
-        "action": "create_additive_layer",
-        "controller_name": name,
-        "layer_name": layer_name,
-        "script_path": abs_path,
-        "next_steps": STANDARD_NEXT_STEPS,
-        "result_file": "Temp/vb_result.json",
-    }, indent=2)

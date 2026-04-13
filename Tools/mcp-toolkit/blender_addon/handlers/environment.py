@@ -15,10 +15,9 @@ from __future__ import annotations
 
 import logging
 import math
-import struct
 import zlib
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import numpy as np
 
@@ -27,31 +26,25 @@ import bmesh
 
 logger = logging.getLogger(__name__)
 
-from ._terrain_noise import (
+from ._terrain_noise import (  # noqa: E402
     generate_heightmap,
-    compute_slope_map,
-    compute_biome_assignments,
     carve_river_path,
     generate_road_path,
     _theoretical_max_amplitude,
     TERRAIN_PRESETS,
     BIOME_RULES,
 )
-from ._terrain_erosion import (
-    apply_hydraulic_erosion,
-    apply_thermal_erosion,
-)
-from ._terrain_world import (
+from ._terrain_world import (  # noqa: E402
     erode_world_heightmap,
     generate_world_heightmap,
 )
 # NOTE: extract_tile and world_region_dimensions were removed from this import
 # because they are only used by the deprecated handle_generate_world_terrain.
 # They remain available in _terrain_world for direct import if needed.
-from .terrain_chunking import validate_tile_seams
-from .terrain_materials import compute_world_splatmap_weights
-from .terrain_features import generate_waterfall
-from ._water_network import WaterNetwork
+from .terrain_materials import compute_world_splatmap_weights  # noqa: E402
+from .terrain_features import generate_waterfall  # noqa: E402
+from ._water_network import WaterNetwork  # noqa: E402
+from .terrain_semantics import WorldHeightTransform  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -85,6 +78,45 @@ def _detect_grid_dims(bm) -> tuple[int, int]:
     # Fallback: assume square
     side = max(2, int(math.sqrt(len(bm.verts))))
     return side, side
+
+
+def _run_height_solver_in_world_space(
+    heightmap: np.ndarray,
+    solver: Callable[..., tuple[list[tuple[int, int]], np.ndarray]],
+    /,
+    **solver_kwargs: Any,
+) -> tuple[list[tuple[int, int]], np.ndarray, WorldHeightTransform]:
+    """Run a normalized terrain-path solver while preserving world-unit heights.
+
+    ``carve_river_path`` and ``generate_road_path`` still operate in a
+    normalized ``[0, 1]`` domain. This adapter preserves signed/negative
+    elevations by explicitly normalizing with ``WorldHeightTransform`` and
+    restoring the world-unit result after the solver returns.
+    """
+    world_heightmap = np.asarray(heightmap, dtype=np.float64)
+    if world_heightmap.ndim != 2:
+        raise ValueError("heightmap must be a 2D array")
+
+    transform = WorldHeightTransform(
+        world_min=float(world_heightmap.min()) if world_heightmap.size else 0.0,
+        world_max=float(world_heightmap.max()) if world_heightmap.size else 0.0,
+    )
+    normalized = np.clip(transform.to_normalized(world_heightmap), 0.0, 1.0)
+    path, solved = solver(normalized, **solver_kwargs)
+    restored = transform.from_normalized(np.asarray(solved, dtype=np.float64))
+    return path, restored, transform
+
+
+def _normalize_altitude_for_rule_range(
+    altitude_z: float,
+    *,
+    range_min: float,
+    range_max: float,
+) -> float:
+    """Map a world/local Z value into the biome-rule altitude domain [0, 1]."""
+    span = max(float(range_max) - float(range_min), 1e-9)
+    normalized = (float(altitude_z) - float(range_min)) / span
+    return max(0.0, min(1.0, normalized))
 
 
 # ---------------------------------------------------------------------------
@@ -792,6 +824,7 @@ def _create_terrain_mesh_from_heightmap(
     object_location: tuple[float, float, float] = (0.0, 0.0, 0.0),
     cliff_overlays_enabled: bool = True,
     cliff_threshold_deg: float = 60.0,
+    controller_cliff_placements: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Create a terrain mesh object from a heightmap and optional cliff overlays."""
     rows, cols = heightmap.shape
@@ -801,7 +834,7 @@ def _create_terrain_mesh_from_heightmap(
 
     # Create UV layer BEFORE create_grid so calc_uvs has somewhere to write.
     # Without this, calc_uvs=True silently produces nothing (verified bug).
-    uv_layer = bm.loops.layers.uv.new("UVMap")
+    _uv_layer = bm.loops.layers.uv.new("UVMap")
 
     bmesh.ops.create_grid(
         bm,
@@ -853,13 +886,16 @@ def _create_terrain_mesh_from_heightmap(
     if cliff_overlays_enabled:
         from ._terrain_depth import detect_cliff_edges, generate_cliff_face_mesh
 
-        cliff_placements = detect_cliff_edges(
-            heightmap,
-            slope_threshold_deg=cliff_threshold_deg,
-            min_cluster_size=4,
-            terrain_size=terrain_size,
-            height_scale=height_scale,
-        )
+        if controller_cliff_placements is not None:
+            cliff_placements = list(controller_cliff_placements)
+        else:
+            cliff_placements = detect_cliff_edges(
+                heightmap,
+                slope_threshold_deg=cliff_threshold_deg,
+                min_cluster_size=4,
+                terrain_size=terrain_size,
+                height_scale=height_scale,
+            )
         for i, cp in enumerate(cliff_placements):
             cliff_mesh_spec = generate_cliff_face_mesh(
                 width=cp["width"],
@@ -912,10 +948,82 @@ def _create_terrain_mesh_from_heightmap(
         "name": obj.name,
         "vertex_count": vertex_count,
         "cliff_overlays": len(cliff_placements),
+        "hero_cliff_overlays": sum(
+            1 for cp in cliff_placements
+            if str(cp.get("tier", "secondary")) == "hero"
+        ),
         "terrain_size": terrain_size,
         "object_location": tuple(obj.location),
         "terrain_type": terrain_type,
     }
+
+
+def _cliff_structures_to_overlay_placements(
+    heightmap: np.ndarray,
+    cliffs: list[Any],
+    *,
+    terrain_size: float | tuple[float, float],
+    height_scale: float,
+) -> list[dict[str, Any]]:
+    """Convert Bundle B cliff structures into overlay placements."""
+    heightmap = np.asarray(heightmap, dtype=np.float64)
+    rows, cols = heightmap.shape
+    if rows == 0 or cols == 0:
+        return []
+
+    if isinstance(terrain_size, (tuple, list)):
+        if len(terrain_size) < 2:
+            raise ValueError("terrain_size tuple must contain width and height")
+        terrain_width = max(float(terrain_size[0]), 1e-9)
+        terrain_height = max(float(terrain_size[1]), 1e-9)
+    else:
+        terrain_width = terrain_height = max(float(terrain_size), 1e-9)
+
+    row_spacing = terrain_height / max(rows - 1, 1)
+    col_spacing = terrain_width / max(cols - 1, 1)
+    grad_y, grad_x = np.gradient(heightmap, row_spacing, col_spacing)
+
+    placements: list[dict[str, Any]] = []
+    for cliff in cliffs:
+        face_mask = np.asarray(getattr(cliff, "face_mask", None), dtype=bool)
+        if face_mask.size == 0 or not face_mask.any():
+            continue
+
+        cells = np.argwhere(face_mask)
+        r_min, c_min = cells.min(axis=0)
+        r_max, c_max = cells.max(axis=0)
+        r_center = (r_min + r_max) / 2.0
+        c_center = (c_min + c_max) / 2.0
+
+        wx = (c_center / max(cols - 1, 1) - 0.5) * terrain_width
+        wy = (r_center / max(rows - 1, 1) - 0.5) * terrain_height
+        ri = int(np.clip(r_center, 0, rows - 1))
+        ci = int(np.clip(c_center, 0, cols - 1))
+        wz = float(heightmap[ri, ci]) * float(height_scale)
+
+        face_angle = math.atan2(float(grad_y[ri, ci]), float(grad_x[ri, ci]))
+        width_x = (c_max - c_min + 1) * col_spacing
+        width_y = (r_max - r_min + 1) * row_spacing
+        width = max(width_x, width_y, 2.0)
+        raw_height_range = float(
+            heightmap[cells[:, 0], cells[:, 1]].max()
+            - heightmap[cells[:, 0], cells[:, 1]].min()
+        )
+        cliff_height = max(raw_height_range * float(height_scale), 2.0)
+
+        placements.append(
+            {
+                "cliff_id": str(getattr(cliff, "cliff_id", f"cliff_{len(placements):02d}")),
+                "tier": str(getattr(cliff, "tier", "secondary")),
+                "position": [wx, wy, wz],
+                "rotation": [0.0, 0.0, face_angle],
+                "width": width,
+                "height": cliff_height,
+                "cell_count": int(getattr(cliff, "cell_count", int(cells.shape[0]))),
+            }
+        )
+
+    return placements
 
 
 # ---------------------------------------------------------------------------
@@ -988,12 +1096,7 @@ def handle_generate_terrain(params: dict) -> dict:
     erosion = validated["erosion"]
     erosion_iters = validated["erosion_iterations"]
 
-    # --- Controller path (Fix H1): route through TerrainPassController ---
-    # When use_controller=True, the terrain pipeline's registered passes
-    # (macro_world -> structural_masks -> erosion -> validation_minimal)
-    # run instead of the legacy inline heightmap+erosion code.  This
-    # ensures Bundle A-O passes, controller checkpoints, and contract
-    # enforcement are applied.
+    # --- Controller path: controller state is the terrain source of truth ---
     if use_controller:
         controller_params = {
             "tile_size": max(resolution - 1, 1),
@@ -1002,11 +1105,10 @@ def handle_generate_terrain(params: dict) -> dict:
             "terrain_type": terrain_type,
             "scale": scale,
         }
-        # Build the pipeline: always include erosion when requested
         pipeline = ["macro_world", "structural_masks"]
         if erosion in ("hydraulic", "thermal", "both"):
             pipeline.append("erosion")
-            # Provide a scene_read so the controller allows the erosion pass
+            pipeline.append("structural_masks")
             controller_params["scene_read"] = {
                 "timestamp": 0.0,
                 "reviewer": "compose_map",
@@ -1016,53 +1118,54 @@ def handle_generate_terrain(params: dict) -> dict:
                 else "arid" if erosion == "thermal"
                 else "temperate"
             )
+        if params.get("cliff_overlays", True):
+            pipeline.append("cliffs")
         pipeline.append("validation_minimal")
         controller_params["pipeline"] = pipeline
 
-        controller_result = handle_run_terrain_pass(controller_params)
-
-        # Extract the heightmap from the controller's mask stack for mesh creation.
-        # The controller stores height in the mask stack; we pull it from the
-        # result if available, otherwise fall back to generating one.
-        controller_ok = controller_result.get("ok", False)
-
-        # The controller ran analytical passes.  Now generate the heightmap
-        # for mesh creation using the same parameters (the controller's
-        # macro_world pass already produced one internally, but it's not
-        # directly returned in the result dict -- we regenerate with the
-        # same seed for determinism).
-        heightmap = generate_heightmap(
-            width=resolution,
-            height=resolution,
-            scale=scale,
-            octaves=validated["octaves"],
-            persistence=validated["persistence"],
-            lacunarity=validated["lacunarity"],
-            seed=seed,
-            terrain_type=terrain_type,
-            warp_strength=params.get("warp_strength", 0.4),
-            warp_scale=params.get("warp_scale", 0.5),
-        )
-
-        erosion_applied = False
-        if erosion in ("hydraulic", "both") or erosion in ("thermal", "both"):
-            erosion_result = erode_world_heightmap(
-                heightmap,
-                hydraulic_iterations=erosion_iters if erosion in ("hydraulic", "both") else 0,
-                thermal_iterations=max(erosion_iters // 50, 5) if erosion in ("thermal", "both") else 0,
-                seed=seed,
+        controller_run = _execute_terrain_pipeline(controller_params)
+        controller_state = controller_run["state"]
+        controller_results = controller_run["results"]
+        failed_passes = [
+            result.pass_name
+            for result in controller_results
+            if result.status == "failed"
+        ]
+        if failed_passes:
+            raise RuntimeError(
+                "TerrainPassController failed before mesh generation"
+                + f" (failed passes: {', '.join(failed_passes)})"
             )
-            heightmap = erosion_result["heightmap"]
-            erosion_applied = True
+
+        heightmap = np.asarray(controller_state.mask_stack.height, dtype=np.float64).copy()
+        erosion_applied = erosion in ("hydraulic", "thermal", "both")
 
         # Apply flatten zones for building foundations (MESH-05)
         flatten_zones = params.get("flatten_zones", None)
         if flatten_zones:
             from .terrain_advanced import flatten_multiple_zones
             heightmap = flatten_multiple_zones(heightmap, flatten_zones)
+            controller_state.mask_stack.set("height", heightmap, "flatten_multiple_zones")
+            controller_state.mask_stack.height_min_m = float(heightmap.min()) if heightmap.size else 0.0
+            controller_state.mask_stack.height_max_m = float(heightmap.max()) if heightmap.size else 0.0
 
         terrain_size = scale
         object_location = tuple(params.get("object_location", (0.0, 0.0, 0.0)))
+        controller_cliff_placements: list[dict[str, Any]] | None = None
+        if params.get("cliff_overlays", True) and controller_state.mask_stack.cliff_candidate is not None:
+            from .terrain_cliffs import carve_cliff_system
+
+            controller_cliffs = carve_cliff_system(
+                controller_state,
+                region=None,
+                candidate_mask=np.asarray(controller_state.mask_stack.cliff_candidate, dtype=bool),
+            )
+            controller_cliff_placements = _cliff_structures_to_overlay_placements(
+                heightmap,
+                controller_cliffs,
+                terrain_size=terrain_size,
+                height_scale=height_scale,
+            )
         terrain_result = _create_terrain_mesh_from_heightmap(
             name=name,
             heightmap=heightmap,
@@ -1073,6 +1176,7 @@ def handle_generate_terrain(params: dict) -> dict:
             object_location=object_location,
             cliff_overlays_enabled=params.get("cliff_overlays", True),
             cliff_threshold_deg=params.get("cliff_threshold_deg", 60.0),
+            controller_cliff_placements=controller_cliff_placements,
         )
 
         result = {
@@ -1083,11 +1187,12 @@ def handle_generate_terrain(params: dict) -> dict:
             "height_scale": height_scale,
             "erosion_applied": erosion_applied,
             "cliff_overlays": terrain_result["cliff_overlays"],
+            "hero_cliff_overlays": terrain_result.get("hero_cliff_overlays", 0),
             "flatten_zones_applied": len(flatten_zones) if flatten_zones else 0,
             "has_moisture_map": False,
             "controller_used": True,
-            "controller_ok": controller_ok,
-            "controller_passes": [r.get("pass_name") for r in controller_result.get("results", [])],
+            "controller_ok": not failed_passes,
+            "controller_passes": [r.pass_name for r in controller_results],
         }
         if biome_preset is not None:
             result["biome_preset"] = biome_name
@@ -1413,38 +1518,9 @@ def handle_generate_world_terrain(params: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def handle_run_terrain_pass(params: dict) -> dict:
-    """Run a registered terrain pass via ``TerrainPassController``.
-
-    Required params:
-        pass_name (str)  — name of a registered pass (e.g. "macro_world")
-        tile_size (int)  — cells per tile edge
-        cell_size (float)
-        seed (int)
-
-    Optional params:
-        tile_x (int=0), tile_y (int=0)
-        world_origin_x (float=0.0), world_origin_y (float=0.0)
-        region_bounds (dict|list) — BBox for the intent region
-        region (dict|list) — BBox for scoped execution
-        protected_zones (list[dict])
-        scene_read (dict)  — presence signals that scene-read requirement is met
-        height (list[list[float]]|np.ndarray) — optional pre-built heightmap
-        terrain_type (str), scale (float) — for generating initial height
-        erosion_profile (str)
-        pipeline (list[str]) — pass sequence
-        pass_name=... with pipeline=None runs a single pass
-
-    Default behavior:
-        - with ``scene_read``: ``macro_world -> structural_masks -> erosion -> validation_minimal``
-        - without ``scene_read``: ``macro_world -> structural_masks -> validation_minimal``
-
-    Returns:
-        dict with ``ok``, ``results`` (list of PassResult dicts),
-        ``content_hash``, ``populated_channels``.
-    """
+def _execute_terrain_pipeline(params: dict) -> dict[str, Any]:
+    """Execute a terrain pass or pipeline and return live controller state."""
     # Local imports to avoid circular dependency at module load.
-    from . import _terrain_world as _tw
     from .terrain_master_registrar import register_all_terrain_passes
     from .terrain_pipeline import TerrainPassController
     from .terrain_semantics import (
@@ -1646,13 +1722,21 @@ def handle_run_terrain_pass(params: dict) -> dict:
 
     if pipeline is not None:
         pipeline = list(pipeline)
-        if (
-            "validation_full" in pipeline
-            and not unity_export_opt_out
-            and "prepare_heightmap_raw_u16" not in pipeline
-        ):
+        if "validation_full" in pipeline and not unity_export_opt_out:
             insert_at = pipeline.index("validation_full")
-            pipeline.insert(insert_at, "prepare_heightmap_raw_u16")
+            for prereq in ("materials_v2", "navmesh", "prepare_terrain_normals", "prepare_heightmap_raw_u16"):
+                if prereq not in pipeline:
+                    pipeline.insert(insert_at, prereq)
+                    insert_at += 1
+
+    requested_after_injection = list(pipeline) if pipeline is not None else [str(pass_name)]
+    missing_after_injection = [
+        pipeline_pass
+        for pipeline_pass in requested_after_injection
+        if pipeline_pass not in TerrainPassController.PASS_REGISTRY
+    ]
+    if missing_after_injection:
+        register_all_terrain_passes(strict=False)
 
     try:
         if pipeline is not None:
@@ -1673,6 +1757,52 @@ def handle_run_terrain_pass(params: dict) -> dict:
         # Unbind the controller to prevent stale references from leaking
         # across calls (Fix M4).
         bind_active_controller(None)
+
+    return {
+        "controller": controller,
+        "state": state,
+        "mask_stack": mask_stack,
+        "results": results,
+        "tile_x": tile_x,
+        "tile_y": tile_y,
+        "pipeline": pipeline,
+        "pass_name": pass_name,
+    }
+
+
+def handle_run_terrain_pass(params: dict) -> dict:
+    """Run a registered terrain pass via ``TerrainPassController``.
+
+    Required params:
+        pass_name (str)  — name of a registered pass (e.g. "macro_world")
+        tile_size (int)  — cells per tile edge
+        cell_size (float)
+        seed (int)
+
+    Optional params:
+        tile_x (int=0), tile_y (int=0)
+        world_origin_x (float=0.0), world_origin_y (float=0.0)
+        region_bounds (dict|list) — BBox for the intent region
+        region (dict|list) — BBox for scoped execution
+        protected_zones (list[dict])
+        scene_read (dict)  — presence signals that scene-read requirement is met
+        height (list[list[float]]|np.ndarray) — optional pre-built heightmap
+        terrain_type (str), scale (float) — for generating initial height
+        erosion_profile (str)
+        pipeline (list[str]) — pass sequence
+        pass_name=... with pipeline=None runs a single pass
+
+    Default behavior:
+        - with ``scene_read``: ``macro_world -> structural_masks -> erosion -> validation_minimal``
+        - without ``scene_read``: ``macro_world -> structural_masks -> validation_minimal``
+
+    Returns:
+        dict with ``ok``, ``results`` (list of PassResult dicts),
+        ``content_hash``, ``populated_channels``.
+    """
+    execution = _execute_terrain_pipeline(params)
+    mask_stack = execution["mask_stack"]
+    results = execution["results"]
 
     def _serialize(pr) -> dict:
         return {
@@ -1696,8 +1826,8 @@ def handle_run_terrain_pass(params: dict) -> dict:
         "results": [_serialize(r) for r in results],
         "content_hash": mask_stack.compute_hash(),
         "populated_channels": sorted(mask_stack.populated_by_pass.keys()),
-        "tile_x": tile_x,
-        "tile_y": tile_y,
+        "tile_x": execution["tile_x"],
+        "tile_y": execution["tile_y"],
     }
 
 
@@ -1864,7 +1994,10 @@ def handle_paint_terrain(params: dict) -> dict:
         name (str): Existing terrain object name.
         biome_rules (list of dict, optional): Biome rules with name, material,
             min_alt, max_alt, min_slope, max_slope. Defaults to BIOME_RULES.
-        height_scale (float, default 20.0): Used to normalize altitude.
+        height_range (2-item sequence, optional): Explicit altitude range used
+            to normalize biome-rule altitude bands across shared/tiled terrain.
+        height_scale (float, default 20.0): Legacy fallback only; mesh-derived
+            height range is preferred to preserve signed elevations.
 
     Returns dict with: name, material_count, biome_rules_applied.
     """
@@ -1874,7 +2007,7 @@ def handle_paint_terrain(params: dict) -> dict:
         raise ValueError("'name' is required")
 
     biome_rules = params.get("biome_rules") or BIOME_RULES
-    height_scale = params.get("height_scale", 20.0)
+    height_scale = float(params.get("height_scale", 20.0))
 
     obj = bpy.data.objects.get(name)
     if obj is None:
@@ -1910,11 +2043,31 @@ def handle_paint_terrain(params: dict) -> dict:
     bm = bmesh.new()
     bm.from_mesh(mesh)
     bm.faces.ensure_lookup_table()
+    bm.verts.ensure_lookup_table()
+
+    explicit_range = params.get("height_range")
+    if isinstance(explicit_range, (list, tuple)) and len(explicit_range) >= 2:
+        altitude_min = float(explicit_range[0])
+        altitude_max = float(explicit_range[1])
+    else:
+        altitude_min = float(params.get("height_range_min", 0.0))
+        altitude_max = float(params.get("height_range_max", 0.0))
+        if altitude_max <= altitude_min:
+            if bm.verts:
+                z_values = [float(v.co.z) for v in bm.verts]
+                altitude_min = min(z_values)
+                altitude_max = max(z_values)
+            else:
+                altitude_min = 0.0
+                altitude_max = height_scale if height_scale > 0.0 else 1.0
 
     for face in bm.faces:
         center = face.calc_center_median()
-        altitude = center.z / height_scale if height_scale > 0 else 0.0
-        altitude = max(0.0, min(1.0, altitude))
+        altitude = _normalize_altitude_for_rule_range(
+            center.z,
+            range_min=altitude_min,
+            range_max=altitude_max,
+        )
 
         # Slope from face normal
         slope_rad = math.acos(max(-1.0, min(1.0, face.normal.z)))
@@ -1983,14 +2136,17 @@ def handle_carve_river(params: dict) -> dict:
     # WORLD-004: Detect actual grid dimensions (robust to non-square terrain)
     rows, cols = _detect_grid_dims(bm)
 
-    # Extract heights
-    heights = np.array([v.co.z for v in bm.verts])
-    height_scale = heights.max() if heights.max() > 0 else 1.0
-    heightmap = (heights / height_scale).reshape(rows, cols)
+    # Extract world-unit heights. Preserve signed ranges when routing through
+    # the normalized A* solver to avoid corrupting negative-elevation worlds.
+    heights = np.array([v.co.z for v in bm.verts], dtype=np.float64)
+    heightmap = heights.reshape(rows, cols)
 
     # Carve river
-    path, carved = carve_river_path(
-        heightmap, source=source, dest=destination,
+    path, carved, _ = _run_height_solver_in_world_space(
+        heightmap,
+        carve_river_path,
+        source=source,
+        dest=destination,
         width=width, depth=depth, seed=seed,
     )
 
@@ -1998,7 +2154,7 @@ def handle_carve_river(params: dict) -> dict:
     carved_flat = carved.flatten()
     for i, vert in enumerate(bm.verts):
         if i < len(carved_flat):
-            vert.co.z = float(carved_flat[i]) * height_scale
+            vert.co.z = float(carved_flat[i])
 
     bm.to_mesh(mesh)
     bm.free()
@@ -2008,6 +2164,336 @@ def handle_carve_river(params: dict) -> dict:
         "path_length": len(path),
         "depth": depth,
     }
+
+
+# ---------------------------------------------------------------------------
+# Road helpers
+# ---------------------------------------------------------------------------
+
+def _clamp01(value: float) -> float:
+    return max(0.0, min(1.0, float(value)))
+
+
+def _smootherstep(value: float) -> float:
+    x = _clamp01(value)
+    return x * x * x * (x * (x * 6.0 - 15.0) + 10.0)
+
+
+def _point_segment_distance_2d(
+    px: float,
+    py: float,
+    ax: float,
+    ay: float,
+    bx: float,
+    by: float,
+) -> tuple[float, float]:
+    """Return (distance, projection_t) from a point to a 2D segment."""
+    abx = bx - ax
+    aby = by - ay
+    denom = abx * abx + aby * aby
+    if denom <= 1e-9:
+        return math.hypot(px - ax, py - ay), 0.0
+    t = ((px - ax) * abx + (py - ay) * aby) / denom
+    t = _clamp01(t)
+    cx = ax + abx * t
+    cy = ay + aby * t
+    return math.hypot(px - cx, py - cy), t
+
+
+def _apply_road_profile_to_heightmap(
+    heightmap: np.ndarray,
+    path: list[tuple[int, int]],
+    *,
+    width_cells: float,
+    grade_strength: float,
+    crown_height_m: float,
+    shoulder_width_cells: float,
+    ditch_depth_m: float,
+) -> np.ndarray:
+    """Apply a crown-and-ditch deformation profile around the solved road path."""
+    result = np.asarray(heightmap, dtype=np.float64).copy()
+    if len(path) < 2:
+        return result
+
+    road_half_width = max(float(width_cells) * 0.5, 0.75)
+    shoulder_width = max(float(shoulder_width_cells), 1.0)
+    outer_radius = road_half_width + shoulder_width
+    grade = max(0.15, min(float(grade_strength), 1.0))
+
+    for (r0, c0), (r1, c1) in zip(path, path[1:]):
+        center_h0 = float(result[r0, c0])
+        center_h1 = float(result[r1, c1])
+        r_min = max(0, int(math.floor(min(r0, r1) - outer_radius)))
+        r_max = min(result.shape[0] - 1, int(math.ceil(max(r0, r1) + outer_radius)))
+        c_min = max(0, int(math.floor(min(c0, c1) - outer_radius)))
+        c_max = min(result.shape[1] - 1, int(math.ceil(max(c0, c1) + outer_radius)))
+
+        for rr in range(r_min, r_max + 1):
+            for cc in range(c_min, c_max + 1):
+                dist, t = _point_segment_distance_2d(
+                    float(rr),
+                    float(cc),
+                    float(r0),
+                    float(c0),
+                    float(r1),
+                    float(c1),
+                )
+                if dist > outer_radius:
+                    continue
+
+                center_height = center_h0 + (center_h1 - center_h0) * t
+                if dist <= road_half_width:
+                    center_t = dist / max(road_half_width, 1e-6)
+                    crown = crown_height_m * (1.0 - _smootherstep(center_t))
+                    blend = grade * (0.45 + 0.55 * (1.0 - _smootherstep(center_t)))
+                    target = center_height + crown
+                else:
+                    shoulder_t = (dist - road_half_width) / max(shoulder_width, 1e-6)
+                    ditch = -ditch_depth_m * math.sin(_clamp01(shoulder_t) * math.pi)
+                    blend = grade * 0.35 * (1.0 - _smootherstep(shoulder_t))
+                    target = center_height + ditch
+
+                result[rr, cc] = result[rr, cc] * (1.0 - blend) + target * blend
+
+    return result
+
+
+def _sample_path_indices(
+    path: list[tuple[int, int]],
+    *,
+    min_spacing_cells: float,
+    forced_indices: set[int] | None = None,
+) -> list[int]:
+    """Down-sample a dense grid path while preserving mandatory boundary indices."""
+    if len(path) <= 2:
+        return list(range(len(path)))
+
+    forced = set(forced_indices or set())
+    forced.update({0, len(path) - 1})
+    sampled = [0]
+    last_r, last_c = path[0]
+    for idx in range(1, len(path) - 1):
+        r, c = path[idx]
+        if idx in forced or math.hypot(r - last_r, c - last_c) >= max(min_spacing_cells, 1.0):
+            if sampled[-1] != idx:
+                sampled.append(idx)
+                last_r, last_c = r, c
+    if sampled[-1] != len(path) - 1:
+        sampled.append(len(path) - 1)
+    return sampled
+
+
+def _collect_bridge_spans(
+    path: list[tuple[int, int]],
+    *,
+    base_heightmap: np.ndarray,
+    graded_heightmap: np.ndarray,
+    water_level: float | None,
+    width_m: float,
+    rows: int,
+    cols: int,
+    terrain_width: float,
+    terrain_height: float,
+    terrain_origin_x: float,
+    terrain_origin_y: float,
+) -> list[dict[str, Any]]:
+    """Return bridge span descriptors for contiguous over-water road sections."""
+    if water_level is None or len(path) < 2:
+        return []
+
+    spans: list[dict[str, Any]] = []
+    start_idx: int | None = None
+    end_idx: int | None = None
+    for idx, (row, col) in enumerate(path):
+        if float(base_heightmap[row, col]) < float(water_level):
+            if start_idx is None:
+                start_idx = idx
+            end_idx = idx
+        elif start_idx is not None and end_idx is not None:
+            spans.append({"start_index": start_idx, "end_index": end_idx})
+            start_idx = None
+            end_idx = None
+    if start_idx is not None and end_idx is not None:
+        spans.append({"start_index": start_idx, "end_index": end_idx})
+
+    clearance = 0.22 + max(width_m, 0.0) * 0.05
+    resolved: list[dict[str, Any]] = []
+    for span in spans:
+        start_index = max(0, span["start_index"] - 1)
+        end_index = min(len(path) - 1, span["end_index"] + 1)
+        if end_index <= start_index:
+            continue
+        r0, c0 = path[start_index]
+        r1, c1 = path[end_index]
+        x0, y0 = _terrain_grid_to_world_xy(
+            r0,
+            c0,
+            rows=rows,
+            cols=cols,
+            terrain_width=terrain_width,
+            terrain_height=terrain_height,
+            terrain_origin_x=terrain_origin_x,
+            terrain_origin_y=terrain_origin_y,
+        )
+        x1, y1 = _terrain_grid_to_world_xy(
+            r1,
+            c1,
+            rows=rows,
+            cols=cols,
+            terrain_width=terrain_width,
+            terrain_height=terrain_height,
+            terrain_origin_x=terrain_origin_x,
+            terrain_origin_y=terrain_origin_y,
+        )
+        deck_z = max(
+            float(water_level),
+            float(graded_heightmap[r0, c0]),
+            float(graded_heightmap[r1, c1]),
+        ) + clearance
+        span_length = math.hypot(x1 - x0, y1 - y0)
+        style = "rope" if width_m <= 2.5 and span_length >= 8.0 else "stone_arch"
+        resolved.append(
+            {
+                "start_index": start_index,
+                "end_index": end_index,
+                "style": style,
+                "material_key": "plank_floor" if style == "rope" else "cobblestone_floor",
+                "start_pos": (x0, y0, deck_z),
+                "end_pos": (x1, y1, deck_z),
+                "clearance": clearance,
+            }
+        )
+    return resolved
+
+
+def _paint_road_mask_on_terrain(
+    terrain_obj: Any,
+    path_world: list[tuple[float, float, float]],
+    *,
+    road_half_width: float,
+    shoulder_width: float,
+) -> None:
+    """Paint the canonical terrain splatmap layer so roads read in preview/export."""
+    mesh = getattr(terrain_obj, "data", None)
+    if mesh is None or not hasattr(mesh, "loops") or not hasattr(mesh, "vertices"):
+        return
+
+    layer_name = "VB_TerrainSplatmap"
+    attr = mesh.color_attributes.get(layer_name)
+    created_attr = False
+    if attr is None:
+        attr = mesh.color_attributes.new(name=layer_name, type="FLOAT_COLOR", domain="CORNER")
+        created_attr = True
+
+    if attr is None or len(path_world) < 2:
+        return
+
+    total_radius = max(road_half_width + shoulder_width, 1e-6)
+    base_color = np.asarray((0.60, 0.20, 0.15, 0.05), dtype=np.float32)
+    target_color = np.asarray((0.10, 0.10, 0.76, 0.04), dtype=np.float32)
+    matrix_world = getattr(terrain_obj, "matrix_world", None)
+
+    if created_attr:
+        for loop_idx in range(len(mesh.loops)):
+            attr.data[loop_idx].color = tuple(base_color)
+
+    for loop_idx, loop in enumerate(mesh.loops):
+        vertex = mesh.vertices[loop.vertex_index].co
+        if matrix_world is not None:
+            try:
+                world_pos = matrix_world @ vertex
+                vx = float(world_pos.x)
+                vy = float(world_pos.y)
+            except Exception:
+                vx = float(vertex.x)
+                vy = float(vertex.y)
+        else:
+            vx = float(vertex.x)
+            vy = float(vertex.y)
+
+        min_dist = float("inf")
+        for (ax, ay, _az), (bx, by, _bz) in zip(path_world, path_world[1:]):
+            dist, _ = _point_segment_distance_2d(vx, vy, ax, ay, bx, by)
+            if dist < min_dist:
+                min_dist = dist
+        if min_dist > total_radius:
+            continue
+
+        mask = 1.0 - _smootherstep(min_dist / total_radius)
+        existing = np.asarray(attr.data[loop_idx].color[:4], dtype=np.float32)
+        if not np.isfinite(existing).all() or float(existing.sum()) <= 1e-6:
+            existing = base_color.copy()
+        mixed = existing * (1.0 - mask) + target_color * mask
+        total = float(mixed.sum())
+        if total > 1e-6:
+            mixed /= total
+        attr.data[loop_idx].color = tuple(float(v) for v in mixed)
+
+
+def _build_road_strip_geometry(
+    points: list[tuple[float, float, float]],
+    *,
+    half_width: float,
+) -> tuple[list[tuple[float, float, float]], list[tuple[int, int, int, int]]]:
+    """Build a low-vertex road strip by reusing one left/right pair per path row."""
+    vertices: list[tuple[float, float, float]] = []
+    faces: list[tuple[int, int, int, int]] = []
+    if len(points) < 2:
+        return vertices, faces
+
+    for idx, (px, py, pz) in enumerate(points):
+        if idx == 0:
+            dx = points[1][0] - px
+            dy = points[1][1] - py
+        elif idx == len(points) - 1:
+            dx = px - points[idx - 1][0]
+            dy = py - points[idx - 1][1]
+        else:
+            dx = points[idx + 1][0] - points[idx - 1][0]
+            dy = points[idx + 1][1] - points[idx - 1][1]
+        seg_len = max(math.hypot(dx, dy), 1e-6)
+        nx = -dy / seg_len * half_width
+        ny = dx / seg_len * half_width
+        vertices.append((px + nx, py + ny, pz))
+        vertices.append((px - nx, py - ny, pz))
+        if idx > 0:
+            base = idx * 2
+            faces.append((base - 2, base - 1, base + 1, base))
+    return vertices, faces
+
+
+def _create_bridge_object_from_spec(
+    spec: dict[str, Any],
+    *,
+    object_name: str,
+    parent: Any | None,
+    material_key: str,
+) -> Any | None:
+    """Materialize a bridge mesh spec into Blender and assign a lightweight material."""
+    mesh_data = bpy.data.meshes.new(object_name)
+    mesh_data.from_pydata(spec.get("vertices", []), [], spec.get("faces", []))
+    mesh_data.update()
+    obj = bpy.data.objects.new(object_name, mesh_data)
+    bpy.context.collection.objects.link(obj)
+    if parent is not None:
+        obj.parent = parent
+        mpi = getattr(obj, "matrix_parent_inverse", None)
+        if mpi is not None and hasattr(parent, "matrix_world"):
+            try:
+                obj.matrix_parent_inverse = parent.matrix_world.inverted()
+            except Exception:
+                if hasattr(mpi, "identity"):
+                    mpi.identity()
+
+    from .procedural_materials import create_procedural_material
+
+    try:
+        mat = create_procedural_material(object_name, material_key)
+        if mat is not None:
+            mesh_data.materials.append(mat)
+    except Exception:
+        pass
+    return obj
 
 
 # ---------------------------------------------------------------------------
@@ -2048,9 +2534,8 @@ def handle_generate_road(params: dict) -> dict:
     # WORLD-004: Detect actual grid dimensions (robust to non-square terrain)
     rows, cols = _detect_grid_dims(bm)
 
-    heights = np.array([v.co.z for v in bm.verts])
-    height_scale = heights.max() if heights.max() > 0 else 1.0
-    heightmap = (heights / height_scale).reshape(rows, cols)
+    heights = np.array([v.co.z for v in bm.verts], dtype=np.float64)
+    heightmap = heights.reshape(rows, cols)
 
     # Convert width from meters to grid cells if it looks like meters
     terrain_width = obj.dimensions.x if obj.dimensions.x > 0 else 100.0
@@ -2061,20 +2546,38 @@ def handle_generate_road(params: dict) -> dict:
     if width > 10:  # likely specified in meters, not cells
         width = max(1, int(width / cell_size))
 
-    path, graded = generate_road_path(
-        heightmap, waypoints=waypoints,
+    path, graded, _ = _run_height_solver_in_world_space(
+        heightmap,
+        generate_road_path,
+        waypoints=waypoints,
         width=width, grade_strength=grade_strength, seed=seed,
+    )
+
+    water_level_raw = params.get("water_level")
+    water_level = float(water_level_raw) if water_level_raw is not None else None
+    crown_height_m = max(cell_size * 0.04, 0.03)
+    ditch_depth_m = max(cell_size * 0.10, 0.08)
+    shoulder_width_cells = max(1.5, width * 0.65)
+    graded = _apply_road_profile_to_heightmap(
+        graded,
+        path,
+        width_cells=float(width),
+        grade_strength=float(grade_strength),
+        crown_height_m=crown_height_m,
+        shoulder_width_cells=shoulder_width_cells,
+        ditch_depth_m=ditch_depth_m,
     )
 
     graded_flat = graded.flatten()
     for i, vert in enumerate(bm.verts):
         if i < len(graded_flat):
-            vert.co.z = float(graded_flat[i]) * height_scale
+            vert.co.z = float(graded_flat[i])
 
     bm.to_mesh(mesh)
     bm.free()
+    if hasattr(mesh, "update"):
+        mesh.update()
 
-    # Generate visible road surface mesh with cobblestone material
     road_mesh_name = f"{terrain_name}_Road"
     terrain_obj = bpy.data.objects.get(terrain_name)
     terrain_width = terrain_obj.dimensions.x if terrain_obj and terrain_obj.dimensions.x > 0 else 100.0
@@ -2084,79 +2587,114 @@ def handle_generate_road(params: dict) -> dict:
     cell_size = (cell_size_x + cell_size_y) * 0.5
     terrain_origin_x = terrain_obj.location.x if terrain_obj else 0.0
     terrain_origin_y = terrain_obj.location.y if terrain_obj else 0.0
-
-    road_bm = bmesh.new()
-    road_uv = road_bm.loops.layers.uv.new("UVMap")
     road_half_width = width * cell_size * 0.5
+    road_width_world = max(width * cell_size, cell_size)
+    shoulder_width_world = max(cell_size * shoulder_width_cells, road_half_width * 0.65)
 
-    # Build road mesh as series of connected quads along the path
-    if len(path) >= 2:
-        prev_left = prev_right = None
-        for pi in range(len(path) - 1):
-            r0, c0 = path[pi]
-            r1, c1 = path[pi + 1]
-            # Convert grid coords to world coords
-            x0, y0 = _terrain_grid_to_world_xy(
-                r0,
-                c0,
+    full_path_world = [
+        (
+            *_terrain_grid_to_world_xy(
+                row,
+                col,
                 rows=rows,
                 cols=cols,
                 terrain_width=terrain_width,
                 terrain_height=terrain_height,
                 terrain_origin_x=terrain_origin_x,
                 terrain_origin_y=terrain_origin_y,
-            )
-            x1, y1 = _terrain_grid_to_world_xy(
-                r1,
-                c1,
-                rows=rows,
-                cols=cols,
-                terrain_width=terrain_width,
-                terrain_height=terrain_height,
-                terrain_origin_x=terrain_origin_x,
-                terrain_origin_y=terrain_origin_y,
-            )
-            z0 = float(graded_flat[r0 * cols + c0]) * height_scale + 0.03
-            z1 = float(graded_flat[r1 * cols + c1]) * height_scale + 0.03
+            ),
+            float(graded[row, col]) + 0.03,
+        )
+        for row, col in path
+    ]
+    _paint_road_mask_on_terrain(
+        terrain_obj,
+        full_path_world,
+        road_half_width=road_half_width,
+        shoulder_width=shoulder_width_world,
+    )
 
-            # Perpendicular direction for road width
-            dx, dy = x1 - x0, y1 - y0
-            length = max(math.sqrt(dx * dx + dy * dy), 0.01)
-            nx, ny = -dy / length * road_half_width, dx / length * road_half_width
+    bridge_spans = _collect_bridge_spans(
+        path,
+        base_heightmap=heightmap,
+        graded_heightmap=graded,
+        water_level=water_level,
+        width_m=road_width_world,
+        rows=rows,
+        cols=cols,
+        terrain_width=terrain_width,
+        terrain_height=terrain_height,
+        terrain_origin_x=terrain_origin_x,
+        terrain_origin_y=terrain_origin_y,
+    )
+    bridge_mask = [False] * len(path)
+    forced_indices: set[int] = set()
+    for span in bridge_spans:
+        forced_indices.update({span["start_index"], span["end_index"]})
+        for idx in range(span["start_index"], span["end_index"] + 1):
+            if 0 <= idx < len(bridge_mask):
+                bridge_mask[idx] = True
 
-            v0 = road_bm.verts.new((x0 + nx, y0 + ny, z0))
-            v1 = road_bm.verts.new((x0 - nx, y0 - ny, z0))
-            v2 = road_bm.verts.new((x1 - nx, y1 - ny, z1))
-            v3 = road_bm.verts.new((x1 + nx, y1 + ny, z1))
+    sampled_indices = _sample_path_indices(
+        path,
+        min_spacing_cells=max(width * 0.75, 2.0),
+        forced_indices=forced_indices,
+    )
 
-            if prev_left is not None and prev_right is not None:
-                # Connect to previous segment for continuous road
-                try:
-                    road_bm.faces.new([prev_left, prev_right, v1, v0])
-                except ValueError:
-                    pass
+    chunks: list[list[int]] = []
+    current_chunk: list[int] = []
+    for idx in sampled_indices:
+        if bridge_mask[idx]:
+            if len(current_chunk) >= 2:
+                chunks.append(current_chunk)
+            current_chunk = []
+            continue
+        if current_chunk:
+            lo = min(current_chunk[-1], idx)
+            hi = max(current_chunk[-1], idx)
+            if any(bridge_mask[lo: hi + 1]):
+                if len(current_chunk) >= 2:
+                    chunks.append(current_chunk)
+                current_chunk = [idx]
+            else:
+                current_chunk.append(idx)
+        else:
+            current_chunk = [idx]
+    if len(current_chunk) >= 2:
+        chunks.append(current_chunk)
 
-            try:
-                face = road_bm.faces.new([v0, v1, v2, v3])
-                face.smooth = True
-            except ValueError:
-                pass
-            prev_left = v3
-            prev_right = v2
-
-    # Remove doubles and recalc normals
-    if road_bm.verts:
-        bmesh.ops.remove_doubles(road_bm, verts=road_bm.verts[:], dist=0.01)
-        bmesh.ops.recalc_face_normals(road_bm, faces=road_bm.faces[:])
+    road_vertices: list[tuple[float, float, float]] = []
+    road_faces: list[tuple[int, int, int, int]] = []
+    for chunk in chunks:
+        chunk_points = [full_path_world[idx] for idx in chunk]
+        chunk_vertices, chunk_faces = _build_road_strip_geometry(
+            chunk_points,
+            half_width=road_half_width,
+        )
+        base_index = len(road_vertices)
+        road_vertices.extend(chunk_vertices)
+        road_faces.extend(
+            tuple(base_index + corner for corner in face)
+            for face in chunk_faces
+        )
 
     road_mesh_data = bpy.data.meshes.new(road_mesh_name)
-    road_bm.to_mesh(road_mesh_data)
-    road_bm.free()
-    for poly in road_mesh_data.polygons:
+    road_mesh_data.from_pydata(road_vertices, [], road_faces)
+    road_mesh_data.update()
+    for poly in getattr(road_mesh_data, "polygons", []):
         poly.use_smooth = True
 
     road_obj = bpy.data.objects.new(road_mesh_name, road_mesh_data)
     bpy.context.collection.objects.link(road_obj)
+    if terrain_obj is not None:
+        road_obj.parent = terrain_obj
+        mpi = getattr(road_obj, "matrix_parent_inverse", None)
+        if mpi is not None and hasattr(terrain_obj, "matrix_world"):
+            try:
+                road_obj.matrix_parent_inverse = terrain_obj.matrix_world.inverted()
+            except Exception:
+                if hasattr(mpi, "identity"):
+                    mpi.identity()
 
     # Apply cobblestone material
     from .procedural_materials import create_procedural_material
@@ -2179,12 +2717,37 @@ def handle_generate_road(params: dict) -> dict:
                     rgh.default_value = 0.85
         road_mesh_data.materials.append(road_mat)
 
+    bridge_object_names: list[str] = []
+    if bridge_spans:
+        from ._terrain_depth import generate_terrain_bridge_mesh
+
+        for bridge_index, span in enumerate(bridge_spans):
+            bridge_spec = generate_terrain_bridge_mesh(
+                start_pos=span["start_pos"],
+                end_pos=span["end_pos"],
+                width=max(road_width_world * 0.92, 1.25),
+                style=span["style"],
+                seed=seed + 500 + bridge_index,
+            )
+            bridge_obj = _create_bridge_object_from_spec(
+                bridge_spec,
+                object_name=f"{road_mesh_name}_Bridge_{bridge_index}",
+                parent=terrain_obj,
+                material_key=span["material_key"],
+            )
+            if bridge_obj is not None:
+                bridge_object_names.append(bridge_obj.name)
+
     return {
         "name": terrain_name,
         "road_mesh_name": road_obj.name,
         "path_length": len(path),
         "width": width,
+        "road_width_m": road_width_world,
         "road_vertex_count": len(road_mesh_data.vertices),
+        "bridge_count": len(bridge_object_names),
+        "bridge_object_names": bridge_object_names,
+        "splatmap_layer": "VB_TerrainSplatmap",
     }
 
 
@@ -2392,7 +2955,7 @@ def handle_create_water(params: dict) -> dict:
                 pass
 
     bm.to_mesh(mesh)
-    tri_count = sum(1 for p in mesh.polygons if len(p.vertices) == 3)
+    _tri_count = sum(1 for p in mesh.polygons if len(p.vertices) == 3)
     # Count quads as 2 tris each for budget check
     total_tris = sum(len(p.vertices) - 2 for p in mesh.polygons)
     bm.free()

@@ -5,7 +5,6 @@ Tests handler registration and compose_map step presence.
 
 from __future__ import annotations
 
-import pytest
 
 
 # ---------------------------------------------------------------------------
@@ -34,7 +33,7 @@ class TestHandlerRegistration:
     def test_render_angle_is_real_handler(self):
         """render_angle should be the real handler, not viewport screenshot alias."""
         from blender_addon.handlers import COMMAND_HANDLERS
-        from blender_addon.handlers.viewport import handle_render_angle, handle_get_viewport_screenshot
+        from blender_addon.handlers.viewport import handle_get_viewport_screenshot
 
         handler = COMMAND_HANDLERS.get("render_angle")
         assert handler is not None, "render_angle not registered"

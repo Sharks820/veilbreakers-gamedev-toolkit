@@ -189,8 +189,8 @@ def _make_bpy_stubs():
 # Import handler modules normally (conftest stubs handle bpy/bmesh/mathutils)
 # ---------------------------------------------------------------------------
 
-from blender_addon.handlers import _terrain_noise as terrain_noise
-from blender_addon.handlers import environment_scatter as scatter_mod
+from blender_addon.handlers import _terrain_noise as terrain_noise  # noqa: E402
+from blender_addon.handlers import environment_scatter as scatter_mod  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -257,7 +257,6 @@ class TestLeafCardReplacesUVSphere(unittest.TestCase):
     def test_tree_name_contains_leafcard(self):
         """The tree object name should hint at leaf card construction."""
         bpy_stub, bmesh_stub = _make_bpy_stubs()
-        import sys
         orig_bpy = sys.modules.get("bpy")
         orig_bmesh = sys.modules.get("bmesh")
         sys.modules["bpy"] = bpy_stub
@@ -281,7 +280,6 @@ class TestWindVertexColorsRGBA(unittest.TestCase):
 
     def test_grass_card_has_wind_vc_layer(self):
         """Grass card mesh should have a 'wind_vc' vertex color layer."""
-        import bpy
         obj = scatter_mod._create_grass_card(biome="prairie", seed=0)
         self.assertIsNotNone(obj)
         # The bmesh should have stored a wind_vc layer
@@ -292,7 +290,6 @@ class TestWindVertexColorsRGBA(unittest.TestCase):
 
     def _with_rich_stubs(self, fn):
         """Run fn(bpy_stub, bmesh_stub) with rich stubs patched into scatter_mod."""
-        import sys
         bpy_stub, bmesh_stub = _make_bpy_stubs()
         orig_bpy = sys.modules.get("bpy")
         orig_bmesh = sys.modules.get("bmesh")
@@ -347,7 +344,6 @@ class TestGrassCardTriCount(unittest.TestCase):
 
     def test_grass_card_has_3_to_6_tris(self):
         """_create_grass_card should produce 3-6 triangles per biome."""
-        import sys
         bpy_stub, bmesh_stub = _make_bpy_stubs()
         orig_bpy = sys.modules.get("bpy")
         orig_bmesh = sys.modules.get("bmesh")
@@ -635,8 +631,8 @@ class TestRidgedMultifractalOutputRange(unittest.TestCase):
         self.assertLessEqual(hm.max(), 1.0)
 
     def test_different_seeds_produce_different_results(self):
-        v1 = terrain_noise.ridged_multifractal(1.0, 2.0, seed=1)
-        v2 = terrain_noise.ridged_multifractal(1.0, 2.0, seed=999)
+        v1 = terrain_noise.ridged_multifractal(1.1, 2.3, seed=1)
+        v2 = terrain_noise.ridged_multifractal(1.1, 2.3, seed=999)
         self.assertNotAlmostEqual(v1, v2, places=4,
                                   msg="Different seeds should produce different noise values")
 

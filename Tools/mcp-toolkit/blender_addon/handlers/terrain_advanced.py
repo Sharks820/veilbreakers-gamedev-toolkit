@@ -334,7 +334,7 @@ def compute_spline_deformation(
     core_width = width * (1.0 - blend_fraction)
 
     # For smooth mode, collect neighbors for averaging
-    neighbor_heights: list[float] = []
+    _neighbor_heights: list[float] = []
 
     for idx, (vx, vy, vz) in enumerate(vert_positions):
         dist, closest, t_spline = distance_point_to_polyline(vx, vy, polyline)
@@ -706,15 +706,15 @@ def handle_terrain_layers(params: dict) -> dict:
         res = max(2, int(math.sqrt(len(mesh.vertices))))
         new_layer = TerrainLayer(layer_name, res, res, blend_mode, strength)
         layers.append(new_layer)
-        obj["terrain_layers"] = json.dumps([l.to_dict() for l in layers])
+        obj["terrain_layers"] = json.dumps([L.to_dict() for L in layers])
         return {"action": "add_layer", "layer_name": layer_name,
                 "total_layers": len(layers)}
 
     elif action == "remove_layer":
         if not layer_name:
             raise ValueError("'layer_name' is required for remove_layer")
-        layers = [l for l in layers if l.name != layer_name]
-        obj["terrain_layers"] = json.dumps([l.to_dict() for l in layers])
+        layers = [L for L in layers if L.name != layer_name]
+        obj["terrain_layers"] = json.dumps([L.to_dict() for L in layers])
         return {"action": "remove_layer", "layer_name": layer_name,
                 "total_layers": len(layers)}
 
@@ -722,9 +722,9 @@ def handle_terrain_layers(params: dict) -> dict:
         if not layer_name:
             raise ValueError("'layer_name' is required for modify_layer")
         target = None
-        for l in layers:
-            if l.name == layer_name:
-                target = l
+        for layer in layers:
+            if layer.name == layer_name:
+                target = layer
                 break
         if target is None:
             raise ValueError(f"Layer not found: {layer_name}")
@@ -744,7 +744,7 @@ def handle_terrain_layers(params: dict) -> dict:
             seed=params.get("seed", 42),
         )
 
-        obj["terrain_layers"] = json.dumps([l.to_dict() for l in layers])
+        obj["terrain_layers"] = json.dumps([L.to_dict() for L in layers])
         return {"action": "modify_layer", "layer_name": layer_name,
                 "operation": operation, "affected_cells": affected}
 
@@ -776,9 +776,9 @@ def handle_terrain_layers(params: dict) -> dict:
         return {
             "action": "list_layers",
             "layers": [
-                {"name": l.name, "blend_mode": l.blend_mode,
-                 "strength": l.strength, "shape": list(l.heights.shape)}
-                for l in layers
+                {"name": layer.name, "blend_mode": layer.blend_mode,
+                 "strength": layer.strength, "shape": list(layer.heights.shape)}
+                for L in layers
             ],
             "total_layers": len(layers),
         }
@@ -1427,7 +1427,7 @@ def handle_snap_to_terrain(params: dict) -> dict:
         raise ValueError(f"Terrain object not found: {terrain_name}")
 
     # Ensure terrain mesh is up to date for raycasting
-    depsgraph = bpy.context.evaluated_depsgraph_get()
+    _depsgraph = bpy.context.evaluated_depsgraph_get()
 
     results: list[dict[str, Any]] = []
 
@@ -1691,11 +1691,11 @@ def handle_terrain_flatten_zone(params: dict) -> dict:
     # Map flattened grid Z back to each vertex
     z_min_new = float(np.nanmin(flattened_grid))
     z_max_new = float(np.nanmax(flattened_grid))
-    z_range_new = max(z_max_new - z_min_new, 1e-6)
+    _z_range_new = max(z_max_new - z_min_new, 1e-6)
 
     z_orig_min = float(np.nanmin(grid))
     z_orig_max = float(np.nanmax(grid))
-    z_orig_range = max(z_orig_max - z_orig_min, 1e-6)
+    _z_orig_range = max(z_orig_max - z_orig_min, 1e-6)
 
     # Compute delta per vertex from grid change
     orig_sample = grid[row_idx, col_idx]

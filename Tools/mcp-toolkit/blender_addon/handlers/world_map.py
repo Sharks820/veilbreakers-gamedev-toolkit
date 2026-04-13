@@ -522,7 +522,7 @@ def _compute_region_adjacency(
     resolution: int = 100,
 ) -> set[tuple[int, int]]:
     """Find adjacent Voronoi regions via grid-neighbor test."""
-    n = len(centers)
+    _n = len(centers)
     step = map_size / resolution
     grid: list[list[int]] = []
 

@@ -213,17 +213,17 @@ def _write_to_unity(content: str, relative_path: str) -> str:
     return str(target)
 
 
-def _read_unity_result() -> dict:
+def _read_unity_result(result_file: str = "Temp/vb_result.json") -> dict:
     """Read the result JSON written by a Unity editor script.
 
     Returns:
-        Parsed JSON dict from Temp/vb_result.json, or an error dict
+        Parsed JSON dict from the given result file, or an error dict
         if the file doesn't exist.
     """
     if not settings.unity_project_path:
         return {"status": "error", "message": "unity_project_path not configured"}
 
-    result_path = Path(settings.unity_project_path) / "Temp" / "vb_result.json"
+    result_path = Path(settings.unity_project_path) / Path(result_file)
     if not result_path.exists():
         return {
             "status": "pending",
@@ -257,12 +257,39 @@ async def _handle_dict_template(action_name: str, result: dict) -> str:
         if key not in {"script_content", "script_path", "next_steps", "menu_path"}
     }
 
+    return await _write_generated_editor_response(
+        action_name=action_name,
+        script_content=script_content,
+        rel_path=rel_path,
+        menu_path=menu_path,
+        next_steps=next_steps,
+        response_fields=passthrough_keys,
+    )
+
+
+async def _write_generated_editor_response(
+    action_name: str,
+    script_content: str,
+    rel_path: str,
+    *,
+    menu_path: str = "",
+    next_steps: list[str] | None = None,
+    result_file: str | None = "Temp/vb_result.json",
+    response_fields: dict | None = None,
+) -> str:
+    """Write a generated Unity artifact and auto-execute when bridge-ready.
+
+    This is the bridge-first response path for editor scripts that register a
+    ``MenuItem``. When ``menu_path`` is supplied and the TCP bridge is
+    available, the helper recompiles Unity, executes the generated menu item,
+    then reads back ``vb_result.json`` so failures propagate instead of
+    silently looking successful.
+    """
     try:
         abs_path = _write_to_unity(script_content, rel_path)
     except ValueError as exc:
         return json.dumps({"status": "error", "action": action_name, "message": str(exc)})
 
-    # Attempt auto-execute via bridge if menu_path is provided
     bridge_result = None
     if menu_path:
         bridge_result = await _bridge_recompile_and_execute(menu_path)
@@ -271,16 +298,37 @@ async def _handle_dict_template(action_name: str, result: dict) -> str:
         "status": "success",
         "action": action_name,
         "script_path": abs_path,
-        "result_file": "Temp/vb_result.json",
     }
-    response.update(passthrough_keys)
+    if result_file is not None:
+        response["result_file"] = result_file
+    if response_fields:
+        response.update(response_fields)
 
     if bridge_result is not None:
         response["bridge_executed"] = True
         response["bridge_result"] = bridge_result
-        response["next_steps"] = ["Auto-executed via VBBridge. Check result above."]
+        response["next_steps"] = [
+            "Auto-executed via VBBridge. Check execution_result and bridge_result above.",
+        ]
+
+        bridge_status = bridge_result.get("status") if isinstance(bridge_result, dict) else None
+        if isinstance(bridge_status, str) and bridge_status:
+            response["bridge_status"] = bridge_status
+            if bridge_status != "success":
+                response["status"] = bridge_status
+                if isinstance(bridge_result, dict) and bridge_result.get("message"):
+                    response["message"] = bridge_result["message"]
+
+        if result_file:
+            execution_result = _read_unity_result(result_file)
+            response["execution_result"] = execution_result
+            execution_status = execution_result.get("status")
+            if isinstance(execution_status, str) and execution_status and execution_status != "success":
+                response["status"] = execution_status
+                if execution_result.get("message"):
+                    response["message"] = execution_result["message"]
     else:
         response["bridge_executed"] = False
-        response["next_steps"] = next_steps
+        response["next_steps"] = next_steps or STANDARD_NEXT_STEPS
 
     return json.dumps(response, indent=2)

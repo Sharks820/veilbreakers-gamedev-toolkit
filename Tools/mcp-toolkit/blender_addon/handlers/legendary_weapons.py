@@ -445,7 +445,7 @@ def _generate_chainbreaker() -> MeshSpec:
             angle = t * math.pi * 0.6
             fx = side * (cross_w - t * cross_w * 0.3)
             fy = head_y - math.sin(angle) * 0.08
-            fz = 0.0
+            _fz = 0.0
             w = 0.008 * (1.0 - t * 0.3)
             fv.extend([(fx - w, fy, w), (fx + w, fy, w),
                        (fx + w, fy, -w), (fx - w, fy, -w)])
@@ -729,10 +729,10 @@ def _generate_soulcatcher() -> MeshSpec:
         ring_pts = 1 if ring == 0 else disc_segs
         for i in range(ring_pts):
             if ring == 0:
-                parts_front_center = [(0.0, 0.0, z_bulge)]
+                _parts_front_center = [(0.0, 0.0, z_bulge)]
             else:
                 a = 2.0 * math.pi * i / disc_segs
-                parts_front_center = []
+                _parts_front_center = []
                 # Only add to main vertex list below
     # Build the shield as a simpler construction
     # Front face -- hemisphere-like

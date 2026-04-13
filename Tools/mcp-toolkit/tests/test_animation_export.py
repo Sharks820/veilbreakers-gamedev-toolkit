@@ -19,11 +19,10 @@ import tempfile
 import types
 from pathlib import Path
 
-import pytest
 
 _TMP_EXPORTS = str(Path(tempfile.gettempdir()) / "exports")
 
-from blender_addon.handlers.animation_export import (
+from blender_addon.handlers.animation_export import (  # noqa: E402
     MIXAMO_TO_RIGIFY,
     PREVIEW_ANGLES,
     _attempt_ai_motion_api,

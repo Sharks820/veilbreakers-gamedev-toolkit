@@ -16,7 +16,6 @@ from __future__ import annotations
 import math
 
 import numpy as np
-import pytest
 
 from blender_addon.handlers.terrain_assets import (
     AssetContextRule,

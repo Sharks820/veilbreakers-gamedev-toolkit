@@ -858,7 +858,7 @@ def generate_timber_frame(
 
     # Diagonal braces
     if config["has_cross_brace"]:
-        brace_w = bw * 0.7
+        _brace_w = bw * 0.7
         brace_d = bd * 0.7
         for pi in range(divisions):
             px = pi * (panel_width + bw) + bw
@@ -938,7 +938,7 @@ def generate_timber_frame(
         parts.append((sv, sf))
     # Diagonal braces on back wall
     if config["has_cross_brace"]:
-        brace_w2 = bw * 0.7
+        _brace_w2 = bw * 0.7
         brace_d2 = bd * 0.7
         for pi in range(divisions):
             px = pi * (panel_width + bw) + bw
@@ -955,8 +955,8 @@ def generate_timber_frame(
                 parts.append((sv, sf))
 
     # === Left wall frame (x=0 side) — ARCH-004 ===
-    left_panel_h = (depth - 2 * bd) / max(1, divisions)
-    left_panel_w = (height - 2 * bw) / max(1, divisions)  # panels are vertical strips
+    _left_panel_h = (depth - 2 * bd) / max(1, divisions)
+    _left_panel_w = (height - 2 * bw) / max(1, divisions)  # panels are vertical strips
     # Horizontal rails
     sv, sf = _bowed_box(0.0, 0.0, 0.0, bd + proud, depth, bw,
                         rng.uniform(bow * 0.5, bow * 1.5))
@@ -1038,7 +1038,7 @@ def generate_gothic_window(
 
     Components: frame, arch, mullions, tracery, sill, shutters, glass pane areas.
     """
-    rng = random.Random(seed)
+    _rng = random.Random(seed)
     parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
     components: list[str] = []
     hw = width / 2.0
@@ -1250,7 +1250,7 @@ def generate_roof(
     Roof styles: 'gable', 'hip', 'gambrel', 'mansard', 'shed', 'conical_tower'
     Materials: 'tile', 'shingle', 'slate', 'thatch'
     """
-    rng = random.Random(seed)
+    _rng = random.Random(seed)
     parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
     components: list[str] = []
 
@@ -1270,7 +1270,7 @@ def generate_roof(
 
     # Roof base structure (rafters)
     rafter_w = 0.06
-    rafter_d = 0.08
+    _rafter_d = 0.08
     rafter_count = max(2, int(depth / 0.6))
     total_tiles = 0
 
@@ -1293,7 +1293,7 @@ def generate_roof(
             # Position along slope
             slope_x = -half_w + row_z_frac * half_w
             slope_z = row_z_frac * slope_rise
-            y_start = -overhang
+            _y_start = -overhang
 
             sv, sf, sc = _shingle_row(
                 depth + 2 * overhang, 0.0, tile_w, tile_h, tile_h * 0.5,
@@ -1350,7 +1350,7 @@ def generate_roof(
 
         # Fascia board along eave edges
         fascia_h = 0.06
-        fascia_d = 0.02
+        _fascia_d = 0.02
         # Left eave
         fv, ff = _box(-half_w, -overhang, -fascia_h,
                        0.02, depth + 2 * overhang, fascia_h)
@@ -1391,8 +1391,8 @@ def generate_roof(
         # Rafters (visible structural beams — angled to follow roof pitch)
         # Each rafter runs from eave (z=0) to ridge (z=slope_rise) along the slope.
         # We build them as thin quads following the slope rather than flat boxes.
-        cos_p_raf = math.cos(pitch_rad)
-        sin_p_raf = math.sin(pitch_rad)
+        _cos_p_raf = math.cos(pitch_rad)
+        _sin_p_raf = math.sin(pitch_rad)
         for ri in range(rafter_count):
             ry = -overhang + (ri + 0.5) * (depth + 2 * overhang) / rafter_count
             # Left rafter: eave at x=-half_w,z=0 → ridge at x=0,z=slope_rise
@@ -1743,7 +1743,7 @@ def generate_staircase(
 
         # Stringer beams (side supports)
         total_h = step_count * step_height
-        total_d = step_count * step_depth
+        _total_d = step_count * step_depth
         stringer_w = 0.04
         stringer_h = 0.12
 
@@ -2114,7 +2114,7 @@ def generate_archway(
 
     Components: jambs, imposts, arch voussoirs, keystone, intrados, spandrel.
     """
-    rng = random.Random(seed)
+    _rng = random.Random(seed)
     parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
     components: list[str] = []
     hw = width / 2.0
@@ -2265,7 +2265,7 @@ def generate_chimney(
     Features: shaft with visible block pattern, corbeling near top,
     chimney pot/cap, flue opening, base flashing strip.
     """
-    rng = random.Random(seed)
+    _rng = random.Random(seed)
     parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
     components: list[str] = []
 
@@ -2674,7 +2674,7 @@ def generate_flying_buttress(
         ax1, _, az1 = arch_pts_3d[i + 1]
         seg_dx = ax1 - ax0
         seg_dz = az1 - az0
-        seg_len = math.sqrt(seg_dx**2 + seg_dz**2)
+        _seg_len = math.sqrt(seg_dx**2 + seg_dz**2)
         # Build segment as a small box aligned to the chord direction
         sv, sf = _box(
             ax0 - arm_w * 0.5, -arm_d * 0.5, az0 - arm_w * 0.5,
@@ -2748,7 +2748,7 @@ def generate_battlements(
     Features: merlons with arrow slits, crenels, parapet walk,
     machicolations, arrow loops in wall, stone block surface.
     """
-    rng = random.Random(seed)
+    _rng = random.Random(seed)
     parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
     components: list[str] = []
 

@@ -4,7 +4,6 @@ Tests the validate_* pure-logic validators from handlers/physics.py
 -- no Blender/bpy required.
 """
 
-import pytest
 
 
 # ---------------------------------------------------------------------------

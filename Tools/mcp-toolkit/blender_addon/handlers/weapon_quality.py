@@ -613,7 +613,7 @@ def _build_cross_guard(
         # Main cross-guard bar: tapered rectangular bars extending from center
         bar_sections = 8
         for side in (-1, 1):
-            side_verts: list[tuple[float, float, float]] = []
+            _side_verts: list[tuple[float, float, float]] = []
             for bi in range(bar_sections + 1):
                 t = bi / bar_sections
                 x = side * t * width / 2.0
@@ -629,7 +629,7 @@ def _build_cross_guard(
                 half_h = height / 2.0 * h_scale
                 half_d = depth / 2.0 * d_scale
 
-                base = len(verts)
+                _base = len(verts)
                 verts.extend([
                     (x, guard_y - half_h, -half_d),
                     (x, guard_y - half_h, half_d),
@@ -672,7 +672,7 @@ def _build_cross_guard(
                 half_h = height / 2.0 * h_scale
                 half_d = depth / 2.0
 
-                base = len(verts)
+                _base = len(verts)
                 verts.extend([
                     (x, guard_y + y_curve - half_h, -half_d),
                     (x, guard_y + y_curve - half_h, half_d),
@@ -792,7 +792,7 @@ def _build_cross_guard(
                 r = cage_radius * math.sin(t * math.pi) * 0.5 + cage_radius * 0.3
                 px = ca * r
                 pz = sa * r
-                base = len(verts)
+                __base = len(verts)
                 # Thin strip: 2 verts wide
                 verts.extend([
                     (px - sa * bar_thick, y, pz + ca * bar_thick),
@@ -1733,9 +1733,9 @@ def _build_hammer_head(
         ])
         for _ in pv:
             uvs.append((0.5, 0.5))
-        detail_features_extra = ["back_pick"]
+        _detail_features_extra = ["back_pick"]
     else:
-        detail_features_extra = []
+        _detail_features_extra = []
 
     return verts, faces, uvs, bevel_indices
 
@@ -2242,9 +2242,9 @@ def generate_quality_shield(
     running_vert_count += len(back_verts)
 
     # === RIM (beveled edge band) ===
-    rim_verts: list[tuple[float, float, float]] = []
+    _rim_verts: list[tuple[float, float, float]] = []
     rim_faces: list[tuple[int, ...]] = []
-    rim_uvs_list: list[tuple[float, float]] = []
+    _rim_uvs_list: list[tuple[float, float]] = []
 
     # Connect front edge to back edge with side faces
     # Top row
@@ -2451,7 +2451,7 @@ def generate_quality_staff(
                 c_radius, c_radius * 0.2,
                 c_height, c_segs, rings=2,
             )
-            offset = len(all_parts)
+            _offset = len(all_parts)
             all_parts.append((cv, cf))
             all_uvs.append([(0.5 + 0.1 * ci, 0.8) for _ in cv])
             running_vert_count += len(cv)
@@ -2888,7 +2888,7 @@ def generate_quality_gauntlet(
     vgroup_data: dict[str, list[int]] = {}
     running_vert_count = 0
 
-    side_mult = -1 if side == "left" else 1
+    _side_mult = -1 if side == "left" else 1
     hand_w = 0.04 * size
     hand_h = 0.06 * size
     hand_d = 0.025 * size

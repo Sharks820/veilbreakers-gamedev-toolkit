@@ -1887,7 +1887,7 @@ class TestKeyItems:
         assert dims["width"] > dims["height"]
 
     def test_map_scroll_sealed_has_wax(self):
-        r_rolled = generate_map_scroll_mesh(style="rolled")
+        generate_map_scroll_mesh(style="rolled")
         r_sealed = generate_map_scroll_mesh(style="sealed")
         # Sealed has wax seal + emblem + ribbon, similar complexity
         assert r_sealed["metadata"]["vertex_count"] > 20

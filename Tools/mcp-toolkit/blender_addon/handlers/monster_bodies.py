@@ -939,7 +939,7 @@ def _generate_humanoid_body(scale: float) -> tuple[VertList, FaceList, dict[str,
     torso_width_base = 0.2 * s
     torso_width_top = 0.25 * s
     torso_depth_base = 0.12 * s
-    torso_depth_top = 0.15 * s
+    _torso_depth_top = 0.15 * s
     hip_y = 0.9 * s
 
     tv, tf = _tapered_cylinder(
@@ -1119,7 +1119,7 @@ def _generate_quadruped_body(scale: float) -> tuple[VertList, FaceList, dict[str
     # Rotate body to lie along Z: swap Y-growth to Z-growth
     main_body_v_rotated: VertList = []
     for v in main_body_v:
-        new_y = v[1] + body_radius  # lift up
+        _new_y = v[1] + body_radius  # lift up
         new_z = (v[1] - (body_height - body_radius)) - body_length / 2  # Y progress -> Z
         main_body_v_rotated.append((v[0], body_height, new_z))
     # Better: use actual rings along Z
@@ -1382,7 +1382,7 @@ def _generate_arachnid_body(scale: float) -> tuple[VertList, FaceList, dict[str,
 
         prev_x, prev_y, prev_z = root_x, root_y, root_z
         for si in range(4):
-            t = si / 3.0
+            _t = si / 3.0
             # Coxa goes up, femur/patella go out, tarsus goes down
             if si == 0:
                 # Coxa: slight upward

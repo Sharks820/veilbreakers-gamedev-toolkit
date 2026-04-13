@@ -10,7 +10,7 @@ Pure numpy. No bpy. Deterministic.
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np

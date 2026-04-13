@@ -11,7 +11,6 @@ logic only (pass registration, channel mutation, validation).
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from blender_addon.handlers.terrain_semantics import (
     BBox,

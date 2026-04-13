@@ -12,7 +12,6 @@ Validates that every generator returns valid riggable mesh data:
 
 from __future__ import annotations
 
-import math
 
 import pytest
 
@@ -389,8 +388,8 @@ class TestFlag:
         specs = {s: generate_flag(style=s) for s in self.STYLES}
         vert_counts = {s: len(specs[s]["vertices"]) for s in self.STYLES}
         # Tattered has fewer faces due to removed cells
-        tattered_faces = len(specs["tattered"]["faces"])
-        banner_faces = len(specs["banner"]["faces"])
+        len(specs["tattered"]["faces"])
+        len(specs["banner"]["faces"])
         # Tattered should have fewer faces OR same (random)
         # Just check they all produce valid meshes
         for s in self.STYLES:
@@ -415,7 +414,7 @@ class TestFlag:
         flag_uvs = [uvs[i] for i in flag_body if i < len(uvs)]
         if flag_uvs:
             us = [uv[0] for uv in flag_uvs]
-            vs = [uv[1] for uv in flag_uvs]
+            [uv[1] for uv in flag_uvs]
             # Should span roughly 0-1 range
             assert max(us) > 0.9
             assert min(us) < 0.1

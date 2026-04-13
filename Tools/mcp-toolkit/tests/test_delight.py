@@ -12,7 +12,6 @@ Tests cover:
 import os
 
 import numpy as np
-import pytest
 from PIL import Image
 
 from veilbreakers_mcp.shared.delight import delight_albedo
@@ -112,7 +111,7 @@ class TestDelightAlbedo:
         output_path = str(tmp_path / "output.png")
         _create_gradient_image(input_path)
 
-        result = delight_albedo(input_path, output_path, strength=0.0)
+        delight_albedo(input_path, output_path, strength=0.0)
 
         # With strength=0.0, output should be very close to input
         input_img = np.array(Image.open(input_path))

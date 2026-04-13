@@ -11,10 +11,9 @@ Per Addendum 1.B.4. No bpy imports.
 
 from __future__ import annotations
 
-import os
 import re
 from pathlib import Path
-from typing import Any, Callable, List, Optional, Set
+from typing import Any, Callable, List, Set
 
 from .terrain_quality_profiles import TerrainQualityProfile
 

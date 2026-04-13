@@ -5,7 +5,6 @@ the expected keywords, Unity API calls, PrimeTween usage, and parameter
 substitutions. Validates no DOTween contamination across all generators.
 """
 
-import pytest
 
 from veilbreakers_mcp.shared.unity_templates.ux_templates import (
     generate_minimap_script,

@@ -15,7 +15,6 @@ Every test uses real data and exercises actual functions -- no mocks.
 from __future__ import annotations
 
 import io
-import math
 import struct
 import tempfile
 from pathlib import Path
@@ -34,9 +33,6 @@ from PIL import Image as PILImage
 # Pure-logic modules -- no bpy dependency
 from blender_addon.handlers.animation_gaits import (
     ATTACK_CONFIGS,
-    BIPED_WALK_CONFIG,
-    FLY_HOVER_CONFIG,
-    IDLE_CONFIG,
     Keyframe,
     generate_attack_keyframes,
     generate_custom_keyframes,
@@ -45,7 +41,6 @@ from blender_addon.handlers.animation_gaits import (
     get_gait_config,
 )
 from blender_addon.handlers._terrain_noise import (
-    BIOME_RULES,
     TERRAIN_PRESETS,
     compute_biome_assignments,
     compute_slope_map,
@@ -79,7 +74,6 @@ from blender_addon.handlers.texture import (
     _is_power_of_two,
     _validate_texture_metadata,
     _validate_bake_params,
-    _find_texture_file,
     _build_channel_config,
     BSDF_INPUT_MAP,
 )
@@ -101,8 +95,6 @@ from blender_addon.handlers.rigging_templates import (
     VALID_RIGIFY_TYPES,
 )
 from blender_addon.handlers.rigging_advanced import (
-    FACIAL_BONES,
-    MONSTER_EXPRESSIONS,
     RAGDOLL_PRESETS,
     _validate_ik_params,
     _validate_spring_params,
@@ -113,14 +105,7 @@ from blender_addon.handlers.rigging_advanced import (
 
 # Animation pure-logic validators
 from blender_addon.handlers.animation import (
-    VALID_ATTACK_TYPES,
-    VALID_GAITS,
-    VALID_HIT_DIRECTIONS,
-    VALID_REACTION_TYPES,
-    VALID_SPEEDS,
     _validate_walk_params,
-    _validate_fly_params,
-    _validate_idle_params,
     _validate_attack_params,
     _validate_reaction_params,
     _validate_custom_params,
@@ -129,11 +114,6 @@ from blender_addon.handlers.animation import (
 # Animation export pure-logic
 from blender_addon.handlers.animation_export import (
     MIXAMO_TO_RIGIFY,
-    PREVIEW_ANGLES,
-    _validate_export_params,
-    _validate_preview_params,
-    _validate_secondary_motion_params,
-    _validate_root_motion_params,
     _validate_batch_export_params,
     _map_mixamo_bones,
     _generate_unity_filename,
@@ -154,10 +134,8 @@ from blender_addon.handlers.worldbuilding_layout import (
 
 # Worldbuilding pure-logic result builders
 from blender_addon.handlers.worldbuilding import (
-    _building_ops_to_mesh_spec,
     _build_building_result,
     _build_castle_result,
-    _build_ruins_result,
     _build_interior_result,
     _build_modular_kit_result,
 )
@@ -932,7 +910,6 @@ class TestTool13BlenderAnimation:
         assert result["description"] == "raise arms"
 
     def test_validate_batch_export_params_valid(self):
-        import tempfile
         from pathlib import Path
         _tmp_anims = str(Path(tempfile.gettempdir()) / "anims")
         result = _validate_batch_export_params({
@@ -1173,7 +1150,7 @@ class TestTool15BlenderWorldbuilding:
 
     def test_apply_ruins_damage(self):
         spec = evaluate_building_grammar(10, 8, 2, "medieval", seed=0)
-        original_ops = len(spec.operations)
+        len(spec.operations)
         damaged = apply_ruins_damage(spec, damage_level=0.7, seed=0)
         assert isinstance(damaged, BuildingSpec)
         # Damage should produce debris operations

@@ -26,7 +26,6 @@ Pure-logic functions:
 from __future__ import annotations
 
 import logging
-import math
 from operator import itemgetter
 
 import bpy

@@ -4,7 +4,6 @@ Covers all 10 brands x 6 ability slots, status effects, combos,
 and creature-type combat idles. All pure-logic -- no Blender required.
 """
 
-import math
 import pytest
 
 from blender_addon.handlers.animation_abilities import (

@@ -161,7 +161,14 @@ def test_agent_contract_exposes_automation_targets_and_warnings():
     assert preset["toolchain"]["terrain_authoring"] == "terrain_mixer"
     assert preset["toolchain"]["scatter"] == "bagapie"
     assert preset["toolchain"]["export_packaging"] == "native_export_packaging"
-    assert preset["terrain_pass_sequence"][-2:] == ["prepare_heightmap_raw_u16", "validation_full"]
+    assert "cliffs" in preset["terrain_pass_sequence"]
+    assert "materials_v2" in preset["terrain_pass_sequence"]
+    assert "navmesh" in preset["terrain_pass_sequence"]
+    assert preset["terrain_pass_sequence"][-3:] == [
+        "prepare_terrain_normals",
+        "prepare_heightmap_raw_u16",
+        "validation_full",
+    ]
     assert contract["entrypoints"]["inspect_toolchain"] == "asset_pipeline action=inspect_external_toolchain"
     assert any("Sverchok" in warning for warning in contract["warnings"])
     assert any("BlenderKit" in warning for warning in contract["warnings"])

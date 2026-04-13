@@ -42,7 +42,7 @@ def assert_no_editor_import(script: str, label: str = "") -> None:
 # combat_feel_templates
 # ===========================================================================
 
-from veilbreakers_mcp.shared.unity_templates.combat_feel_templates import (
+from veilbreakers_mcp.shared.unity_templates.combat_feel_templates import (  # noqa: E402
     generate_hitstop_system_script,
     generate_input_buffer_script,
     generate_combat_camera_script,
@@ -168,7 +168,7 @@ class TestAttackChain:
 # gameplay_templates (new generators)
 # ===========================================================================
 
-from veilbreakers_mcp.shared.unity_templates.gameplay_templates import (
+from veilbreakers_mcp.shared.unity_templates.gameplay_templates import (  # noqa: E402
     generate_tactical_ai_coordinator_script,
     generate_boss_phase_controller_script,
     generate_player_combat_controller_script,
@@ -285,7 +285,7 @@ class TestAttackTelegraph:
 # shader_templates
 # ===========================================================================
 
-from veilbreakers_mcp.shared.unity_templates.shader_templates import (
+from veilbreakers_mcp.shared.unity_templates.shader_templates import (  # noqa: E402
     generate_anisotropic_hair_shader,
     generate_terrain_blend_shader,
     generate_ice_crystal_shader,
@@ -344,7 +344,7 @@ class TestIceCrystalShader:
 # vfx_mastery_templates
 # ===========================================================================
 
-from veilbreakers_mcp.shared.unity_templates.vfx_mastery_templates import (
+from veilbreakers_mcp.shared.unity_templates.vfx_mastery_templates import (  # noqa: E402
     generate_vfx_pool_script,
     generate_vfx_lod_script,
 )
@@ -394,7 +394,7 @@ class TestVFXLOD:
 # world_templates
 # ===========================================================================
 
-from veilbreakers_mcp.shared.unity_templates.world_templates import (
+from veilbreakers_mcp.shared.unity_templates.world_templates import (  # noqa: E402
     generate_wfc_dungeon_script,
     generate_interior_streaming_script,
 )
@@ -450,7 +450,7 @@ class TestInteriorStreaming:
 # content_templates
 # ===========================================================================
 
-from veilbreakers_mcp.shared.unity_templates.content_templates import (
+from veilbreakers_mcp.shared.unity_templates.content_templates import (  # noqa: E402
     generate_legendary_affix_system_script,
     generate_equipment_variant_matrix_script,
 )
@@ -499,7 +499,7 @@ class TestEquipmentVariantMatrix:
 # audio_middleware_templates
 # ===========================================================================
 
-from veilbreakers_mcp.shared.unity_templates.audio_middleware_templates import (
+from veilbreakers_mcp.shared.unity_templates.audio_middleware_templates import (  # noqa: E402
     generate_adaptive_music_system_script,
 )
 

@@ -15,9 +15,6 @@ import time
 from typing import Any, Callable, Optional
 
 from .terrain_semantics import (
-    BBox,
-    TerrainAnchor,
-    TerrainIntentState,
     TerrainPipelineState,
 )
 

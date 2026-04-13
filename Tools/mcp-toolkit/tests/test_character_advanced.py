@@ -30,7 +30,6 @@ from blender_addon.handlers.character_advanced import (
     VALID_MORPH_NAMES,
     VALID_COLLISION_TYPES,
     VALID_FACIAL_LEVELS,
-    VALID_BODY_PARTS,
     FACE_MORPH_TARGETS,
     BODY_MORPH_TARGETS,
     FACIAL_LANDMARKS,

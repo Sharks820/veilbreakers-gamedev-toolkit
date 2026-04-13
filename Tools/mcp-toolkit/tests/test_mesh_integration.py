@@ -12,7 +12,6 @@ All tests are pure-logic (no bpy needed).
 
 from __future__ import annotations
 
-import math
 
 import pytest
 
@@ -25,7 +24,6 @@ from blender_addon.handlers._mesh_bridge import (
 )
 from blender_addon.handlers._dungeon_gen import (
     DungeonLayout,
-    Room,
     generate_bsp_dungeon,
     generate_dungeon_prop_placements,
 )

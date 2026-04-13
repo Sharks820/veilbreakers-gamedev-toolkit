@@ -14,16 +14,14 @@ Pure numpy, no bpy. Z-up, world meters. All seeding is deterministic via
 
 from __future__ import annotations
 
-import math
 import time
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 import numpy as np
 
 from .terrain_semantics import (
     BBox,
-    PassDefinition,
     PassResult,
     TerrainMaskStack,
     TerrainPipelineState,
@@ -78,7 +76,7 @@ class StratigraphyStack:
     layers: List[StratigraphyLayer] = field(default_factory=list)
 
     def total_thickness(self) -> float:
-        return float(sum(l.thickness_m for l in self.layers))
+        return float(sum(L.thickness_m for L in self.layers))
 
     def layer_for_elevation(self, elevation_m: float) -> Optional[StratigraphyLayer]:
         """Return the stratum whose world-Z band contains ``elevation_m``.
@@ -128,10 +126,10 @@ def compute_strata_orientation(
     # Build a per-layer band lookup once (fast path). We vectorize by
     # classifying each cell's (elev - base) into a layer index via
     # cumulative thicknesses.
-    thicks = np.array([l.thickness_m for l in strat_stack.layers], dtype=np.float64)
+    thicks = np.array([L.thickness_m for L in strat_stack.layers], dtype=np.float64)
     bounds = np.concatenate(([0.0], np.cumsum(thicks)))  # length N+1
-    dips = np.array([l.dip_rad for l in strat_stack.layers], dtype=np.float64)
-    azs = np.array([l.azimuth_rad for l in strat_stack.layers], dtype=np.float64)
+    dips = np.array([L.dip_rad for L in strat_stack.layers], dtype=np.float64)
+    azs = np.array([L.azimuth_rad for L in strat_stack.layers], dtype=np.float64)
 
     z = (h - strat_stack.base_elevation_m).clip(min=0.0)
     # np.searchsorted gives the index of the first bound > z. Subtract 1
@@ -177,10 +175,10 @@ def compute_rock_hardness(
         raise ValueError("StratigraphyStack must have at least one layer")
 
     h = np.asarray(stack.height, dtype=np.float64)
-    thicks = np.array([l.thickness_m for l in strat_stack.layers], dtype=np.float64)
+    thicks = np.array([L.thickness_m for L in strat_stack.layers], dtype=np.float64)
     bounds = np.concatenate(([0.0], np.cumsum(thicks)))
     hardness_vals = np.array(
-        [l.hardness for l in strat_stack.layers], dtype=np.float64
+        [L.hardness for L in strat_stack.layers], dtype=np.float64
     )
 
     z = (h - strat_stack.base_elevation_m).clip(min=0.0)
@@ -238,7 +236,7 @@ def _default_strat_stack_from_hints(hints: dict) -> StratigraphyStack:
     """Build a default 4-layer stack if intent.composition_hints doesn't provide one."""
     user_layers = hints.get("stratigraphy_layers")
     if user_layers:
-        layers = [StratigraphyLayer(**l) for l in user_layers]
+        layers = [StratigraphyLayer(**L) for L in user_layers]
         base = float(hints.get("stratigraphy_base_elevation_m", 0.0))
         return StratigraphyStack(base_elevation_m=base, layers=layers)
 
@@ -271,7 +269,7 @@ def pass_stratigraphy(
     strat_stack = _default_strat_stack_from_hints(dict(hints))
 
     hardness = compute_rock_hardness(stack, strat_stack)
-    orientation = compute_strata_orientation(stack, strat_stack)
+    _orientation = compute_strata_orientation(stack, strat_stack)
 
     metrics = {
         "layer_count": len(strat_stack.layers),

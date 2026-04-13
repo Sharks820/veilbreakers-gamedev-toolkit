@@ -4,7 +4,6 @@ Tests the _validate_sculpt_brush_params pure-logic validator and
 related constants from handlers/mesh.py -- no Blender/bpy required.
 """
 
-import pytest
 
 
 class TestSculptBrushTypes:

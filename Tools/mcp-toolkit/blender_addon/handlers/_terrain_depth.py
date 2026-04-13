@@ -21,7 +21,6 @@ import numpy as np
 from .procedural_meshes import (
     _make_result,
     _merge_meshes,
-    _compute_dimensions,
     generate_bridge_mesh,
 )
 
@@ -136,7 +135,7 @@ def generate_cave_entrance_mesh(
     Args:
         width: Width of the entrance opening.
         height: Height of the entrance opening (to top of arch).
-        depth: How far the tunnel extends into terrain (Y-axis).
+        depth: How far the tunnel extends into terrain (negative Y-axis).
         arch_segments: Number of segments in the semicircular arch.
         terrain_edge_height: Z offset for terrain-level placement.
         style: Visual style label.
@@ -162,9 +161,9 @@ def generate_cave_entrance_mesh(
     # Each slice is the arch profile (semicircle + sides)
     profile_rings: list[list[tuple[float, float, float]]] = []
 
-    for dz_i in range(depth_segs + 1):
-        z_frac = dz_i / depth_segs
-        z = -z_frac * depth  # tunnel goes in -Z direction
+    for depth_i in range(depth_segs + 1):
+        depth_frac = depth_i / depth_segs
+        tunnel_y = -depth_frac * depth
 
         ring: list[tuple[float, float, float]] = []
 
@@ -174,7 +173,7 @@ def generate_cave_entrance_mesh(
             z_frac = si / side_segs
             vz = terrain_edge_height + z_frac * (spring_z - terrain_edge_height)
             noise = rng.gauss(0.0, 0.05) if style == "natural" else 0.0
-            ring.append((-half_w + noise, z, vz))
+            ring.append((-half_w + noise, tunnel_y, vz))
 
         # Arch semicircle (left to right across the top)
         arch_radius = half_w
@@ -185,14 +184,14 @@ def generate_cave_entrance_mesh(
             vz = arch_center_z + math.sin(angle) * (apex_z - spring_z)
             noise_x = rng.gauss(0.0, 0.05) if style == "natural" else 0.0
             noise_z = rng.gauss(0.0, 0.05) if style == "natural" else 0.0
-            ring.append((x + noise_x, z, vz + noise_z))
+            ring.append((x + noise_x, tunnel_y, vz + noise_z))
 
         # Right side spring-line down to bottom
         for si in range(side_segs, -1, -1):
             z_frac = si / side_segs
             vz = terrain_edge_height + z_frac * (spring_z - terrain_edge_height)
             noise = rng.gauss(0.0, 0.05) if style == "natural" else 0.0
-            ring.append((half_w + noise, z, vz))
+            ring.append((half_w + noise, tunnel_y, vz))
 
         profile_rings.append(ring)
 
@@ -463,7 +462,7 @@ def generate_terrain_bridge_mesh(
 
     dx = ex - sx
     dy = ey - sy
-    dz = ez - sz
+    __dz = ez - sz
 
     # Compute span (horizontal distance in XY ground plane, Z-up)
     horizontal_dist = math.sqrt(dx * dx + dy * dy)

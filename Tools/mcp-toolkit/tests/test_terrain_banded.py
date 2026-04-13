@@ -20,7 +20,6 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
-import pytest
 
 
 # ---------------------------------------------------------------------------
@@ -304,7 +303,6 @@ def _build_minimal_state(tile_size=24, seed=321):
 def test_banded_pass_writes_composite_into_stack_height():
     from blender_addon.handlers.terrain_banded import (
         generate_banded_heightmap,
-        pass_banded_macro,
         register_bundle_g_passes,
     )
     from blender_addon.handlers.terrain_pipeline import TerrainPassController

@@ -15,7 +15,7 @@ __all__ = [
     "safe_process",
     "safe_defaults",
     "safe_broad_except",
-    "safe_reexport_check",
+    "safe_reexport_check",  # noqa: F822
     "safe_lambda_capture",
     "safe_dict_get",
     "safe_open",
@@ -122,11 +122,6 @@ def safe_json_load(data: str) -> Optional[dict]:
 # === NOT PY-COR-14: Not shadowing builtins ===
 def safe_naming() -> None:
     """Uses non-builtin names for local variables."""
-    items = [1, 2, 3]  # Not 'list'
-    mapping = {"a": 1}  # Not 'dict'
-    unique = {1, 2, 3}  # Not 'set'
-    obj_type = "string"  # Not 'type'
-    obj_id = 42  # Not 'id'
 
 
 # === NOT PY-SEC-07: assert in test code (this is test fixtures dir) ===

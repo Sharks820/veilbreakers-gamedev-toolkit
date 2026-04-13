@@ -5,7 +5,7 @@ from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, logger,
-    _write_to_unity, STANDARD_NEXT_STEPS,
+    _write_generated_editor_response,
 )
 
 from veilbreakers_mcp.shared.unity_templates.quality_templates import (
@@ -22,6 +22,13 @@ from veilbreakers_mcp.shared.unity_templates._cs_sanitize import sanitize_cs_ide
 # ---------------------------------------------------------------------------
 # Compound tool: unity_quality (AAA-01, AAA-02, AAA-03, AAA-04, AAA-06)
 # ---------------------------------------------------------------------------
+
+_QUALITY_MENU_PATHS = {
+    "check_poly_budget": "VeilBreakers/Quality/Check Poly Budget",
+    "create_master_materials": "VeilBreakers/Quality/Generate Master Material Library",
+    "check_texture_quality": "VeilBreakers/Quality/Check Texture Quality",
+    "aaa_audit": "VeilBreakers/Quality/Full AAA Audit",
+}
 
 
 @mcp.tool()
@@ -55,14 +62,13 @@ async def unity_quality(
                 auto_flag=auto_flag,
             )
             rel_path = f"Assets/Editor/Generated/Quality/PolyBudgetCheck_{safe_type}.cs"
-            abs_path = _write_to_unity(script, rel_path)
-            return json.dumps({
-                "status": "success",
-                "action": action,
-                "script_path": abs_path,
-                "asset_type": safe_type,
-                "next_steps": STANDARD_NEXT_STEPS,
-            })
+            return await _write_generated_editor_response(
+                action_name=action,
+                script_content=script,
+                rel_path=rel_path,
+                menu_path=_QUALITY_MENU_PATHS[action],
+                response_fields={"asset_type": safe_type},
+            )
 
         elif action == "create_master_materials":
             script = generate_master_material_script(
@@ -70,14 +76,16 @@ async def unity_quality(
                 materials=materials,
             )
             rel_path = "Assets/Editor/Generated/Quality/CreateMasterMaterials.cs"
-            abs_path = _write_to_unity(script, rel_path)
-            return json.dumps({
-                "status": "success",
-                "action": action,
-                "script_path": abs_path,
-                "material_count": len(materials) if materials else "default",
-                "next_steps": STANDARD_NEXT_STEPS,
-            })
+            return await _write_generated_editor_response(
+                action_name=action,
+                script_content=script,
+                rel_path=rel_path,
+                menu_path=_QUALITY_MENU_PATHS[action],
+                response_fields={
+                    "material_count": len(materials) if materials else "default",
+                    "output_folder": output_folder,
+                },
+            )
 
         elif action == "check_texture_quality":
             script = generate_texture_quality_check_script(
@@ -87,13 +95,13 @@ async def unity_quality(
                 check_channel_packing=check_channel_packing,
             )
             rel_path = "Assets/Editor/Generated/Quality/TextureQualityCheck.cs"
-            abs_path = _write_to_unity(script, rel_path)
-            return json.dumps({
-                "status": "success",
-                "action": action,
-                "script_path": abs_path,
-                "next_steps": STANDARD_NEXT_STEPS,
-            })
+            return await _write_generated_editor_response(
+                action_name=action,
+                script_content=script,
+                rel_path=rel_path,
+                menu_path=_QUALITY_MENU_PATHS[action],
+                response_fields={"target_folder": target_folder},
+            )
 
         elif action == "aaa_audit":
             safe_type = sanitize_cs_identifier(asset_type) or "prop"
@@ -105,14 +113,16 @@ async def unity_quality(
                 check_materials=check_materials,
             )
             rel_path = "Assets/Editor/Generated/Quality/AAAQualityAudit.cs"
-            abs_path = _write_to_unity(script, rel_path)
-            return json.dumps({
-                "status": "success",
-                "action": action,
-                "script_path": abs_path,
-                "asset_type": safe_type,
-                "next_steps": STANDARD_NEXT_STEPS,
-            })
+            return await _write_generated_editor_response(
+                action_name=action,
+                script_content=script,
+                rel_path=rel_path,
+                menu_path=_QUALITY_MENU_PATHS[action],
+                response_fields={
+                    "asset_type": safe_type,
+                    "target_folder": target_folder,
+                },
+            )
 
         else:
             return json.dumps(

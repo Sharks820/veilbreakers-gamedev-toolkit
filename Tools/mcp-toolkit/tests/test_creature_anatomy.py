@@ -661,7 +661,7 @@ def test_mouth_position_offset() -> None:
 
     # Center of mass should be near the specified position
     cx = sum(v[0] for v in verts) / len(verts)
-    cy = sum(v[1] for v in verts) / len(verts)
+    sum(v[1] for v in verts) / len(verts)
     cz = sum(v[2] for v in verts) / len(verts)
 
     assert abs(cx - pos[0]) < 0.5, f"Mouth X center {cx:.3f} far from {pos[0]}"
@@ -744,8 +744,8 @@ def test_serpent_size_scaling() -> None:
     small = generate_serpent_body(size=0.5)
     large = generate_serpent_body(size=2.0)
 
-    small_bb = small[3].get("head", (0, 0, 0))
-    large_bb = large[3].get("head", (0, 0, 0))
+    small[3].get("head", (0, 0, 0))
+    large[3].get("head", (0, 0, 0))
 
     # The meshes should be different sizes
     assert small[0] != large[0] or len(small[0]) != len(large[0]) or True

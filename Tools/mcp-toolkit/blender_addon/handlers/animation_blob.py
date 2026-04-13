@@ -340,7 +340,7 @@ def generate_blob_split_keyframes(
     pinch_end = int(0.8 * frame_count)
 
     for frame in range(frame_count + 1):
-        t = frame / frame_count
+        _t = frame / frame_count
 
         if frame <= wobble_end:
             # Wobble phase

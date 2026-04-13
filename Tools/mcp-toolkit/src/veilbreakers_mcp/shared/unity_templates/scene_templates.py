@@ -68,6 +68,92 @@ _TIME_OF_DAY_PRESETS: dict[str, dict] = {
 }
 
 
+def _cs_float_literal(value: float | int) -> str:
+    """Format a Python numeric value as a Unity-friendly C# float literal."""
+    numeric = float(value)
+    text = f"{numeric:g}"
+    if "e" not in text.lower() and "." not in text:
+        text += ".0"
+    return f"{text}f"
+
+
+def _cs_vector2_literal(values: list[float] | tuple[float, float]) -> str:
+    if len(values) != 2:
+        raise ValueError("tile_offset must contain exactly 2 values")
+    return f"new Vector2({_cs_float_literal(values[0])}, {_cs_float_literal(values[1])})"
+
+
+def _cs_color_literal(values: list[float] | tuple[float, ...]) -> str:
+    if len(values) not in (3, 4):
+        raise ValueError("specular_color must contain 3 or 4 values")
+    color_values = list(values)
+    if len(color_values) == 3:
+        color_values.append(1.0)
+    return "new Color(" + ", ".join(_cs_float_literal(v) for v in color_values) + ")"
+
+
+def _generate_terrain_layer_block(
+    layer: dict,
+    layer_var: str,
+    tex_var: str,
+    index: int,
+    layer_array_var: str,
+) -> str:
+    """Generate C# setup for one TerrainLayer, including optional rich fields."""
+    tex_path = sanitize_cs_string(layer.get("texture_path", ""))
+    lines = [
+        f'            var {tex_var} = AssetDatabase.LoadAssetAtPath<Texture2D>("{tex_path}");',
+        f"            var {layer_var} = new TerrainLayer();",
+        f"            {layer_var}.diffuseTexture = {tex_var};",
+    ]
+
+    tile_size = layer.get("tiling", 15.0)
+    lines.append(f"            {layer_var}.tileSize = new Vector2({_cs_float_literal(tile_size)}, {_cs_float_literal(tile_size)});")
+
+    normal_path = layer.get("normal_path")
+    if normal_path:
+        safe_normal_path = sanitize_cs_string(normal_path)
+        lines.extend(
+            [
+                f'            var {tex_var}Normal = AssetDatabase.LoadAssetAtPath<Texture2D>("{safe_normal_path}");',
+                f"            {layer_var}.normalMapTexture = {tex_var}Normal;",
+            ]
+        )
+
+    mask_map_path = layer.get("mask_map_path")
+    if mask_map_path:
+        safe_mask_map_path = sanitize_cs_string(mask_map_path)
+        lines.extend(
+            [
+                f'            var {tex_var}Mask = AssetDatabase.LoadAssetAtPath<Texture2D>("{safe_mask_map_path}");',
+                f"            {layer_var}.maskMapTexture = {tex_var}Mask;",
+            ]
+        )
+
+    tile_offset = layer.get("tile_offset")
+    if tile_offset is not None:
+        lines.append(f"            {layer_var}.tileOffset = {_cs_vector2_literal(tile_offset)};")
+
+    normal_scale = layer.get("normal_scale")
+    if normal_scale is not None:
+        lines.append(f"            {layer_var}.normalScale = {_cs_float_literal(normal_scale)};")
+
+    metallic = layer.get("metallic")
+    if metallic is not None:
+        lines.append(f"            {layer_var}.metallic = {_cs_float_literal(metallic)};")
+
+    smoothness = layer.get("smoothness")
+    if smoothness is not None:
+        lines.append(f"            {layer_var}.smoothness = {_cs_float_literal(smoothness)};")
+
+    specular_color = layer.get("specular_color")
+    if specular_color is not None:
+        lines.append(f"            {layer_var}.specular = {_cs_color_literal(specular_color)};")
+
+    lines.append(f"            {layer_array_var}[{index}] = {layer_var};")
+    return "\n".join(lines)
+
+
 # ---------------------------------------------------------------------------
 # SCENE-01: Terrain setup
 # ---------------------------------------------------------------------------
@@ -103,14 +189,13 @@ def generate_terrain_setup_script(
     if splatmap_layers:
         layer_loads = ""
         for i, layer in enumerate(splatmap_layers):
-            tex_path = sanitize_cs_string(layer.get("texture_path", ""))
-            tiling = layer.get("tiling", 15.0)
-            layer_loads += f"""
-            var tex{i} = AssetDatabase.LoadAssetAtPath<Texture2D>("{tex_path}");
-            var layer{i} = new TerrainLayer();
-            layer{i}.diffuseTexture = tex{i};
-            layer{i}.tileSize = new Vector2({tiling}f, {tiling}f);
-            terrainLayers[{i}] = layer{i};"""
+            layer_loads += "\n" + _generate_terrain_layer_block(
+                layer,
+                f"layer{i}",
+                f"tex{i}",
+                i,
+                "terrainLayers",
+            )
 
         layer_block = f"""
             // Splatmap layer configuration
@@ -319,14 +404,13 @@ def generate_tiled_terrain_setup_script(
         if splatmap_layers:
             layer_loads = ""
             for i, layer in enumerate(splatmap_layers):
-                tex_path = sanitize_cs_string(layer.get("texture_path", ""))
-                tiling = layer.get("tiling", 15.0)
-                layer_loads += f"""
-            var tile{suffix}Tex{i} = AssetDatabase.LoadAssetAtPath<Texture2D>("{tex_path}");
-            var tile{suffix}Layer{i} = new TerrainLayer();
-            tile{suffix}Layer{i}.diffuseTexture = tile{suffix}Tex{i};
-            tile{suffix}Layer{i}.tileSize = new Vector2({tiling}f, {tiling}f);
-            tile{suffix}Layers[{i}] = tile{suffix}Layer{i};"""
+                layer_loads += "\n" + _generate_terrain_layer_block(
+                    layer,
+                    f"tile{suffix}Layer{i}",
+                    f"tile{suffix}Tex{i}",
+                    i,
+                    f"tile{suffix}Layers",
+                )
 
             splatmap_code = f"""
             var tile{suffix}Layers = new TerrainLayer[{len(splatmap_layers)}];

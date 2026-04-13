@@ -14,7 +14,6 @@ All pure-logic -- no Blender required.
 """
 
 import math
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -432,7 +431,7 @@ class TestMossGrowth:
         """Only surfaces with upward-facing normals get moss."""
         # Cube has top face (up), bottom face (down), and 4 walls
         mesh = _make_cube_mesh_data()
-        mask = apply_moss_growth(mesh, strength=1.0)
+        apply_moss_growth(mesh, strength=1.0)
         # Top vertices (4,5,6,7) should have some moss contribution
         # Bottom and side-only vertices might have less
         # The key test: no vertex gets moss from downward-facing or pure-side surfaces

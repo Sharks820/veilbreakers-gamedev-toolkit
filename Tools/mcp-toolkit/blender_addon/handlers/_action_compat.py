@@ -8,7 +8,6 @@ This module provides helpers that work across both APIs.
 
 from __future__ import annotations
 
-import bpy
 
 
 def is_layered_action(action) -> bool:

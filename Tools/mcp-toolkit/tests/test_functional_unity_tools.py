@@ -155,7 +155,7 @@ class TestUnityEditor:
 # Tool 2: unity_vfx (10 actions)
 # ---------------------------------------------------------------------------
 
-from veilbreakers_mcp.shared.unity_templates.vfx_templates import (
+from veilbreakers_mcp.shared.unity_templates.vfx_templates import (  # noqa: E402
     BRAND_VFX_CONFIGS,
     ENV_VFX_CONFIGS,
     generate_ability_vfx_script,
@@ -167,7 +167,7 @@ from veilbreakers_mcp.shared.unity_templates.vfx_templates import (
     generate_screen_effect_script,
     generate_trail_vfx_script,
 )
-from veilbreakers_mcp.shared.unity_templates.shader_templates import (
+from veilbreakers_mcp.shared.unity_templates.shader_templates import (  # noqa: E402
     generate_corruption_shader,
     generate_damage_overlay_shader,
     generate_dissolve_shader,
@@ -367,8 +367,8 @@ class TestUnityVFX:
 # Tool 3: unity_audio (10 actions)
 # ---------------------------------------------------------------------------
 
-from veilbreakers_mcp.shared.elevenlabs_client import ElevenLabsAudioClient
-from veilbreakers_mcp.shared.unity_templates.audio_templates import (
+from veilbreakers_mcp.shared.elevenlabs_client import ElevenLabsAudioClient  # noqa: E402
+from veilbreakers_mcp.shared.unity_templates.audio_templates import (  # noqa: E402
     generate_adaptive_music_script,
     generate_animation_event_sfx_script,
     generate_audio_mixer_setup_script,
@@ -573,18 +573,18 @@ class TestUnityAudio:
 # Tool 4: unity_ui (5 actions)
 # ---------------------------------------------------------------------------
 
-from veilbreakers_mcp.shared.unity_templates.ui_templates import (
+from veilbreakers_mcp.shared.unity_templates.ui_templates import (  # noqa: E402
     generate_responsive_test_script,
     generate_uxml_screen,
     generate_uss_stylesheet,
     validate_uxml_layout,
 )
-from veilbreakers_mcp.shared.wcag_checker import (
+from veilbreakers_mcp.shared.wcag_checker import (  # noqa: E402
     check_wcag_aa,
     contrast_ratio,
     relative_luminance,
 )
-from veilbreakers_mcp.shared.screenshot_diff import compare_screenshots
+from veilbreakers_mcp.shared.screenshot_diff import compare_screenshots  # noqa: E402
 
 
 class TestUnityUI:
@@ -819,7 +819,7 @@ class TestUnityUI:
 # Tool 5: unity_scene (8 actions)
 # ---------------------------------------------------------------------------
 
-from veilbreakers_mcp.shared.unity_templates.scene_templates import (
+from veilbreakers_mcp.shared.unity_templates.scene_templates import (  # noqa: E402
     generate_animation_rigging_script,
     generate_animator_controller_script,
     generate_avatar_config_script,
@@ -1162,7 +1162,7 @@ class TestUnityScene:
 # Tool 6: unity_gameplay (7 actions)
 # ---------------------------------------------------------------------------
 
-from veilbreakers_mcp.shared.unity_templates.gameplay_templates import (
+from veilbreakers_mcp.shared.unity_templates.gameplay_templates import (  # noqa: E402
     generate_aggro_system_script,
     generate_behavior_tree_script,
     generate_combat_ability_script,
@@ -1332,7 +1332,7 @@ class TestUnityGameplay:
 # Tool 7: unity_performance (5 actions)
 # ---------------------------------------------------------------------------
 
-from veilbreakers_mcp.shared.unity_templates.performance_templates import (
+from veilbreakers_mcp.shared.unity_templates.performance_templates import (  # noqa: E402
     _analyze_profile_thresholds,
     _classify_asset_issues,
     _validate_lod_screen_percentages,

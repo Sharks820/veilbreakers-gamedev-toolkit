@@ -4,7 +4,6 @@ All modules are pure logic (no bpy/bmesh). Tests verify mesh spec structure,
 determinism, edge cases, and feature correctness.
 """
 
-import math
 
 import pytest
 
@@ -219,6 +218,7 @@ class TestBridgeDetection:
         segments = [((0, 0, -1), (10, 0, -1), 4.0, "main")]
         bridges = _detect_bridges(segments, water_level=0.0)
         assert len(bridges) > 0
+        assert bridges[0]["deck_start"][2] > 0.0
 
     def test_bridge_has_correct_road_type(self):
         from blender_addon.handlers.road_network import _detect_bridges
@@ -226,6 +226,24 @@ class TestBridgeDetection:
         segments = [((0, 0, -2), (10, 0, -2), 2.0, "path")]
         bridges = _detect_bridges(segments, water_level=0.0)
         assert bridges[0]["road_type"] == "path"
+
+    def test_heightmap_bridge_sampling_does_not_wrap(self):
+        from blender_addon.handlers.road_network import _detect_bridges
+
+        heightmap = [
+            [5.0, 5.0, 5.0, 5.0],
+            [5.0, 5.0, 5.0, 5.0],
+            [-5.0, -5.0, -5.0, -5.0],
+            [5.0, 5.0, 5.0, 5.0],
+        ]
+        segments = [((0.0, 3.2, 1.0), (4.0, 3.2, 1.0), 4.0, "main")]
+        bridges = _detect_bridges(
+            segments,
+            water_level=0.0,
+            heightmap=heightmap,
+            terrain_bounds=(0.0, 0.0, 4.0, 4.0),
+        )
+        assert bridges == []
 
 
 class TestComputeRoadNetwork:
@@ -241,6 +259,7 @@ class TestComputeRoadNetwork:
         assert len(result["segments"]) >= 2
         assert result["total_length"] > 0
         assert len(result["mesh_specs"]) == len(result["segments"])
+        assert "bridge_mesh_specs" in result
 
     def test_single_waypoint(self):
         from blender_addon.handlers.road_network import compute_road_network
@@ -301,6 +320,8 @@ class TestComputeRoadNetwork:
         wps = [(0, 0, -5), (20, 0, -5)]
         result = compute_road_network(wps, water_level=0.0, seed=42)
         assert len(result["bridges"]) > 0
+        assert len(result["bridge_mesh_specs"]) == len(result["bridges"])
+        assert result["bridge_mesh_specs"][0]["type"] == "terrain_bridge"
 
 
 class TestRoadMeshSpec:

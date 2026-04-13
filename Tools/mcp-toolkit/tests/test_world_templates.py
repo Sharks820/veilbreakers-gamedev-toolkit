@@ -6,7 +6,6 @@ These are editor scripts and MUST contain 'using UnityEditor;' (except
 the runtime part of scene transitions which must NOT).
 """
 
-import pytest
 
 from veilbreakers_mcp.shared.unity_templates.world_templates import (
     generate_scene_creation_script,

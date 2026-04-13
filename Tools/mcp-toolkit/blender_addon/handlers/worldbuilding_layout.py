@@ -1153,8 +1153,8 @@ def generate_linked_interior_spec(
 
     ext_min = building_exterior_bounds["min"]
     ext_max = building_exterior_bounds["max"]
-    ext_center_x = (ext_min[0] + ext_max[0]) / 2.0
-    ext_center_y = (ext_min[1] + ext_max[1]) / 2.0
+    _ext_center_x = (ext_min[0] + ext_max[0]) / 2.0
+    _ext_center_y = (ext_min[1] + ext_max[1]) / 2.0
 
     for i, door in enumerate(door_positions):
         pos = door["position"]

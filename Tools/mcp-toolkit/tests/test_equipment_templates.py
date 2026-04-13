@@ -6,7 +6,6 @@ Equipment attachment templates generate runtime MonoBehaviour scripts --
 they must NEVER contain 'using UnityEditor;'.
 """
 
-import pytest
 
 from veilbreakers_mcp.shared.unity_templates.equipment_templates import (
     generate_equipment_attachment_script,

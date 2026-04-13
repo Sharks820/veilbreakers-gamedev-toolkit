@@ -233,7 +233,7 @@ def generate_brand_basic_attack(
     strike_end = min(strike_end, int(0.6 * frame_count))
 
     for frame in range(frame_count + 1):
-        t = frame / frame_count
+        _t = frame / frame_count
 
         if frame <= antic_end:
             # Wind-up phase (brand-specific intensity)
@@ -303,7 +303,7 @@ def generate_brand_defend(
     raise_end = int(0.3 * frame_count)
 
     for frame in range(frame_count + 1):
-        t = frame / frame_count
+        _t = frame / frame_count
 
         if frame <= raise_end:
             p = _ease_in_out(frame / raise_end if raise_end > 0 else 1.0)
@@ -346,7 +346,7 @@ def generate_brand_skill(
     """
     frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
-    profile = _BRAND_ATTACK_PROFILES.get(brand.upper(), _BRAND_ATTACK_PROFILES["IRON"])
+    _profile = _BRAND_ATTACK_PROFILES.get(brand.upper(), _BRAND_ATTACK_PROFILES["IRON"])
     skill_slot = max(1, min(3, skill_slot))
 
     # Scale drama by skill slot (skill 3 is most dramatic)
@@ -357,7 +357,7 @@ def generate_brand_skill(
     active_end = int((antic_pct + 0.2) * frame_count)
 
     for frame in range(frame_count + 1):
-        t = frame / frame_count
+        _t = frame / frame_count
 
         if frame <= antic_end:
             p = _ease_in_out(frame / antic_end if antic_end > 0 else 1.0)
@@ -424,7 +424,7 @@ def generate_brand_ultimate(
     release_end = int(0.65 * frame_count)
 
     for frame in range(frame_count + 1):
-        t = frame / frame_count
+        _t = frame / frame_count
 
         if frame <= charge_end:
             # Long dramatic charge

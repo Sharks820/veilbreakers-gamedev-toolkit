@@ -140,6 +140,321 @@ async def _with_screenshot(
     return parts
 
 
+_AAA_CAMERA_ANGLES: list[tuple[int, int, str]] = [
+    (0, 0, "front"),
+    (180, 0, "back"),
+    (90, 0, "left"),
+    (270, 0, "right"),
+    (0, 90, "top"),
+    (45, 30, "ne_45"),
+    (135, 30, "nw_45"),
+    (225, 30, "sw_45"),
+    (315, 30, "se_45"),
+    (0, 5, "ground_level"),
+]
+
+
+def _normalize_validation_profiles(raw_profiles: Any) -> list[str]:
+    """Normalize optional validation-profile input into stable lowercase names."""
+    if raw_profiles is None:
+        return []
+    if isinstance(raw_profiles, str):
+        candidates = [raw_profiles]
+    elif isinstance(raw_profiles, (list, tuple, set)):
+        candidates = list(raw_profiles)
+    else:
+        return []
+
+    profiles: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        profile = str(candidate or "").strip().lower()
+        if not profile or profile in seen:
+            continue
+        seen.add(profile)
+        profiles.append(profile)
+    return profiles
+
+
+def _iter_nested_strings(value: Any):
+    """Yield string leaves from nested dict/list payloads for keyword inference."""
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped:
+            yield stripped.lower()
+        return
+    if isinstance(value, dict):
+        for nested in value.values():
+            yield from _iter_nested_strings(nested)
+        return
+    if isinstance(value, (list, tuple, set)):
+        for nested in value:
+            yield from _iter_nested_strings(nested)
+
+
+def _payload_contains_keywords(payload: Any, keywords: tuple[str, ...]) -> bool:
+    lowered = tuple(keyword.lower() for keyword in keywords)
+    return any(
+        any(keyword in text for keyword in lowered)
+        for text in _iter_nested_strings(payload)
+    )
+
+
+def _derive_terrain_validation_profiles(
+    *,
+    map_spec: dict | None = None,
+    terrain_result: dict | None = None,
+    object_names: list[str] | None = None,
+    location_results: list[dict] | None = None,
+) -> list[str]:
+    """Infer the mandatory terrain-validation profiles for the current map."""
+    terrain_result = terrain_result or {}
+    map_spec = map_spec or {}
+    terrain_cfg = map_spec.get("terrain", {}) if isinstance(map_spec, dict) else {}
+    water_cfg = map_spec.get("water", {}) if isinstance(map_spec, dict) else {}
+    locations = list(map_spec.get("locations", [])) if isinstance(map_spec, dict) else []
+    combined_location_payloads = locations + list(location_results or [])
+    terrain_preset = str(terrain_cfg.get("preset", "")).strip().lower()
+
+    profiles = ["terrain_readability"]
+
+    cliff_overlays = max(
+        int(terrain_result.get("cliff_overlays", 0) or 0),
+        int(terrain_result.get("hero_cliff_overlays", 0) or 0),
+    )
+    has_cliff_signal = (
+        cliff_overlays > 0
+        or terrain_preset in {"mountains", "canyon", "volcanic", "coastal", "cliffs"}
+        or _payload_contains_keywords(
+            [terrain_cfg, combined_location_payloads, object_names or []],
+            ("cliff", "cliffside", "ridge", "terrace", "escarpment"),
+        )
+    )
+    if has_cliff_signal:
+        profiles.append("terrain_cliff")
+
+    has_waterfall_signal = (
+        bool(water_cfg.get("waterfalls"))
+        or any(
+            isinstance(river, dict)
+            and (
+                river.get("waterfall")
+                or river.get("has_waterfall")
+                or str(river.get("type", "")).strip().lower() in {"waterfall", "cascade"}
+            )
+            for river in water_cfg.get("rivers", [])
+        )
+        or _payload_contains_keywords(
+            [water_cfg, combined_location_payloads, object_names or []],
+            ("waterfall", "cascade", "falls"),
+        )
+    )
+    if has_waterfall_signal:
+        profiles.append("terrain_waterfall")
+
+    has_cave_signal = (
+        any(
+            isinstance(location, dict)
+            and str(location.get("type", "")).strip().lower() == "cave"
+            for location in combined_location_payloads
+        )
+        or _payload_contains_keywords(
+            [combined_location_payloads, object_names or []],
+            ("cave", "cavern", "grotto", "sinkhole", "lair"),
+        )
+    )
+    if has_cave_signal:
+        profiles.append("terrain_cave")
+
+    return profiles
+
+
+async def _capture_aaa_screenshots(
+    blender: BlenderConnection,
+    *,
+    angles: int = 10,
+    temp_dir: str | None = None,
+    prefix: str = "aaa",
+) -> dict:
+    """Render the shared AAA screenshot set used by visual verification gates."""
+    import glob as _glob
+    import tempfile as _tempfile
+
+    angle_defs = _AAA_CAMERA_ANGLES[: max(1, min(int(angles), len(_AAA_CAMERA_ANGLES)))]
+    safe_prefix = re.sub(r"[^A-Za-z0-9._-]+", "_", str(prefix or "aaa")).strip("_") or "aaa"
+    target_dir = temp_dir or os.path.join(_tempfile.gettempdir(), f"vb_{safe_prefix}")
+    os.makedirs(target_dir, exist_ok=True)
+
+    for old_png in _glob.glob(os.path.join(target_dir, f"{safe_prefix}_*.png")):
+        os.remove(old_png)
+
+    screenshot_paths: list[str] = []
+    capture_errors: list[str] = []
+    angle_labels: list[str] = []
+
+    for index, (yaw, pitch, label) in enumerate(angle_defs):
+        output_path = os.path.join(target_dir, f"{safe_prefix}_{index}_{label}.png")
+        angle_labels.append(label)
+        try:
+            await blender.send_command("render_angle", {
+                "yaw": yaw,
+                "pitch": pitch,
+                "output_path": output_path,
+            })
+            if os.path.isfile(output_path):
+                screenshot_paths.append(output_path)
+            else:
+                capture_errors.append(f"{label}: render_angle did not produce a screenshot")
+        except Exception as exc:
+            capture_errors.append(f"{label}: {exc}")
+
+    existing = [path for path in screenshot_paths if os.path.isfile(path)]
+    return {
+        "screenshots": existing,
+        "capture_errors": capture_errors,
+        "angle_labels": angle_labels,
+        "directory": target_dir,
+        "angles": angle_defs,
+    }
+
+
+async def _run_aaa_visual_verification(
+    blender: BlenderConnection,
+    *,
+    angles: int = 10,
+    min_score: int = 60,
+    validation_profile: str | None = None,
+    capture_baseline: bool = False,
+    baseline_dir: str | None = None,
+    screenshot_prefix: str = "aaa",
+    screenshot_dir: str | None = None,
+) -> dict:
+    """Capture multi-angle screenshots and run the shared AAA verifier."""
+    capture = await _capture_aaa_screenshots(
+        blender,
+        angles=angles,
+        temp_dir=screenshot_dir,
+        prefix=screenshot_prefix,
+    )
+    existing = capture["screenshots"]
+    capture_errors = list(capture["capture_errors"])
+    angle_defs = list(capture["angles"])
+
+    if not existing:
+        return {
+            "status": "error",
+            "error": "No screenshots were captured — ensure Blender is connected",
+            "hint": "Run Blender with the VeilBreakers addon and try again",
+            "capture_errors": capture_errors,
+            "screenshots": [],
+            "angle_labels": [label for _, _, label in angle_defs],
+        }
+
+    verify_result = aaa_verify_map(
+        existing,
+        min_score=min_score,
+        required_angle_count=len(angle_defs),
+        angle_labels=[label for _, _, label in angle_defs],
+        validation_profile=validation_profile,
+    )
+
+    baseline_result = None
+    if capture_baseline:
+        baseline_target = baseline_dir or os.path.join(capture["directory"], "baselines")
+        baseline_result = capture_regression_baseline(existing, baseline_target)
+
+    return {
+        "status": "success" if verify_result.get("passed", False) else "failed",
+        "verification": verify_result,
+        "screenshots": existing,
+        "baseline": baseline_result,
+        "angle_labels": [label for _, _, label in angle_defs[:len(existing)]],
+        "capture_errors": capture_errors,
+    }
+
+
+async def _run_terrain_visual_gate(
+    blender: BlenderConnection,
+    *,
+    map_spec: dict | None = None,
+    terrain_result: dict | None = None,
+    object_names: list[str] | None = None,
+    location_results: list[dict] | None = None,
+    validation_profiles: list[str] | None = None,
+    min_score: int = 60,
+    screenshot_prefix: str = "terrain_gate",
+) -> dict:
+    """Run mandatory terrain-focused multi-profile verification on one capture set."""
+    profiles = _normalize_validation_profiles(validation_profiles)
+    if not profiles:
+        profiles = _derive_terrain_validation_profiles(
+            map_spec=map_spec,
+            terrain_result=terrain_result,
+            object_names=object_names,
+            location_results=location_results,
+        )
+    if "terrain_readability" not in profiles:
+        profiles.insert(0, "terrain_readability")
+
+    capture = await _capture_aaa_screenshots(
+        blender,
+        angles=len(_AAA_CAMERA_ANGLES),
+        prefix=screenshot_prefix,
+    )
+    existing = capture["screenshots"]
+    capture_errors = list(capture["capture_errors"])
+    angle_labels = [label for _, _, label in capture["angles"]]
+
+    if not existing:
+        return {
+            "status": "error",
+            "passed": False,
+            "required_profiles": profiles,
+            "failed_profiles": profiles,
+            "issues": ["No screenshots were captured — ensure Blender is connected"],
+            "capture_errors": capture_errors,
+            "screenshots": [],
+            "angle_labels": angle_labels,
+            "profile_results": [],
+        }
+
+    profile_results: list[dict] = []
+    failed_profiles: list[str] = []
+    issues: list[str] = []
+    for profile in profiles:
+        verification = aaa_verify_map(
+            existing,
+            min_score=min_score,
+            required_angle_count=len(capture["angles"]),
+            angle_labels=angle_labels,
+            validation_profile=profile,
+        )
+        profile_results.append(verification)
+        if not verification.get("passed", False):
+            failed_profiles.append(profile)
+            issues.extend(verification.get("issues", []))
+
+    deduped_issues: list[str] = []
+    seen_issue_text: set[str] = set()
+    for issue in issues:
+        if issue in seen_issue_text:
+            continue
+        seen_issue_text.add(issue)
+        deduped_issues.append(issue)
+
+    return {
+        "status": "success" if not failed_profiles else "failed",
+        "passed": not failed_profiles,
+        "required_profiles": profiles,
+        "failed_profiles": failed_profiles,
+        "issues": deduped_issues,
+        "capture_errors": capture_errors,
+        "screenshots": existing,
+        "angle_labels": angle_labels,
+        "profile_results": profile_results,
+    }
+
+
 def _estimate_location_radius(location: dict) -> float:
     """Estimate a footprint radius for map auto-placement."""
     loc_type = str(location.get("type", "building")).lower()
@@ -1356,20 +1671,41 @@ async def blender_object(
 
 @mcp.tool()
 async def blender_material(
-    action: Literal["create", "assign", "modify", "list"],
+    action: Literal[
+        "create", "assign", "modify", "list",
+        "create_procedural", "list_presets",
+    ],
     name: str | None = None,
     object_name: str | None = None,
+    material_key: str | None = None,
     base_color: list[float] | None = None,
     metallic: float | None = None,
     roughness: float | None = None,
     capture_viewport: bool = True
 ):
-    """Manage Blender materials (basic PBR)."""
+    """Manage Blender materials, including procedural AAA preset graphs."""
     blender = get_blender_connection()
 
     if action == "list":
         result = await blender.send_command("material_list")
         return json.dumps(result, indent=2, default=str)
+
+    if action == "list_presets":
+        result = await blender.send_command(
+            "material_create_procedural", {"list_available": True}
+        )
+        return json.dumps(result, indent=2, default=str)
+
+    if action == "create_procedural":
+        if not material_key:
+            return "ERROR: 'material_key' is required for action 'create_procedural'"
+        params = {"material_key": material_key}
+        if name is not None:
+            params["name"] = name
+        if object_name is not None:
+            params["object_name"] = object_name
+        result = await blender.send_command("material_create_procedural", params)
+        return await _with_screenshot(blender, result, capture_viewport)
 
     if action == "assign" and (not name or not object_name):
         return "ERROR: 'name' and 'object_name' are required for action 'assign'"
@@ -2369,6 +2705,7 @@ async def asset_pipeline(
     capture_baseline: bool = False,
     baseline_dir: str | None = None,
     current_screenshots: list[str] | None = None,
+    validation_profile: str | None = None,
 ):
     """Asset pipeline -- 3D generation, map composition, interior building, processing, LODs, catalog, equipment. Use compose_map to build full maps (terrain+water+roads+locations+vegetation+atmosphere). Use compose_interior for walkable interiors (room shells+doors+furniture+props). Use generate_building for Tripo-powered architecture. Use generate_terrain_mesh for procedural terrain."""
     blender = get_blender_connection()
@@ -2778,7 +3115,7 @@ async def asset_pipeline(
                 result["prompt_used"] = full_prompt
                 result["generation_method"] = "tripo_studio"
                 result["next_steps"] = [
-                    f"Pick best variant, then: asset_pipeline action=cleanup object_name=<name> has_extracted_textures=true",
+                    "Pick best variant, then: asset_pipeline action=cleanup object_name=<name> has_extracted_textures=true",
                     "Run game_check after cleanup to verify quality",
                 ]
                 _prop_studio_name = result.get("object_name")
@@ -2879,12 +3216,20 @@ async def asset_pipeline(
         planned_locations = _plan_map_location_anchors(spec)
         steps_completed: list[str] = []
         steps_failed: list[dict] = []
+        pipeline_warnings: list[str] = []
         created_objects: list[str] = []
         location_results: list[dict] = []
         interior_results: list[dict] = []
+        terrain_visual_verification: dict[str, Any] | None = None
         terrain_cfg = spec.get("terrain", {})
+        terrain_result_payload: dict[str, Any] | None = None
         terrain_size = float(terrain_cfg.get("size", 200.0))
         terrain_location = tuple(terrain_cfg.get("location", (0.0, 0.0)))[:2]
+        auto_export_unity = bool(
+            spec.get("auto_export_unity")
+            or spec.get("unity_export_approved")
+            or spec.get("export_to_unity")
+        )
         terrain_resolution = min(
             int(terrain_cfg.get("resolution", 256)),
             int(budget["terrain_resolution_cap"]),
@@ -2945,6 +3290,12 @@ async def asset_pipeline(
                 "params_snapshot": {"terrain_size": terrain_size, "seed": map_seed},
             })
 
+        def _record_pipeline_warning(step: str, error: Exception, *, object_name: str | None = None) -> None:
+            target = f" for {object_name}" if object_name else ""
+            message = f"{step}{target}: {error}"
+            logger.warning("compose_map warning: %s", message)
+            pipeline_warnings.append(message)
+
         # --- Step 1: Clear scene ---
         if "scene_cleared" not in steps_completed:
             try:
@@ -2967,7 +3318,7 @@ async def asset_pipeline(
                     (terrain_location[0], terrain_location[1], 0.0)
                     if terrain_location != (0.0, 0.0) else (0.0, 0.0, 0.0)
                 )
-                await blender.send_command("env_generate_terrain", {
+                _terrain_result = await blender.send_command("env_generate_terrain", {
                     "name": terrain_name,
                     "terrain_type": terrain_cfg.get("preset", "hills"),
                     "resolution": terrain_resolution,
@@ -2979,6 +3330,14 @@ async def asset_pipeline(
                     "use_controller": True,
                     "object_location": list(_terrain_loc_3d),
                 })
+                if (
+                    isinstance(_terrain_result, dict)
+                    and _terrain_result.get("status") not in (None, "success")
+                ):
+                    raise RuntimeError(
+                        _terrain_result.get("error", "env_generate_terrain returned non-success status")
+                    )
+                terrain_result_payload = _terrain_result if isinstance(_terrain_result, dict) else None
                 steps_completed.append("terrain_generated")
                 created_objects.append(terrain_name)
                 _save_chkpt()
@@ -3054,6 +3413,7 @@ async def asset_pipeline(
                     "terrain_name": terrain_name,
                     "waypoints": waypoints,
                     "width": road.get("width", 3),
+                    "water_level": water_cfg.get("water_level"),
                     "seed": map_seed + 100 + i,
                 })
                 steps_completed.append(f"road_{i}")
@@ -3313,7 +3673,124 @@ async def asset_pipeline(
                 steps_completed.append("interiors_generated")
                 _save_chkpt()  # checkpoint after interiors
 
-        # --- Step 10: Export heightmap for Unity import ---
+        terrain_visual_profiles = _normalize_validation_profiles(spec.get("terrain_visual_profiles"))
+        if not terrain_visual_profiles:
+            terrain_visual_profiles = _derive_terrain_validation_profiles(
+                map_spec=spec,
+                terrain_result=terrain_result_payload,
+                object_names=created_objects,
+                location_results=location_results,
+            )
+        if terrain_name and "terrain_visual_verified" in steps_completed:
+            terrain_visual_verification = {
+                "status": "success",
+                "passed": True,
+                "required_profiles": terrain_visual_profiles,
+                "failed_profiles": [],
+                "issues": [],
+                "capture_errors": [],
+                "screenshots": [],
+                "angle_labels": [label for _, _, label in _AAA_CAMERA_ANGLES],
+                "profile_results": [],
+                "skipped": True,
+                "reason": "terrain visual verification already completed in checkpoint state",
+            }
+
+        # --- Step 10: Mandatory terrain visual verification ---
+        if terrain_name and "terrain_visual_verified" not in steps_completed:
+            terrain_visual_verification = await _run_terrain_visual_gate(
+                blender,
+                map_spec=spec,
+                terrain_result=terrain_result_payload,
+                object_names=created_objects,
+                location_results=location_results,
+                validation_profiles=terrain_visual_profiles,
+                min_score=int(spec.get("terrain_visual_min_score", 60)),
+                screenshot_prefix=f"{map_name}_terrain_gate",
+            )
+            terrain_visual_profiles = list(terrain_visual_verification.get("required_profiles", terrain_visual_profiles))
+            if terrain_visual_verification.get("passed", False):
+                steps_completed.append("terrain_visual_verified")
+                _save_chkpt()
+            else:
+                failed_profiles = terrain_visual_verification.get("failed_profiles", terrain_visual_profiles)
+                failure_label = ", ".join(failed_profiles) if failed_profiles else "terrain_readability"
+                steps_failed.append({
+                    "step": "terrain_visual_verification",
+                    "error": f"Terrain visual verification failed for {failure_label}",
+                })
+                _save_chkpt()
+                early_result = {
+                    "status": "partial",
+                    "map_name": map_name,
+                    "steps_completed": steps_completed,
+                    "steps_failed": steps_failed,
+                    "warnings": pipeline_warnings,
+                    "objects_created": created_objects,
+                    "locations": location_results,
+                    "interiors": interior_results,
+                    "budget_applied": budget,
+                    "quality_report": {
+                        "validated_objects": [],
+                        "warnings": [],
+                        "failures": [],
+                        "skipped": True,
+                        "reason": "terrain visual verification blocked export",
+                    },
+                    "heightmap_export_path": None,
+                    "game_check_failures": [],
+                    "fbx_exported_files": [],
+                    "resumed_from_checkpoint": _CHKPT_LOADED,
+                    "checkpoint_dir": checkpoint_dir,
+                    "terrain_visual_profiles": terrain_visual_profiles,
+                    "terrain_visual_verification": terrain_visual_verification,
+                    "approved_for_unity_export": False,
+                    "unity_export_status": "blocked_by_visual_verification",
+                    "next_steps": [
+                        "Review the terrain screenshots and fix the failed terrain visual profiles before exporting.",
+                        "Run asset_pipeline action=aaa_verify with the reported validation_profile if you need a focused rerun.",
+                        "Do not package or export this map until terrain_visual_verified passes.",
+                    ],
+                }
+                return await _with_screenshot(blender, early_result, capture_viewport, object_name=terrain_name)
+
+        if terrain_name and terrain_visual_verification and terrain_visual_verification.get("passed", False) and not auto_export_unity:
+            review_result = {
+                "status": "review_required",
+                "map_name": map_name,
+                "steps_completed": steps_completed,
+                "steps_failed": steps_failed,
+                "warnings": pipeline_warnings,
+                "objects_created": created_objects,
+                "locations": location_results,
+                "interiors": interior_results,
+                "budget_applied": budget,
+                "quality_report": {
+                    "validated_objects": [],
+                    "warnings": [],
+                    "failures": [],
+                    "skipped": True,
+                    "reason": "Waiting for Blender visual approval before Unity export",
+                },
+                "heightmap_export_path": None,
+                "game_check_failures": [],
+                "fbx_exported_files": [],
+                "resumed_from_checkpoint": _CHKPT_LOADED,
+                "checkpoint_dir": checkpoint_dir,
+                "terrain_visual_profiles": terrain_visual_profiles,
+                "terrain_visual_verification": terrain_visual_verification,
+                "approved_for_unity_export": False,
+                "unity_export_status": "awaiting_user_approval",
+                "export_ready": True,
+                "next_steps": [
+                    "Review this map in Blender and approve the terrain before exporting anything to Unity.",
+                    "When approved, rerun compose_map with map_spec.auto_export_unity=True to resume export, or call generate_map_package explicitly.",
+                    "Use asset_pipeline action=aaa_verify with the terrain validation_profile you care about for focused reruns.",
+                ],
+            }
+            return await _with_screenshot(blender, review_result, capture_viewport, object_name=terrain_name)
+
+        # --- Step 11: Export heightmap for Unity import ---
         heightmap_export_path = None
         if terrain_name and "heightmap_exported" not in steps_completed:
             try:
@@ -3337,7 +3814,7 @@ async def asset_pipeline(
             except Exception as e:
                 steps_failed.append({"step": "heightmap_export", "error": str(e)})
 
-        # --- Step 11: Game-readiness validation (EXPORT-04) ---
+        # --- Step 12: Game-readiness validation (EXPORT-04) ---
         _non_terrain = [n for n in created_objects if "terrain" not in n.lower()]
         _gc_failures: list[dict] = []
         if _non_terrain and "game_check_validated" not in steps_completed:
@@ -3352,14 +3829,18 @@ async def asset_pipeline(
                                 "object": _obj_name,
                                 "issues": _gc.get("summary", "Unknown"),
                             })
-                    except Exception:
-                        pass  # Skip objects that can't be checked
+                    except Exception as exc:
+                        _record_pipeline_warning(
+                            "game_check_skipped",
+                            exc,
+                            object_name=_obj_name,
+                        )
                 steps_completed.append("game_check_validated")
                 _save_chkpt()
             except Exception as e:
                 steps_failed.append({"step": "game_check_validation", "error": str(e)})
 
-        # --- Step 12: Bake procedural textures to images (EXPORT-02) ---
+        # --- Step 13: Bake procedural textures to images (EXPORT-02) ---
         if _non_terrain and "textures_baked" not in steps_completed:
             try:
                 for _obj_name in _non_terrain:
@@ -3369,14 +3850,18 @@ async def asset_pipeline(
                             "channels": ["diffuse", "normal", "ao"],
                             "resolution": 1024,
                         })
-                    except Exception:
-                        pass  # Bake failures are non-fatal
+                    except Exception as exc:
+                        _record_pipeline_warning(
+                            "texture_bake_failed",
+                            exc,
+                            object_name=_obj_name,
+                        )
                 steps_completed.append("textures_baked")
                 _save_chkpt()
             except Exception as e:
                 steps_failed.append({"step": "texture_bake", "error": str(e)})
 
-        # --- Step 13: Generate LOD chains (EXPORT-03) ---
+        # --- Step 14: Generate LOD chains (EXPORT-03) ---
         if _non_terrain and "lods_generated" not in steps_completed:
             try:
                 for _obj_name in _non_terrain:
@@ -3385,14 +3870,18 @@ async def asset_pipeline(
                             "action": "generate_lods",
                             "object_name": _obj_name,
                         })
-                    except Exception:
-                        pass  # LOD failures are non-fatal
+                    except Exception as exc:
+                        _record_pipeline_warning(
+                            "lod_generation_failed",
+                            exc,
+                            object_name=_obj_name,
+                        )
                 steps_completed.append("lods_generated")
                 _save_chkpt()
             except Exception as e:
                 steps_failed.append({"step": "lod_generation", "error": str(e)})
 
-        # --- Step 14: Generate collision meshes (EXPORT-05) ---
+        # --- Step 15: Generate collision meshes (EXPORT-05) ---
         _structure_objects = [n for n in _non_terrain if any(
             kw in n.lower() for kw in ("building", "wall", "gate", "tower", "castle", "bridge", "house", "tavern", "chapel", "keep")
         )]
@@ -3407,7 +3896,7 @@ async def asset_pipeline(
             except Exception as e:
                 steps_failed.append({"step": "collision_generation", "error": str(e)})
 
-        # --- Step 15: Export vegetation instances + splatmap (EXPORT-06, EXPORT-07) ---
+        # --- Step 16: Export vegetation instances + splatmap (EXPORT-06, EXPORT-07) ---
         if "data_exported" not in steps_completed:
             import tempfile as _tf15
             _data_dir = checkpoint_dir or os.path.join(_tf15.gettempdir(), "veilbreakers_exports")
@@ -3420,8 +3909,8 @@ async def asset_pipeline(
                             "output_path": _veg_path,
                             "terrain_name": terrain_name or f"{map_name}_Terrain",
                         })
-                    except Exception:
-                        pass  # Non-fatal if vegetation collection empty
+                    except Exception as exc:
+                        _record_pipeline_warning("vegetation_export_failed", exc)
 
                 if terrain_name:
                     try:
@@ -3431,15 +3920,15 @@ async def asset_pipeline(
                             "output_path": _splat_path,
                             "target_resolution": 512,
                         })
-                    except Exception:
-                        pass  # Non-fatal if terrain has no splatmap layer
+                    except Exception as exc:
+                        _record_pipeline_warning("splatmap_export_failed", exc)
 
                 steps_completed.append("data_exported")
                 _save_chkpt()
             except Exception as e:
                 steps_failed.append({"step": "data_export", "error": str(e)})
 
-        # --- Step 16: Export per-group FBX files (EXPORT-01) ---
+        # --- Step 17: Export per-group FBX files (EXPORT-01) ---
         _fbx_files: list[str] = []
         if created_objects and "fbx_exported" not in steps_completed:
             import tempfile as _tf16
@@ -3464,8 +3953,12 @@ async def asset_pipeline(
                             "object_names": _grp_objects,
                         })
                         _fbx_files.append(_fbx_path)
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        _record_pipeline_warning(
+                            "fbx_export_failed",
+                            exc,
+                            object_name=_grp["group_name"],
+                        )
                 steps_completed.append("fbx_exported")
                 _save_chkpt()
             except Exception as e:
@@ -3479,10 +3972,11 @@ async def asset_pipeline(
         )
 
         result = {
-            "status": "success" if not steps_failed and not quality_report["failures"] else "partial",
+            "status": "success" if not steps_failed and not quality_report["failures"] and not pipeline_warnings else "partial",
             "map_name": map_name,
             "steps_completed": steps_completed,
             "steps_failed": steps_failed,
+            "warnings": pipeline_warnings,
             "objects_created": created_objects,
             "locations": location_results,
             "interiors": interior_results,
@@ -3493,6 +3987,10 @@ async def asset_pipeline(
             "fbx_exported_files": _fbx_files,
             "resumed_from_checkpoint": _CHKPT_LOADED,
             "checkpoint_dir": checkpoint_dir,
+            "terrain_visual_profiles": terrain_visual_profiles,
+            "terrain_visual_verification": terrain_visual_verification,
+            "approved_for_unity_export": auto_export_unity,
+            "unity_export_status": "export_completed" if auto_export_unity else "awaiting_user_approval",
             "next_steps": [
                 "Review the generated map in Blender viewport (use contact_sheet for thorough review).",
                 "Run a hero-pass with Tripo only for standout props or landmark pieces.",
@@ -3525,10 +4023,24 @@ async def asset_pipeline(
         _mp_export_dir = _mpspec.get("export_dir", ".")
         _mp_gen_lods = _mpspec.get("generate_lods", True)
         _mp_skip_check = _mpspec.get("skip_game_check", False)
+        _mp_skip_terrain_visual = bool(_mpspec.get("skip_terrain_visual_validation", False))
+        _mp_terrain_objects = [
+            name for name in _mp_objects
+            if "terrain" in str(name).lower()
+        ]
+        _mp_terrain_profiles = _normalize_validation_profiles(_mpspec.get("terrain_visual_profiles"))
+        _warnings: list[str] = []
+        _terrain_visual_verification: dict[str, Any] | None = None
 
         import os as _os
         _os.makedirs(_mp_export_dir, exist_ok=True)
         _os.makedirs(_os.path.join(_mp_export_dir, _mp_name), exist_ok=True)
+
+        def _record_package_warning(step: str, error: Exception, *, object_name: str | None = None) -> None:
+            target = f" for {object_name}" if object_name else ""
+            message = f"{step}{target}: {error}"
+            logger.warning("generate_map_package warning: %s", message)
+            _warnings.append(message)
 
         try:
             from blender_addon.handlers.pipeline_state import (
@@ -3559,8 +4071,12 @@ async def asset_pipeline(
                             "failed_checks": _failed_checks,
                             "summary": _chk.get("summary", "Unknown failure"),
                         })
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _record_package_warning(
+                        "game_check_failed",
+                        exc,
+                        object_name=_obj_name,
+                    )
 
         if _game_failures and not _mp_skip_check:
             return json.dumps({
@@ -3570,7 +4086,30 @@ async def asset_pipeline(
                 "hint": "Fix issues or set skip_game_check=True",
             })
 
-        # Step 2: LOD generation
+        # Step 2: Mandatory terrain visual validation
+        if _mp_terrain_objects and not _mp_skip_terrain_visual:
+            _terrain_visual_verification = await _run_terrain_visual_gate(
+                blender,
+                map_spec=_mpspec,
+                object_names=_mp_objects,
+                location_results=_mp_locations,
+                validation_profiles=_mp_terrain_profiles,
+                min_score=int(_mpspec.get("terrain_visual_min_score", 60)),
+                screenshot_prefix=f"{_mp_name}_package_terrain",
+            )
+            _mp_terrain_profiles = list(
+                _terrain_visual_verification.get("required_profiles", _mp_terrain_profiles)
+            )
+            if not _terrain_visual_verification.get("passed", False):
+                return {
+                    "status": "error",
+                    "error": "Terrain visual verification failed",
+                    "terrain_visual_profiles": _mp_terrain_profiles,
+                    "terrain_visual_verification": _terrain_visual_verification,
+                    "hint": "Fix terrain readability and feature framing issues before packaging this map.",
+                }
+
+        # Step 3: LOD generation
         _lod_count = 0
         if _mp_gen_lods:
             for _obj_name in _mp_objects:
@@ -3580,17 +4119,21 @@ async def asset_pipeline(
                         "object_name": _obj_name,
                     })
                     _lod_count += 1
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _record_package_warning(
+                        "lod_generation_failed",
+                        exc,
+                        object_name=_obj_name,
+                    )
 
-        # Step 3: Derive Addressable groups
+        # Step 4: Derive Addressable groups
         _addr_groups = _derive_groups(
             _mp_name, _mp_locations,
-            terrain_objects=[n for n in _mp_objects if "terrain" in n.lower() or "Terrain" in n],
+            terrain_objects=_mp_terrain_objects,
             interior_results=_mpspec.get("interior_results", []),
         )
 
-        # Step 4: Export FBX per group
+        # Step 5: Export FBX per group
         _fbx_files = []
         for _grp in _addr_groups:
             _grp_name = _grp["group_name"]
@@ -3606,26 +4149,34 @@ async def asset_pipeline(
                 })
                 if _os.path.isfile(_export_path):
                     _fbx_files.append(_export_path)
-            except Exception:
-                pass
+            except Exception as exc:
+                _record_package_warning(
+                    "fbx_export_failed",
+                    exc,
+                    object_name=_grp_name,
+                )
 
-        # Step 5: Emit scene hierarchy JSON
+        # Step 6: Emit scene hierarchy JSON
         _hierarchy_path = _os.path.join(_mp_export_dir, _mp_name, "scene_hierarchy.json")
         try:
             _hierarchy = _emit_hierarchy(_mp_name, _mp_locations, created_objects=_mp_objects)
             with open(_hierarchy_path, "w", encoding="utf-8") as _fh:
                 json.dump(_hierarchy, _fh, indent=2, default=str)
-        except RuntimeError:
+        except RuntimeError as exc:
+            _record_package_warning("scene_hierarchy_emit_failed", exc)
             _hierarchy_path = None
 
         return {
-            "status": "success" if _fbx_files else "partial",
+            "status": "success" if _fbx_files and not _warnings else "partial",
             "map_name": _mp_name,
             "fbx_files": _fbx_files,
             "scene_hierarchy_json": _hierarchy_path,
             "addressable_groups": _addr_groups,
             "game_check_failures": _game_failures,
             "lod_variants_generated": _lod_count,
+            "warnings": _warnings,
+            "terrain_visual_profiles": _mp_terrain_profiles,
+            "terrain_visual_verification": _terrain_visual_verification,
             "next_steps": [
                 f"Import FBX files into Unity Assets/Maps/{_mp_name}/",
                 "Run: unity_world action=setup_map_streaming with scene_hierarchy_json path",
@@ -3633,83 +4184,16 @@ async def asset_pipeline(
         }
 
     elif action == "aaa_verify":
-        # Multi-angle AAA visual verification — renders 10 camera angles and scores each
-        import tempfile as _tempfile
-
-        # Camera angle definitions: (yaw_deg, pitch_deg, label)
-        _aaa_angles = [
-            (0,   0,  "front"),
-            (180, 0,  "back"),
-            (90,  0,  "left"),
-            (270, 0,  "right"),
-            (0,   90, "top"),
-            (45,  30, "ne_45"),
-            (135, 30, "nw_45"),
-            (225, 30, "sw_45"),
-            (315, 30, "se_45"),
-            (0,   5,  "ground_level"),
-        ]
-        _aaa_angles = _aaa_angles[:angles]
-
-        # MISC-015: use a stable named subdir (not mkdtemp) so screenshots
-        # persist for the caller. mkdtemp created a new dir on every call,
-        # leaking dirs that were never cleaned up.
-        _tmp_dir = os.path.join(_tempfile.gettempdir(), "vb_aaa_verify")
-        os.makedirs(_tmp_dir, exist_ok=True)
-
-        # Clear stale screenshots from previous runs
-        import glob as _glob
-        for _old_png in _glob.glob(os.path.join(_tmp_dir, "aaa_*.png")):
-            os.remove(_old_png)
-
-        _screenshot_paths: list[str] = []
-
-        for _yaw, _pitch, _label in _aaa_angles:
-            _ss_path = os.path.join(_tmp_dir, f"aaa_{_label}.png")
-            try:
-                _render_result = await blender.send_command("render_angle", {
-                    "yaw": _yaw,
-                    "pitch": _pitch,
-                    "output_path": _ss_path,
-                })
-                # Fallback: use viewport screenshot if render_angle not available
-                if not os.path.isfile(_ss_path):
-                    _vp_result = await blender.send_command("viewport_screenshot", {
-                        "output_path": _ss_path,
-                    })
-                _screenshot_paths.append(_ss_path)
-            except Exception:
-                # If Blender command fails, skip this angle (path won't exist)
-                pass
-
-        # Filter to only paths that actually exist
-        _existing = [p for p in _screenshot_paths if os.path.isfile(p)]
-        if not _existing:
-            return json.dumps({
-                "status": "error",
-                "error": "No screenshots were captured — ensure Blender is connected",
-                "hint": "Run Blender with the VeilBreakers addon and try again",
-            })
-
-        _verify_result = aaa_verify_map(
-            _existing,
+        return await _run_aaa_visual_verification(
+            blender,
+            angles=angles,
             min_score=min_score,
-            required_angle_count=len(_aaa_angles),
-            angle_labels=[lbl for _, _, lbl in _aaa_angles],
+            validation_profile=validation_profile,
+            capture_baseline=capture_baseline,
+            baseline_dir=baseline_dir,
+            screenshot_prefix="aaa",
+            screenshot_dir=os.path.join(Path(os.getenv("TEMP") or os.getenv("TMP") or ".").resolve(), "vb_aaa_verify"),
         )
-
-        _baseline_result = None
-        if capture_baseline:
-            _bdir = baseline_dir or os.path.join(_tmp_dir, "baselines")
-            _baseline_result = capture_regression_baseline(_existing, _bdir)
-
-        return {
-            "status": "success",
-            "verification": _verify_result,
-            "screenshots": _existing,
-            "baseline": _baseline_result,
-            "angle_labels": [lbl for _, _, lbl in _aaa_angles[:len(_existing)]],
-        }
 
     elif action == "screenshot_regression":
         # Compare current screenshots against stored baselines
@@ -3728,6 +4212,7 @@ async def asset_pipeline(
         for _angle_id, _cur_path in enumerate(current_screenshots):
             _ref_path = os.path.join(baseline_dir, f"baseline_{_angle_id}.png")
             if not os.path.isfile(_ref_path):
+                _all_match = False
                 _reg_results.append({
                     "angle_id": _angle_id,
                     "match": None,
@@ -3735,6 +4220,7 @@ async def asset_pipeline(
                 })
                 continue
             if not os.path.isfile(_cur_path):
+                _all_match = False
                 _reg_results.append({
                     "angle_id": _angle_id,
                     "match": None,
@@ -3750,7 +4236,7 @@ async def asset_pipeline(
             })
 
         return {
-            "status": "success",
+            "status": "success" if _all_match and bool(_reg_results) else "failed",
             "all_match": _all_match,
             "results": _reg_results,
             "total_angles": len(current_screenshots),
@@ -3760,6 +4246,19 @@ async def asset_pipeline(
     elif action == "performance_check":
         # Performance budget check: triangle count and estimated draw calls
         _pc_result = await blender.send_command("performance_budget_check", {})
+        _pc_status = str(_pc_result.get("status", "")).lower()
+        _pc_error = str(_pc_result.get("error", _pc_result.get("budget", ""))).lower()
+        if _pc_status not in {"ok", "success"} or "not_implemented" in _pc_error:
+            return {
+                "status": "error",
+                "error": "performance_budget_check unavailable",
+                "raw_result": _pc_result,
+                "summary": {
+                    "passed": False,
+                    "tri_utilization_pct": None,
+                    "draw_call_utilization_pct": None,
+                },
+            }
         _total_tris = _pc_result.get("total_tris", 0)
         _mat_count = _pc_result.get("unique_material_count", 0)
 
@@ -3856,6 +4355,7 @@ async def asset_pipeline(
         planned_doors = room_plan["doors"]
         steps_completed = []
         steps_failed = []
+        pipeline_warnings: list[str] = []
         room_results: list = []
         _INTERIOR_CHKPT_LOADED = False
 
@@ -3910,6 +4410,12 @@ async def asset_pipeline(
                 "interior_results": [],
                 "params_snapshot": {"pipeline_action": "compose_interior"},
             })
+
+        def _record_interior_warning(step: str, error: Exception, *, object_name: str | None = None) -> None:
+            target = f" for {object_name}" if object_name else ""
+            message = f"{step}{target}: {error}"
+            logger.warning("compose_interior warning: %s", message)
+            pipeline_warnings.append(message)
 
         # --- Step 1: Generate linked interior (room shells + door triggers + occlusion) ---
         room_defs = []
@@ -3994,9 +4500,12 @@ async def asset_pipeline(
                     "apply_modifiers": True,
                 })
                 steps_completed.append(f"enhance_{room_res['name']}")
-            except Exception:
-                # Enhancement is non-critical for interior; continue
-                pass
+            except Exception as exc:
+                _record_interior_warning(
+                    "room_enhancement_failed",
+                    exc,
+                    object_name=room_obj_name,
+                )
         _save_interior_chkpt()
 
         # --- Step 3: Add storytelling/narrative props to each room ---
@@ -4072,10 +4581,11 @@ async def asset_pipeline(
                     })
 
         result = {
-            "status": "success" if not steps_failed else "partial",
+            "status": "success" if not steps_failed and not pipeline_warnings else "partial",
             "interior_name": int_name,
             "steps_completed": steps_completed,
             "steps_failed": steps_failed,
+            "warnings": pipeline_warnings,
             "rooms_generated": room_results,
             "door_positions": planned_doors,
             "building_bounds": room_plan["building_bounds"],
@@ -4115,7 +4625,8 @@ async def asset_pipeline(
             has_extracted_textures=has_extracted_textures,
             texture_channels=texture_channels,
         )
-        return await _with_screenshot(blender, result, capture_viewport)
+        _focus_name = terrain_name if terrain_name else (created_objects[0] if created_objects else None)
+        return await _with_screenshot(blender, result, capture_viewport, _focus_name)
 
     elif action == "generate_lods":
         if not object_name:

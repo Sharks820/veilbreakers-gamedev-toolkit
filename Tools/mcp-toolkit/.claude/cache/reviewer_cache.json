@@ -35,13 +35,13 @@
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/unity_tools/editor.py|lang=py|scope=production|profile=general": {
-    "hash": "bed0179e8674735533bf0581d2e167548f9fe7001314a1cdfd25e58582df04d0",
-    "timestamp": 1776006447.3798375,
+    "hash": "78592b2fcf2341f6c17df4bf88097633f5d7216d32c5204bf7e94e9c608844fa",
+    "timestamp": 1776048921.1087587,
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/shared/unity_templates/asset_templates.py|lang=py|scope=production|profile=general": {
-    "hash": "812800744e9cabbd2df2fd125b0084bedb54183fe6fb67b6d91a01278852aaad",
-    "timestamp": 1776006447.3800836,
+    "hash": "5bf402222837f034aac10d50377e43e93b99aa64cf0f14971022b0f0e5e308df",
+    "timestamp": 1776048921.1059597,
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/shared/gemini_client.py|lang=py|scope=production|profile=general": {
@@ -50,8 +50,8 @@
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/shared/tripo_post_processor.py|lang=py|scope=production|profile=general": {
-    "hash": "63cb8fda4cbf0c65fee22e90bd08231c4f49389c74a5dc157dafe9711a09a827",
-    "timestamp": 1776006447.3803723,
+    "hash": "c6e1e91fe02d2d66ae54b2f0ba18097dd41ecb5b5d0cf05ece1d8a904de7ba06",
+    "timestamp": 1776048921.1083584,
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/shared/unity_templates/status_effect_vfx_templates.py|lang=py|scope=production|profile=general": {
@@ -80,8 +80,8 @@
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/unity_tools/build.py|lang=py|scope=production|profile=general": {
-    "hash": "9ad628561a122faaed3e7591213d04e17e1f64a639ff6eac8e1cf2c157e21c59",
-    "timestamp": 1776006447.3816884,
+    "hash": "544ab1666b0a705917d8edf0ad6ca049f6e7c725e361cdb016c498691d8d4480",
+    "timestamp": 1776048921.1069882,
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/shared/elevenlabs_client.py|lang=py|scope=production|profile=general": {
@@ -115,8 +115,8 @@
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/unity_tools/scene.py|lang=py|scope=production|profile=general": {
-    "hash": "d556414dccafb33fa43d3f1081834c64950d3bfcf4a2e450b248e10ffef14cd1",
-    "timestamp": 1776006447.3829777,
+    "hash": "3118a341c06cf89abc338f4e5ad05ef07119ab7ca483db4b63812f3407dfc6a6",
+    "timestamp": 1776048921.1061664,
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/shared/unity_templates/vfx_skill_compositions.py|lang=py|scope=production|profile=general": {
@@ -130,8 +130,8 @@
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/unity_tools/performance.py|lang=py|scope=production|profile=general": {
-    "hash": "4938bd379be37653428dd1a851f94fc6687b2d7fbaf6119adfe00491a705ddd1",
-    "timestamp": 1776006447.383496,
+    "hash": "bdbca82d6c373f0ea5ef4e117bcaff042c91474cf3db2e5811191a4bf8e851db",
+    "timestamp": 1776048921.1063654,
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/shared/unity_templates/vb_combat_templates.py|lang=py|scope=production|profile=general": {
@@ -140,8 +140,8 @@
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/unity_tools/pipeline.py|lang=py|scope=production|profile=general": {
-    "hash": "d0d6a75a1a006ab82c14a154c9a009ac89bd35ca95d15ddcfb8a38ce7bbee5e1",
-    "timestamp": 1776006447.383891,
+    "hash": "3278db89d5e68e849a4d9f2400c51cf386f28076043823659d35c46bce08c9fb",
+    "timestamp": 1776048921.1065633,
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/shared/unity_templates/combat_feel_templates.py|lang=py|scope=production|profile=general": {
@@ -165,8 +165,8 @@
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/shared/pipeline_runner.py|lang=py|scope=production|profile=general": {
-    "hash": "9c7eb0559c7dd626baec563dbf36cf0325cede4629b6a0e9801e158170a3dd69",
-    "timestamp": 1776006447.3848615,
+    "hash": "e76a6ffe41dea9808e3c7077c430427e39c3873fb5265debc561cae96ebcf453",
+    "timestamp": 1776045977.2517786,
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/unity_tools/qa.py|lang=py|scope=production|profile=general": {
@@ -280,13 +280,13 @@
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/_tool_runner.py|lang=py|scope=production|profile=general": {
-    "hash": "673c03c896e4a3e4bd803c4980d10f8ea035130c54a4781c70f8e6399a872614",
-    "timestamp": 1776006447.3888774,
+    "hash": "933efd76de7bf0cf326809f944489b08d1c9987a036f940c35d61e0558f3a84d",
+    "timestamp": 1776048921.1056411,
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/shared/env_model_library.py|lang=py|scope=production|profile=general": {
-    "hash": "25ab030b11ae42e68a5b6c2a1198a6e3e3c68a08516a4f1464b1a4ceaefe81d4",
-    "timestamp": 1776006447.389056,
+    "hash": "1c160e5210336adbf81347d0217968318801692e0b04b268363656b1df3799c5",
+    "timestamp": 1776048921.1085672,
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/_ast_analyzer.py|lang=py|scope=production|profile=general": {
@@ -365,8 +365,8 @@
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/unity_tools/prefab.py|lang=py|scope=production|profile=general": {
-    "hash": "0502fdbb0b1ca70ac550134c392f56c67f7c562f19e4470d5218fdb352b588f9",
-    "timestamp": 1776006447.3923016,
+    "hash": "815f32139dc964cda128c96a3b628a1d322e6223a3be9a25c34be9eba693ee17",
+    "timestamp": 1776048921.1081738,
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/shared/unity_templates/vfx_mastery_templates.py|lang=py|scope=production|profile=general": {
@@ -375,8 +375,8 @@
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/shared/visual_validation.py|lang=py|scope=production|profile=general": {
-    "hash": "dd1d4874fd09da864bd0e914b8c05031ec0704c43c403bafd405a0369697ec83",
-    "timestamp": 1776006447.3927155,
+    "hash": "c8566d08ba31133e00e08c5a951518e35b22db7ba1c8f08fe4ae52d70f9372e3",
+    "timestamp": 1776050537.8811858,
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/unity_tools/content.py|lang=py|scope=production|profile=general": {
@@ -385,8 +385,8 @@
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/unity_tools/settings.py|lang=py|scope=production|profile=general": {
-    "hash": "60013c11a484f0ca50f37c4eb81980c49a3609789d9308d37420f7963eb76cb5",
-    "timestamp": 1776006447.393021,
+    "hash": "a73a134d183876b9884a7cd39e717b48bae569ad12c3d0b5de0de7b8fce98a4b",
+    "timestamp": 1776048921.107777,
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/unity_tools/world.py|lang=py|scope=production|profile=general": {
@@ -395,8 +395,8 @@
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/unity_tools/assets.py|lang=py|scope=production|profile=general": {
-    "hash": "00562b205f70ceb0dfa1d57002d7f7a6c2d01d35b7570ce6e7ccbceee6572d4d",
-    "timestamp": 1776006447.393344,
+    "hash": "f38a7959039bef6c6b760554ec7878740d44886f36641cad75a58817386f5aff",
+    "timestamp": 1776048921.1075737,
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/shared/blender_client.py|lang=py|scope=production|profile=general": {
@@ -415,13 +415,13 @@
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/shared/unity_templates/quality_templates.py|lang=py|scope=production|profile=general": {
-    "hash": "df1b86eee5ec86a1c85bbbdcde6c524cc1034678fb402adfc91e2148a8e06e5d",
-    "timestamp": 1776006447.3942063,
+    "hash": "b833e9017bb58407de762db8d1edee70d37f604016a10a3cf690aa62f79eb408",
+    "timestamp": 1776048921.1067915,
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/shared/unity_templates/world_streaming_templates.py|lang=py|scope=production|profile=general": {
-    "hash": "3ebc0588a8ebb91a001c09238fb0a386afbe37b10f7f5cab8dca1c2759064923",
-    "timestamp": 1776006447.3943644,
+    "hash": "e27f374e7df94db34a30d412fd8e23791637abd1cb06eed9fae692944c0dc29a",
+    "timestamp": 1776048921.1071827,
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/_context_engine.py|lang=py|scope=production|profile=general": {
@@ -435,8 +435,8 @@
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/blender_server.py|lang=py|scope=production|profile=general": {
-    "hash": "3e0d27b81de405f84da74617e6e3d04d0c82ecf32e5bfbb7603efafab7ee221d",
-    "timestamp": 1776006447.3951032,
+    "hash": "d6318c3e1dfb5365ab60459cdb28051a8d3ac3356e9c94268c42afdad18c47b9",
+    "timestamp": 1776050537.8823476,
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/shared/unity_templates/content_templates.py|lang=py|scope=production|profile=general": {
@@ -460,8 +460,8 @@
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/unity_tools/_common.py|lang=py|scope=production|profile=general": {
-    "hash": "14ec378908f947bacd488b68f44bbb6c32ea82ac90975483930d6e3ce110e78a",
-    "timestamp": 1776006447.3964887,
+    "hash": "b77bf56b087c4f09886d4e3ae4509a358295f8d8a47c5937a234c210e1a6be12",
+    "timestamp": 1776048921.1079721,
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/shared/tripo_studio_client.py|lang=py|scope=production|profile=general": {
@@ -510,8 +510,8 @@
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/unity_tools/quality.py|lang=py|scope=production|profile=general": {
-    "hash": "304641f1c51c9d6f2cacf4d61fadb28835398f3f34e3ce488d15a36210c8c1ed",
-    "timestamp": 1776006447.3983686,
+    "hash": "0a006567e8822cb730ccac83077f8bd05064e1d31dd0ecebc5e9ce242a896ddd",
+    "timestamp": 1776048921.10737,
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/unity_tools/gameplay.py|lang=py|scope=production|profile=general": {
@@ -565,8 +565,8 @@
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/shared/unity_templates/scene_templates.py|lang=py|scope=production|profile=general": {
-    "hash": "9f8275d6ab075eb4e89b6c27a4053c6e3b904a7f8e7c48f9ab73470aa12ebff7",
-    "timestamp": 1776006447.4006078,
+    "hash": "8638c44f370ef50ff4d553f29a603919743582983219ec213302c6f6bca9b81c",
+    "timestamp": 1776050537.881713,
     "issues": []
   },
   "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit/src/veilbreakers_mcp/unity_tools/game.py|lang=py|scope=production|profile=general": {
@@ -2015,6 +2015,424 @@
         "severity": "LOW",
         "category": "Performance",
         "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6648/test_fix_report_rewrites_cshar0/Bad.cs",
+        "line": 3,
+        "description": "Where(...).Count() enumerates twice",
+        "fix": "Use Count(predicate) instead of Where(...).Count().",
+        "matched_text": "public int Run(int[] values) { return values.Where(v => v > 0).Count(); }",
+        "finding_type": "OPTIMIZATION",
+        "confidence": 70,
+        "priority": 20,
+        "reasoning": "",
+        "layer": "heuristic",
+        "requires_context": false,
+        "profile": "general",
+        "adjusted_confidence": 64
+      }
+    ]
+  },
+  "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6673/test_production_scan_hides_sty0/src/veilbreakers_mcp/demo.py|lang=py|scope=production|profile=all": {
+    "hash": "5f1b71acfd24996dd9047200a31b0f0c41f3720782d164a7a257bc2e4e828cab",
+    "timestamp": 1776046148.3647962,
+    "issues": []
+  },
+  "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6673/test_production_scan_keeps_rea0/src/veilbreakers_mcp/demo.py|lang=py|scope=production|profile=all": {
+    "hash": "37b4634dc58025aa2b6edfdb5af2bdeb30e71c80488eb9a2ae64e58e49a0adf5",
+    "timestamp": 1776046148.3835285,
+    "issues": [
+      {
+        "rule_id": "RUFF-F821",
+        "severity": "HIGH",
+        "category": "Bug",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6673/test_production_scan_keeps_rea0/src/veilbreakers_mcp/demo.py",
+        "line": 1,
+        "description": "undefined name `missing_name`",
+        "fix": "",
+        "matched_text": "",
+        "finding_type": "BUG",
+        "confidence": 75,
+        "priority": 50,
+        "reasoning": "",
+        "layer": "hard_correctness",
+        "requires_context": false,
+        "profile": "all",
+        "adjusted_confidence": 67
+      }
+    ]
+  },
+  "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6673/test_general_profile_treats_no0/arbitrary_app/demo.py|lang=py|scope=production|profile=general": {
+    "hash": "4115b110628613eea2d6781287d130bd659cb2ad626fdd52a2a03943a60c009c",
+    "timestamp": 1776046148.4809213,
+    "issues": [
+      {
+        "rule_id": "PY-SEC-01,RUFF-F821",
+        "severity": "CRITICAL",
+        "category": "Security",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6673/test_general_profile_treats_no0/arbitrary_app/demo.py",
+        "line": 1,
+        "description": "eval() usage -- arbitrary code execution risk [+ruff]",
+        "fix": "Replace with ast.literal_eval() or redesign.",
+        "matched_text": "result = eval(user_input)",
+        "finding_type": "BUG",
+        "confidence": 99,
+        "priority": 95,
+        "reasoning": "",
+        "layer": "hard_correctness",
+        "requires_context": false,
+        "profile": "general",
+        "adjusted_confidence": 99
+      }
+    ]
+  },
+  "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6673/test_changed_ranges_filter_out0/src/demo.py|lang=py|scope=production|profile=general": {
+    "hash": "1956ad8df1729d80e598aebb359e3242fb12e69da524564501897953ba33adf9",
+    "timestamp": 1776046148.6156135,
+    "issues": [
+      {
+        "rule_id": "PY-SEC-01,RUFF-F821",
+        "severity": "CRITICAL",
+        "category": "Security",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6673/test_changed_ranges_filter_out0/src/demo.py",
+        "line": 1,
+        "description": "eval() usage -- arbitrary code execution risk [+ruff]",
+        "fix": "Replace with ast.literal_eval() or redesign.",
+        "matched_text": "result = eval(user_input)",
+        "finding_type": "BUG",
+        "confidence": 99,
+        "priority": 95,
+        "reasoning": "",
+        "layer": "hard_correctness",
+        "requires_context": false,
+        "profile": "general",
+        "adjusted_confidence": 99
+      },
+      {
+        "rule_id": "RUFF-F821",
+        "severity": "HIGH",
+        "category": "Bug",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6673/test_changed_ranges_filter_out0/src/demo.py",
+        "line": 3,
+        "description": "Undefined name `code_string`",
+        "fix": "",
+        "matched_text": "",
+        "finding_type": "BUG",
+        "confidence": 75,
+        "priority": 50,
+        "reasoning": "",
+        "layer": "hard_correctness",
+        "requires_context": false,
+        "profile": "general",
+        "adjusted_confidence": 67
+      }
+    ]
+  },
+  "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6673/test_fix_report_generates_eval0/demo.py|lang=py|scope=production|profile=general": {
+    "hash": "4115b110628613eea2d6781287d130bd659cb2ad626fdd52a2a03943a60c009c",
+    "timestamp": 1776046148.709688,
+    "issues": [
+      {
+        "rule_id": "PY-SEC-01,RUFF-F821",
+        "severity": "CRITICAL",
+        "category": "Security",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6673/test_fix_report_generates_eval0/demo.py",
+        "line": 1,
+        "description": "eval() usage -- arbitrary code execution risk [+ruff]",
+        "fix": "Replace with ast.literal_eval() or redesign.",
+        "matched_text": "result = eval(user_input)",
+        "finding_type": "BUG",
+        "confidence": 99,
+        "priority": 95,
+        "reasoning": "",
+        "layer": "hard_correctness",
+        "requires_context": false,
+        "profile": "general",
+        "adjusted_confidence": 99
+      }
+    ]
+  },
+  "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6673/test_fix_apply_rewrites_file_a0/demo.py|lang=py|scope=advisory|profile=general": {
+    "hash": "1185897f5c8fe320ef382cf83956f235fdbdc880d5fb477a575e544a94a6a493",
+    "timestamp": 1776046152.582284,
+    "issues": [
+      {
+        "rule_id": "PY-COR-03,RUFF-F821,RUFF-E711",
+        "severity": "HIGH",
+        "category": "Bug",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6673/test_fix_apply_rewrites_file_a0/demo.py",
+        "line": 1,
+        "description": "Comparing with None using == instead of 'is None' [+ruff] [+ruff]",
+        "fix": "Use 'is None' or 'is not None'.",
+        "matched_text": "value = thing == None",
+        "finding_type": "STRENGTHENING",
+        "confidence": 99,
+        "priority": 50,
+        "reasoning": "[3 tools agree]",
+        "layer": "semantic",
+        "requires_context": false,
+        "profile": "general",
+        "adjusted_confidence": 99
+      }
+    ]
+  },
+  "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6673/test_fix_report_handles_mutabl0/demo.py|lang=py|scope=production|profile=general": {
+    "hash": "13ae2cd77875ac4aa8a36edcce2e04354d52379aabbb5a98938b63bd109989e0",
+    "timestamp": 1776046152.6626515,
+    "issues": [
+      {
+        "rule_id": "PY-COR-01",
+        "severity": "HIGH",
+        "category": "Bug",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6673/test_fix_report_handles_mutabl0/demo.py",
+        "line": 1,
+        "description": "Mutable default argument -- shared across calls",
+        "fix": "Change 'def f(items=[])' to 'def f(items=None):', then 'items = items if items is not None else []' in the body.",
+        "matched_text": "def build(items=[]):",
+        "finding_type": "BUG",
+        "confidence": 85,
+        "priority": 75,
+        "reasoning": "",
+        "layer": "hard_correctness",
+        "requires_context": false,
+        "profile": "general",
+        "adjusted_confidence": 78
+      }
+    ]
+  },
+  "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6673/test_fix_report_rewrites_cshar0/Bad.cs|lang=cs|scope=strict|profile=general": {
+    "hash": "7d4347752c12e10d317a24a1e3f34e2a827155a84ac5f001df554d35732153ca",
+    "timestamp": 1776046157.0876691,
+    "issues": [
+      {
+        "rule_id": "QUAL-08",
+        "severity": "LOW",
+        "category": "Quality",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6673/test_fix_report_rewrites_cshar0/Bad.cs",
+        "line": 1,
+        "description": "Unused using directive -- verify with IDE",
+        "fix": "Remove unused using statements. Use IDE 'Remove Unused Usings' command.",
+        "matched_text": "using System.Linq;",
+        "finding_type": "STRENGTHENING",
+        "confidence": 30,
+        "priority": 20,
+        "reasoning": "",
+        "layer": "heuristic",
+        "requires_context": false,
+        "profile": "general",
+        "adjusted_confidence": 27
+      },
+      {
+        "rule_id": "CS-PERF-02",
+        "severity": "LOW",
+        "category": "Performance",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6673/test_fix_report_rewrites_cshar0/Bad.cs",
+        "line": 3,
+        "description": "Where(...).Count() enumerates twice",
+        "fix": "Use Count(predicate) instead of Where(...).Count().",
+        "matched_text": "public int Run(int[] values) { return values.Where(v => v > 0).Count(); }",
+        "finding_type": "OPTIMIZATION",
+        "confidence": 70,
+        "priority": 20,
+        "reasoning": "",
+        "layer": "heuristic",
+        "requires_context": false,
+        "profile": "general",
+        "adjusted_confidence": 64
+      }
+    ]
+  },
+  "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6688/test_production_scan_hides_sty0/src/veilbreakers_mcp/demo.py|lang=py|scope=production|profile=all": {
+    "hash": "5f1b71acfd24996dd9047200a31b0f0c41f3720782d164a7a257bc2e4e828cab",
+    "timestamp": 1776049092.1382835,
+    "issues": []
+  },
+  "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6688/test_production_scan_keeps_rea0/src/veilbreakers_mcp/demo.py|lang=py|scope=production|profile=all": {
+    "hash": "37b4634dc58025aa2b6edfdb5af2bdeb30e71c80488eb9a2ae64e58e49a0adf5",
+    "timestamp": 1776049092.1579223,
+    "issues": [
+      {
+        "rule_id": "RUFF-F821",
+        "severity": "HIGH",
+        "category": "Bug",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6688/test_production_scan_keeps_rea0/src/veilbreakers_mcp/demo.py",
+        "line": 1,
+        "description": "undefined name `missing_name`",
+        "fix": "",
+        "matched_text": "",
+        "finding_type": "BUG",
+        "confidence": 75,
+        "priority": 50,
+        "reasoning": "",
+        "layer": "hard_correctness",
+        "requires_context": false,
+        "profile": "all",
+        "adjusted_confidence": 67
+      }
+    ]
+  },
+  "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6688/test_general_profile_treats_no0/arbitrary_app/demo.py|lang=py|scope=production|profile=general": {
+    "hash": "4115b110628613eea2d6781287d130bd659cb2ad626fdd52a2a03943a60c009c",
+    "timestamp": 1776049092.2691844,
+    "issues": [
+      {
+        "rule_id": "PY-SEC-01,RUFF-F821",
+        "severity": "CRITICAL",
+        "category": "Security",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6688/test_general_profile_treats_no0/arbitrary_app/demo.py",
+        "line": 1,
+        "description": "eval() usage -- arbitrary code execution risk [+ruff]",
+        "fix": "Replace with ast.literal_eval() or redesign.",
+        "matched_text": "result = eval(user_input)",
+        "finding_type": "BUG",
+        "confidence": 99,
+        "priority": 95,
+        "reasoning": "",
+        "layer": "hard_correctness",
+        "requires_context": false,
+        "profile": "general",
+        "adjusted_confidence": 99
+      }
+    ]
+  },
+  "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6688/test_changed_ranges_filter_out0/src/demo.py|lang=py|scope=production|profile=general": {
+    "hash": "1956ad8df1729d80e598aebb359e3242fb12e69da524564501897953ba33adf9",
+    "timestamp": 1776049092.4193697,
+    "issues": [
+      {
+        "rule_id": "PY-SEC-01,RUFF-F821",
+        "severity": "CRITICAL",
+        "category": "Security",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6688/test_changed_ranges_filter_out0/src/demo.py",
+        "line": 1,
+        "description": "eval() usage -- arbitrary code execution risk [+ruff]",
+        "fix": "Replace with ast.literal_eval() or redesign.",
+        "matched_text": "result = eval(user_input)",
+        "finding_type": "BUG",
+        "confidence": 99,
+        "priority": 95,
+        "reasoning": "",
+        "layer": "hard_correctness",
+        "requires_context": false,
+        "profile": "general",
+        "adjusted_confidence": 99
+      },
+      {
+        "rule_id": "RUFF-F821",
+        "severity": "HIGH",
+        "category": "Bug",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6688/test_changed_ranges_filter_out0/src/demo.py",
+        "line": 3,
+        "description": "Undefined name `code_string`",
+        "fix": "",
+        "matched_text": "",
+        "finding_type": "BUG",
+        "confidence": 75,
+        "priority": 50,
+        "reasoning": "",
+        "layer": "hard_correctness",
+        "requires_context": false,
+        "profile": "general",
+        "adjusted_confidence": 67
+      }
+    ]
+  },
+  "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6688/test_fix_report_generates_eval0/demo.py|lang=py|scope=production|profile=general": {
+    "hash": "4115b110628613eea2d6781287d130bd659cb2ad626fdd52a2a03943a60c009c",
+    "timestamp": 1776049092.52464,
+    "issues": [
+      {
+        "rule_id": "PY-SEC-01,RUFF-F821",
+        "severity": "CRITICAL",
+        "category": "Security",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6688/test_fix_report_generates_eval0/demo.py",
+        "line": 1,
+        "description": "eval() usage -- arbitrary code execution risk [+ruff]",
+        "fix": "Replace with ast.literal_eval() or redesign.",
+        "matched_text": "result = eval(user_input)",
+        "finding_type": "BUG",
+        "confidence": 99,
+        "priority": 95,
+        "reasoning": "",
+        "layer": "hard_correctness",
+        "requires_context": false,
+        "profile": "general",
+        "adjusted_confidence": 99
+      }
+    ]
+  },
+  "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6688/test_fix_apply_rewrites_file_a0/demo.py|lang=py|scope=advisory|profile=general": {
+    "hash": "1185897f5c8fe320ef382cf83956f235fdbdc880d5fb477a575e544a94a6a493",
+    "timestamp": 1776049096.5675716,
+    "issues": [
+      {
+        "rule_id": "PY-COR-03,RUFF-F821,RUFF-E711",
+        "severity": "HIGH",
+        "category": "Bug",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6688/test_fix_apply_rewrites_file_a0/demo.py",
+        "line": 1,
+        "description": "Comparing with None using == instead of 'is None' [+ruff] [+ruff]",
+        "fix": "Use 'is None' or 'is not None'.",
+        "matched_text": "value = thing == None",
+        "finding_type": "STRENGTHENING",
+        "confidence": 99,
+        "priority": 50,
+        "reasoning": "[3 tools agree]",
+        "layer": "semantic",
+        "requires_context": false,
+        "profile": "general",
+        "adjusted_confidence": 99
+      }
+    ]
+  },
+  "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6688/test_fix_report_handles_mutabl0/demo.py|lang=py|scope=production|profile=general": {
+    "hash": "13ae2cd77875ac4aa8a36edcce2e04354d52379aabbb5a98938b63bd109989e0",
+    "timestamp": 1776049096.649308,
+    "issues": [
+      {
+        "rule_id": "PY-COR-01",
+        "severity": "HIGH",
+        "category": "Bug",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6688/test_fix_report_handles_mutabl0/demo.py",
+        "line": 1,
+        "description": "Mutable default argument -- shared across calls",
+        "fix": "Change 'def f(items=[])' to 'def f(items=None):', then 'items = items if items is not None else []' in the body.",
+        "matched_text": "def build(items=[]):",
+        "finding_type": "BUG",
+        "confidence": 85,
+        "priority": 75,
+        "reasoning": "",
+        "layer": "hard_correctness",
+        "requires_context": false,
+        "profile": "general",
+        "adjusted_confidence": 78
+      }
+    ]
+  },
+  "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6688/test_fix_report_rewrites_cshar0/Bad.cs|lang=cs|scope=strict|profile=general": {
+    "hash": "7d4347752c12e10d317a24a1e3f34e2a827155a84ac5f001df554d35732153ca",
+    "timestamp": 1776049100.626114,
+    "issues": [
+      {
+        "rule_id": "QUAL-08",
+        "severity": "LOW",
+        "category": "Quality",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6688/test_fix_report_rewrites_cshar0/Bad.cs",
+        "line": 1,
+        "description": "Unused using directive -- verify with IDE",
+        "fix": "Remove unused using statements. Use IDE 'Remove Unused Usings' command.",
+        "matched_text": "using System.Linq;",
+        "finding_type": "STRENGTHENING",
+        "confidence": 30,
+        "priority": 20,
+        "reasoning": "",
+        "layer": "heuristic",
+        "requires_context": false,
+        "profile": "general",
+        "adjusted_confidence": 27
+      },
+      {
+        "rule_id": "CS-PERF-02",
+        "severity": "LOW",
+        "category": "Performance",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6688/test_fix_report_rewrites_cshar0/Bad.cs",
         "line": 3,
         "description": "Where(...).Count() enumerates twice",
         "fix": "Use Count(predicate) instead of Where(...).Count().",

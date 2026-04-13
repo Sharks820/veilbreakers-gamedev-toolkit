@@ -8,7 +8,6 @@ operation dicts.  No Blender (bpy) required.
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from blender_addon.handlers._dungeon_gen import (
     generate_bsp_dungeon,
@@ -69,7 +68,7 @@ class TestDungeonToGeometryOps:
         # Same number of ops
         assert len(ops_small) == len(ops_large)
         # Positions in large should be 4x the small
-        for s, l in zip(ops_small, ops_large):
+        for s, l in zip(ops_small, ops_large):  # noqa: E741
             assert abs(l["position"][0] - s["position"][0] * 4) < 1e-6
             assert abs(l["position"][1] - s["position"][1] * 4) < 1e-6
 
@@ -224,7 +223,7 @@ class TestHandlerReturnStructure:
 
     def test_dungeon_handler_metadata(self):
         layout = generate_bsp_dungeon(64, 64, seed=42)
-        ops = _dungeon_to_geometry_ops(layout)
+        _dungeon_to_geometry_ops(layout)
         # Simulate what handle_generate_dungeon returns
         result = {
             "name": "Dungeon",

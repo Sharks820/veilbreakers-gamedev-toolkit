@@ -65,9 +65,9 @@ class TestNPCMaterialRegions:
         """NPC bodies should have body_skin, head_skin, and extremity_skin."""
         result = generate_npc_body_mesh(gender=gender, build=build)
         region_set = set(result["material_regions"].values())
-        assert "body_skin" in region_set, f"Missing body_skin region"
-        assert "head_skin" in region_set, f"Missing head_skin region"
-        assert "extremity_skin" in region_set, f"Missing extremity_skin region"
+        assert "body_skin" in region_set, "Missing body_skin region"
+        assert "head_skin" in region_set, "Missing head_skin region"
+        assert "extremity_skin" in region_set, "Missing extremity_skin region"
 
     def test_metadata_has_region_names(self):
         """Metadata should list unique region names."""

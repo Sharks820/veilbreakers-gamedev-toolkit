@@ -11,7 +11,7 @@ See docs/terrain_ultra_implementation_plan_2026-04-08.md §13 Bundle H.
 from __future__ import annotations
 
 import time
-from typing import List, Optional, Sequence, Tuple
+from typing import Optional, Sequence, Tuple
 
 import numpy as np
 

@@ -3,7 +3,6 @@
 All pure-logic -- no Blender required.
 """
 
-import math
 import pytest
 
 from blender_addon.handlers.animation_hover import (

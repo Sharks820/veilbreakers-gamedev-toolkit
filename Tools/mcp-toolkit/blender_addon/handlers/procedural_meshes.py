@@ -157,12 +157,12 @@ def _auto_generate_box_projection_uvs(
     min_z = max_z = v0[2]
     for v in vertices:
         x, y, z = v[0], v[1], v[2]
-        if x < min_x: min_x = x
-        elif x > max_x: max_x = x
-        if y < min_y: min_y = y
-        elif y > max_y: max_y = y
-        if z < min_z: min_z = z
-        elif z > max_z: max_z = z
+        if x < min_x: min_x = x  # noqa: E701
+        elif x > max_x: max_x = x  # noqa: E701
+        if y < min_y: min_y = y  # noqa: E701
+        elif y > max_y: max_y = y  # noqa: E701
+        if z < min_z: min_z = z  # noqa: E701
+        elif z > max_z: max_z = z  # noqa: E701
 
     dx = max_x - min_x or 1.0
     dy = max_y - min_y or 1.0
@@ -413,8 +413,8 @@ def _make_torus_ring(
         theta = 2.0 * math.pi * i / major_segments
         ct, st = math.cos(theta), math.sin(theta)
         # Centre of the tube cross-section
-        tcx = cx + major_radius * ct
-        tcz = cz + major_radius * st
+        _tcx = cx + major_radius * ct
+        _tcz = cz + major_radius * st
         for j in range(minor_segments):
             phi = 2.0 * math.pi * j / minor_segments
             cp, sp = math.cos(phi), math.sin(phi)
@@ -537,7 +537,7 @@ def _make_beveled_box(
     # Bevel edge faces -- connect adjacent inset vertices along each of the 12 edges
     # Each edge of the original cube connects 2 corners; we create a quad
     # from their respective inset vertices.
-    edge_pairs = [
+    _edge_pairs = [
         # Bottom ring (y-)
         (0, 1, 0, 2),  # edge 0-1: X-inset of 0, Z-inset of 0, Z-inset of 1, X-inset of 1
         (1, 2, 0, 2),
@@ -1079,9 +1079,9 @@ def generate_table_mesh(
                 width * 0.84, brace_segs, rings=1,
             )
             # Rotate by swapping axes -- approximate by placing horizontally
-            rotated_v = [(v[1] - brace_y, brace_y, v[2]) for v in sv]
+            _rotated_v_unused = [(v[1] - brace_y, brace_y, v[2]) for v in sv]
             # Re-place along X
-            rotated_v = [
+            _rotated_v = [
                 (-width * 0.42 + (v[0] + brace_y) / leg_height * width * 0.84,
                  brace_y, inset_z)
                 for i, v in enumerate(sv)
@@ -3305,8 +3305,8 @@ def generate_crossbow_mesh(
     arm_len = 0.3 * s
     arm_segs = 6
     for side in [-1, 1]:
-        arm_verts: list[tuple[float, float, float]] = []
-        arm_faces_local: list[tuple[int, ...]] = []
+        _arm_verts: list[tuple[float, float, float]] = []
+        _arm_faces_local: list[tuple[int, ...]] = []
         for i in range(arm_segs + 1):
             t = i / arm_segs
             # Curved outward
@@ -3519,7 +3519,7 @@ def generate_whip_mesh(
 
         # Apply a gentle curve
         y1 = handle_len + t * whip_length
-        y2 = handle_len + t2 * whip_length
+        _y2 = handle_len + t2 * whip_length
         x_curve = math.sin(t * math.pi * 2) * length * 0.05
         z_curve = math.cos(t * math.pi * 1.5) * length * 0.03
 
@@ -3575,7 +3575,7 @@ def generate_claw_mesh(
         n_segs = 4
         for s in range(n_segs):
             t = s / n_segs
-            t2 = (s + 1) / n_segs
+            _t2 = (s + 1) / n_segs
             # Curve the finger forward and inward
             seg_x = fx + math.sin(t * curve * math.pi * 0.5) * finger_len * 0.5
             seg_y = palm_h + t * finger_len * 0.8
@@ -5562,7 +5562,7 @@ def generate_bola_mesh(style: str = "standard") -> MeshSpec:
         style: "standard", "chain", or "spiked".
     """
     parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
-    segs = 8
+    _segs = 8
 
     num_weights = 3
     rope_len = 0.25
@@ -5629,8 +5629,8 @@ def generate_orb_focus_mesh(style: str = "crystal") -> MeshSpec:
     # Cradle prongs
     for pi in range(4):
         p_angle = 2.0 * math.pi * pi / 4
-        px = math.cos(p_angle) * 0.015
-        pz = math.sin(p_angle) * 0.015
+        _px = math.cos(p_angle) * 0.015
+        _pz = math.sin(p_angle) * 0.015
         prong_segs = 4
         pvl: list[tuple[float, float, float]] = []
         pfl: list[tuple[int, ...]] = []
@@ -6234,7 +6234,7 @@ def generate_bridge_mesh(
 
     if style == "stone_arch":
         # Arch curve underneath
-        arch_segs = 16
+        arch_segs = max(8, min(12, int(span / 1.5)))
         arch_h = span * 0.25
         deck_thick = 0.15
         wall_h = 0.5
@@ -6294,7 +6294,7 @@ def generate_bridge_mesh(
 
     elif style == "rope":
         # Plank walkway with rope sides
-        plank_count = int(span / 0.15)
+        plank_count = max(8, min(24, int(span / 0.45)))
         plank_w = width * 0.9
         plank_thick = 0.03
         plank_d = 0.12
@@ -6329,7 +6329,7 @@ def generate_bridge_mesh(
         parts.append((dv, df))
 
         # Plank lines (surface detail)
-        plank_count = int(width / 0.2)
+        plank_count = max(4, min(10, int(width / 0.35)))
         for i in range(plank_count):
             x = -width / 2 + (i + 0.5) * width / plank_count
             lv, lf = _make_box(x, 0.005, 0, 0.003, 0.005, span / 2 - 0.02)
@@ -6518,7 +6518,7 @@ def generate_staircase_mesh(
         # Side stringers (support beams)
         total_rise = steps * step_h
         total_run = steps * step_d
-        stringer_len = math.sqrt(total_rise ** 2 + total_run ** 2)
+        _stringer_len = math.sqrt(total_rise ** 2 + total_run ** 2)
         for x_side in [-width / 2 - 0.02, width / 2 + 0.02]:
             # Approximate with a box along the diagonal
             sv, sf = _make_box(
@@ -7254,7 +7254,7 @@ def generate_dart_launcher_mesh(
             tx, ty, plate_d / 2, tube_r, tube_depth, segments=tube_segs,
         )
         # Rotate tubes to point outward (along Z)
-        t_verts = [(v[0], v[1], v[1] - ty + plate_d / 2) for v in tv]
+        _t_verts = [(v[0], v[1], v[1] - ty + plate_d / 2) for v in tv]
         # Proper: cylinder is along Y, we need it along Z
         t_verts2 = []
         for v in tv:
@@ -7627,7 +7627,7 @@ def generate_boat_mesh(
         hull_len = 2.0 * s
         hull_w = 0.6 * s
         hull_h = 0.3 * s
-        hull_thick = 0.03 * s
+        _hull_thick = 0.03 * s
 
         # Outer hull profile (side view cross-sections along length)
         n_sections = 8
@@ -8058,7 +8058,7 @@ def generate_buttress_mesh(
 
         # Flying arch (connecting pier to wall)
         # Approximate with angled box
-        arch_len = 1.5
+        _arch_len = 1.5
         arch_h = 0.2
         arch_d = 0.3
 
@@ -8467,7 +8467,7 @@ def generate_scaffolding_mesh(
             ly_bot = level * level_h
             ly_top = (level + 1) * level_h
             # Approximate diagonal with a thin box
-            diag_len = math.sqrt(width ** 2 + level_h ** 2)
+            _diag_len = math.sqrt(width ** 2 + level_h ** 2)
             dv, df = _make_box(
                 0, (ly_bot + ly_top) / 2, side_z,
                 width / 2, 0.01, pole_r,
@@ -8665,7 +8665,7 @@ def generate_veil_tear_mesh(
 
     # Jagged frame (irregular ring of shards)
     n_shards = 16
-    frame_thick = 0.08
+    _frame_thick = 0.08
     frame_depth = 0.15
 
     # Create jagged border using displaced points on an ellipse
@@ -9113,7 +9113,7 @@ def generate_spider_web_mesh(
     """
     parts = []
     strand_r = 0.003
-    strand_segs = 3
+    _strand_segs = 3
 
     # Center point hub
     cv, cf = _make_sphere(0, 0, 0, strand_r * 3, rings=3, sectors=4)
@@ -9122,8 +9122,8 @@ def generate_spider_web_mesh(
     # Radial strands (from center to edge)
     for i in range(radials):
         angle = 2.0 * math.pi * i / radials
-        ex = math.cos(angle) * radius
-        ez = math.sin(angle) * radius
+        _ex = math.cos(angle) * radius
+        _ez = math.sin(angle) * radius
 
         # Strand as series of thin boxes
         n_segs = rings * 2
@@ -9199,11 +9199,11 @@ def generate_coffin_mesh(
     shoulder_l = coffin_l * 0.35  # Where it widens
 
     if style == "wooden_simple":
-        bevel = 0.005
+        _bevel = 0.005
     elif style == "stone_ornate":
-        bevel = 0.01
+        _bevel = 0.01
     else:
-        bevel = 0.008
+        _bevel = 0.008
 
     # Coffin body (hexagonal cross-section extruded)
     # Create as a profile in XY, extrude along Z (which we treat as depth)
@@ -10333,12 +10333,12 @@ def generate_door_mesh(
     """
     parts = []
     depth = 0.08
-    bevel = 0.005
+    _bevel = 0.005
 
     if style == "wooden_plank":
         # Main door panel
         dv, df = _make_beveled_box(0, height / 2, 0, width / 2, height / 2,
-                                   depth / 2, bevel=bevel)
+                                   depth / 2, bevel=_bevel)
         parts.append((dv, df))
 
         # Plank lines (horizontal strips)
@@ -10364,7 +10364,7 @@ def generate_door_mesh(
     elif style == "iron_reinforced":
         # Thick door panel
         dv, df = _make_beveled_box(0, height / 2, 0, width / 2, height / 2,
-                                   depth / 2, bevel=bevel)
+                                   depth / 2, bevel=_bevel)
         parts.append((dv, df))
 
         # Iron bands (horizontal)
@@ -14878,7 +14878,7 @@ def generate_curtain_mesh(
     Returns:
         MeshSpec with vertices, faces, uvs, and metadata.
     """
-    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    _parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
 
     # Subdivided plane with wave deformation
     res_x = max(folds * 4, 16)  # horizontal resolution
@@ -14987,7 +14987,7 @@ def generate_mirror_mesh(
             cap_top=True, cap_bottom=True,
         )
         # Rotate handle to point downward from mirror
-        hv_rot = [(v[0], -mirror_r + (v[1] + mirror_r + handle_len / 2) * -1, v[2])
+        _hv_rot = [(v[0], -mirror_r + (v[1] + mirror_r + handle_len / 2) * -1, v[2])
                   for v in hv]
         # Simpler: just position handle below
         hv2, hf2 = _make_tapered_cylinder(
@@ -15279,7 +15279,7 @@ def generate_bathtub_mesh(
         # Clawfoot bathtub -- elongated oval profile
         segments = 16
         rings = 6
-        wall_thick = 0.025
+        _wall_thick = 0.025
 
         # Outer shell via lathe-like approach: build elliptical cross-sections
         verts_outer: list[tuple[float, float, float]] = []
@@ -15347,7 +15347,7 @@ def generate_bathtub_mesh(
         segments = 16
         outer_r_x = length / 2
         outer_r_z = width / 2
-        inner_offset = 0.03
+        _inner_offset = 0.03
 
         # Outer wall
         verts_all: list[tuple[float, float, float]] = []
@@ -19905,7 +19905,7 @@ def generate_crow_mesh(style: str = "perched") -> MeshSpec:
     segs = 6
 
     # Body (sleek, elongated)
-    body_rx = 0.03
+    _body_rx = 0.03
     body_ry = 0.035
     bv, bf = _make_sphere(0, 0.08, 0, body_ry, rings=5, sectors=segs)
     parts.append((bv, bf))
@@ -20969,7 +20969,7 @@ def generate_small_spider_mesh(style: str = "standard") -> MeshSpec:
         pair_z = 0.015 - pair * 0.008
         for side in [-1.0, 1.0]:
             # Upper leg (outward and up)
-            angle_out = 0.3 + pair * 0.2
+            _angle_out = 0.3 + pair * 0.2
             ul_len = 0.035 + pair * 0.005
             ulv, ulf = _make_tapered_cylinder(
                 side * ct_r * 0.8, 0.02, pair_z,
@@ -21088,7 +21088,7 @@ def generate_frog_mesh(style: str = "sitting") -> MeshSpec:
     is_leaping = style == "leaping"
 
     # Body (wide, flat, squat)
-    body_rx = 0.035
+    _body_rx = 0.035
     body_ry = 0.02
     bv, bf = _make_sphere(0, 0.03, 0, body_ry, rings=4, sectors=segs)
     # Squash vertically, widen horizontally

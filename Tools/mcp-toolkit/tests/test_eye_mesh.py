@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import math
 
-import pytest
 
 from blender_addon.handlers.eye_mesh import (
     generate_eye_mesh,
@@ -164,7 +163,7 @@ class TestEyeUVs:
         )
         # Find vertices that face forward (negative Y)
         center = result["center"]
-        radius = result["radius"]
+        result["radius"]
         front_uvs = []
         for i, (vx, vy, vz) in enumerate(result["inner_vertices"]):
             dx = vx - center[0]

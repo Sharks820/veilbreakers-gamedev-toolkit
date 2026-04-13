@@ -131,7 +131,7 @@ def _generate_shoreline_profile(
     amp = config["shore_noise_amp"]
     freq = config["shore_noise_freq"]
 
-    rng = random.Random(seed)
+    _rng = random.Random(seed)
     profile: list[float] = []
 
     for i in range(resolution):
@@ -420,7 +420,7 @@ def _compute_material_zones(
             v0 = i * resolution_across + j
             v3 = (i + 1) * resolution_across + j
             y_avg = (vertices[v0][1] + vertices[v3][1]) / 2.0
-            z_avg = (vertices[v0][2] + vertices[v3][2]) / 2.0
+            _z_avg = (vertices[v0][2] + vertices[v3][2]) / 2.0
 
             t_along = i / max(resolution_along - 1, 1)
             idx = min(int(t_along * len(shoreline_profile)), len(shoreline_profile) - 1)

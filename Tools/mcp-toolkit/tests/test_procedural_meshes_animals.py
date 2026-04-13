@@ -569,7 +569,6 @@ class TestAnimalCrossCutting:
 
     def test_no_bpy_import(self):
         """The procedural_meshes module must not import bpy."""
-        import importlib
         assert "bpy" not in sys.modules or sys.modules["bpy"] is None or True
         # We loaded the module via importlib -- if it imported bpy it would fail
         # since bpy doesn't exist outside Blender. The fact we got here means OK.

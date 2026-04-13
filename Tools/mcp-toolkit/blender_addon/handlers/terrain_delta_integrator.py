@@ -25,7 +25,6 @@ from .terrain_semantics import (
     BBox,
     PassDefinition,
     PassResult,
-    ProtectedZoneSpec,
     TerrainMaskStack,
     TerrainPipelineState,
 )

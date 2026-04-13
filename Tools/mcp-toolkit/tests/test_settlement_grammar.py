@@ -11,7 +11,6 @@ No bpy/bmesh required — pure logic.
 
 from __future__ import annotations
 
-import math
 import tempfile
 from pathlib import Path
 
@@ -22,10 +21,9 @@ _TMP_LANTERN_GLB = str(_TMPDIR / "lantern.glb")
 _TMP_BENCH_GLB = str(_TMPDIR / "bench_weathered.glb")
 _TMP_CART_GLB = str(_TMPDIR / "cart_corrupt.glb")
 
-from blender_addon.handlers._settlement_grammar import (
+from blender_addon.handlers._settlement_grammar import (  # noqa: E402
     CORRUPTION_DESCS,
     CORRUPTION_TIERS,
-    DISTRICT_FILL_RATES,
     PROP_PROMPTS,
     RING_THRESHOLDS,
     _block_area,

@@ -20,6 +20,8 @@ import math
 import random
 from typing import Any
 
+from ._terrain_depth import generate_terrain_bridge_mesh
+
 
 # ---------------------------------------------------------------------------
 # Type aliases
@@ -38,6 +40,18 @@ ROAD_TYPES: dict[str, dict[str, Any]] = {
     "path": {"width": 2.0, "priority": 1},
     "trail": {"width": 1.0, "priority": 2},
 }
+
+
+def _bridge_style_for_road_type(road_type: str, span: float) -> str:
+    """Choose a bridge style appropriate for the road classification."""
+    if road_type == "trail" or span >= 18.0:
+        return "rope"
+    return "stone_arch"
+
+
+def _bridge_clearance_for_width(width: float) -> float:
+    """Return a conservative deck lift above water for the bridge span."""
+    return max(0.35, min(1.25, width * 0.18))
 
 
 # ---------------------------------------------------------------------------
@@ -308,6 +322,7 @@ def _detect_bridges(
     segments: list[Segment],
     water_level: float = 0.0,
     heightmap: list[list[float]] | None = None,
+    terrain_bounds: tuple[float, float, float, float] | None = None,
 ) -> list[dict[str, Any]]:
     """Detect bridge positions where road segments cross below water_level.
 
@@ -337,9 +352,13 @@ def _detect_bridges(
                 rows = len(heightmap)
                 cols = len(heightmap[0]) if rows > 0 else 0
                 if rows > 0 and cols > 0:
-                    # Map world coords to heightmap indices (simplified)
-                    ri = max(0, min(int(py) % rows, rows - 1))
-                    ci = max(0, min(int(px) % cols, cols - 1))
+                    ri, ci = _world_to_heightmap_indices(
+                        rows,
+                        cols,
+                        px,
+                        py,
+                        terrain_bounds=terrain_bounds,
+                    )
                     terrain_z = heightmap[ri][ci]
 
             if terrain_z < water_level:
@@ -349,9 +368,18 @@ def _detect_bridges(
                 bridge_end = (px, py, pz)
             else:
                 if below_water and bridge_start is not None and bridge_end is not None:
+                    clearance = _bridge_clearance_for_width(width)
+                    deck_z = max(
+                        float(water_level),
+                        float(bridge_start[2]),
+                        float(bridge_end[2]),
+                    ) + clearance
                     bridges.append({
                         "start": bridge_start,
                         "end": bridge_end,
+                        "deck_start": (bridge_start[0], bridge_start[1], deck_z),
+                        "deck_end": (bridge_end[0], bridge_end[1], deck_z),
+                        "water_clearance": clearance,
                         "width": width,
                         "road_type": road_type,
                         "length": _distance_3d(bridge_start, bridge_end),
@@ -361,15 +389,59 @@ def _detect_bridges(
 
         # Handle segment ending while below water
         if below_water and bridge_start is not None and bridge_end is not None:
+            clearance = _bridge_clearance_for_width(width)
+            deck_z = max(
+                float(water_level),
+                float(bridge_start[2]),
+                float(bridge_end[2]),
+            ) + clearance
             bridges.append({
                 "start": bridge_start,
                 "end": bridge_end,
+                "deck_start": (bridge_start[0], bridge_start[1], deck_z),
+                "deck_end": (bridge_end[0], bridge_end[1], deck_z),
+                "water_clearance": clearance,
                 "width": width,
                 "road_type": road_type,
                 "length": _distance_3d(bridge_start, bridge_end),
             })
 
     return bridges
+
+
+def _world_to_heightmap_indices(
+    rows: int,
+    cols: int,
+    world_x: float,
+    world_y: float,
+    *,
+    terrain_bounds: tuple[float, float, float, float] | None = None,
+) -> tuple[int, int]:
+    """Map world-space XY into clamped heightmap row/column indices.
+
+    ``terrain_bounds`` is ``(min_x, min_y, max_x, max_y)``. When omitted,
+    the helper treats the heightmap as spanning ``[0, cols] x [0, rows]``.
+    """
+    if rows <= 0 or cols <= 0:
+        raise ValueError("rows and cols must be positive")
+
+    if terrain_bounds is None:
+        min_x = 0.0
+        min_y = 0.0
+        max_x = float(cols)
+        max_y = float(rows)
+    else:
+        min_x, min_y, max_x, max_y = (float(v) for v in terrain_bounds)
+        if max_x <= min_x or max_y <= min_y:
+            raise ValueError("terrain_bounds must have positive extent")
+
+    span_x = max(max_x - min_x, 1e-9)
+    span_y = max(max_y - min_y, 1e-9)
+    col = int(math.floor(((world_x - min_x) / span_x) * cols))
+    row = int(math.floor(((world_y - min_y) / span_y) * rows))
+    col = max(0, min(col, cols - 1))
+    row = max(0, min(row, rows - 1))
+    return row, col
 
 
 # ---------------------------------------------------------------------------
@@ -494,7 +566,7 @@ def _road_segment_mesh_spec_with_curbs(
         px = start[0] + dx * t
         py = start[1] + dy * t
         pz = start[2] + (end[2] - start[2]) * t
-        u = t  # UV along road direction
+        _u = t  # UV along road direction
 
         for col_xoff, col_z in col_offsets:
             wx = px + nx * col_xoff
@@ -554,6 +626,39 @@ def _road_segment_mesh_spec_with_curbs(
     }
 
 
+def _bridge_mesh_specs(
+    bridges: list[dict[str, Any]],
+    *,
+    water_level: float,
+    seed: int,
+) -> list[dict[str, Any]]:
+    """Generate real bridge mesh specs for detected water crossings."""
+    mesh_specs: list[dict[str, Any]] = []
+    for idx, bridge in enumerate(bridges):
+        start = tuple(bridge.get("deck_start", bridge["start"]))
+        end = tuple(bridge.get("deck_end", bridge["end"]))
+        span = _distance_3d(start, end)
+        style = _bridge_style_for_road_type(str(bridge.get("road_type", "path")), span)
+        mesh = generate_terrain_bridge_mesh(
+            start_pos=start,
+            end_pos=end,
+            width=float(bridge["width"]),
+            style=style,
+            seed=seed + idx,
+        )
+        mesh["type"] = "terrain_bridge"
+        mesh["bridge_id"] = f"bridge_{idx}"
+        mesh["style"] = style
+        mesh["road_type"] = bridge.get("road_type")
+        mesh["water_level"] = float(water_level)
+        mesh["water_clearance"] = float(bridge.get("water_clearance", 0.0))
+        mesh_specs.append(mesh)
+        bridge["bridge_id"] = mesh["bridge_id"]
+        bridge["style"] = style
+        bridge["mesh_spec_index"] = idx
+    return mesh_specs
+
+
 # ---------------------------------------------------------------------------
 # Main API
 # ---------------------------------------------------------------------------
@@ -561,6 +666,7 @@ def _road_segment_mesh_spec_with_curbs(
 def compute_road_network(
     waypoints: list[Vec3],
     terrain_heightmap: list[list[float]] | None = None,
+    terrain_bounds: tuple[float, float, float, float] | None = None,
     water_level: float = 0.0,
     seed: int = 42,
 ) -> dict[str, Any]:
@@ -577,6 +683,8 @@ def compute_road_network(
     terrain_heightmap : list of list of float, optional
         2D heightmap for terrain sampling. If None, segment Z values
         are interpolated linearly between waypoints.
+    terrain_bounds : tuple(min_x, min_y, max_x, max_y), optional
+        World-space bounds covered by ``terrain_heightmap``.
     water_level : float
         Z height of water. Roads below this get bridges.
     seed : int
@@ -588,6 +696,7 @@ def compute_road_network(
         - "segments": list of (start, end, width, road_type)
         - "intersections": list of {"position": Vec3, "type": str}
         - "bridges": list of bridge dicts
+        - "bridge_mesh_specs": list of bridge mesh specs
         - "switchbacks": list of switchback position lists
         - "mesh_specs": list of mesh spec dicts for each segment
         - "waypoint_count": int
@@ -598,6 +707,7 @@ def compute_road_network(
             "segments": [],
             "intersections": [],
             "bridges": [],
+            "bridge_mesh_specs": [],
             "switchbacks": [],
             "mesh_specs": [],
             "waypoint_count": len(waypoints),
@@ -672,7 +782,9 @@ def compute_road_network(
         segments,
         water_level=water_level,
         heightmap=terrain_heightmap,
+        terrain_bounds=terrain_bounds,
     )
+    bridge_mesh_specs = _bridge_mesh_specs(bridges, water_level=water_level, seed=seed)
 
     # Step 5: Generate mesh specs
     # Main roads and cobblestone streets get full curb geometry;
@@ -692,6 +804,7 @@ def compute_road_network(
         "segments": segments,
         "intersections": intersections,
         "bridges": bridges,
+        "bridge_mesh_specs": bridge_mesh_specs,
         "switchbacks": switchbacks,
         "mesh_specs": mesh_specs,
         "waypoint_count": len(waypoints),

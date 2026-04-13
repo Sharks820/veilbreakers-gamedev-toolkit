@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 
 from veilbreakers_mcp._context_engine import ContextEngine
 from veilbreakers_mcp import vb_code_reviewer as reviewer

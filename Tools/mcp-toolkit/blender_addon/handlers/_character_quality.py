@@ -179,7 +179,7 @@ def validate_proportions(
 
     # -- Head-to-body ratio check --
     head_ratio = spec.get("head_ratio", 7.5)
-    expected_head_height = height / head_ratio
+    _expected_head_height = height / head_ratio
     # Estimate head as top ~13% of height
     head_y_min = min_y + height * 0.87
     head_verts = [v for v in verts if v[1] >= head_y_min]

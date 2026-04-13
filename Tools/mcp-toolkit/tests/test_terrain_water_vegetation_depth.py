@@ -10,7 +10,6 @@ import pytest
 
 from blender_addon.handlers.terrain_pipeline import (
     TerrainPassController,
-    register_default_passes,
 )
 from blender_addon.handlers.terrain_semantics import (
     BBox,
@@ -24,7 +23,6 @@ from blender_addon.handlers.terrain_water_variants import (
     Estuary,
     HotSpring,
     KarstSpring,
-    PerchedLake,
     SeasonalState,
     Wetland,
     apply_seasonal_water_state,
@@ -35,10 +33,8 @@ from blender_addon.handlers.terrain_water_variants import (
     detect_wetlands,
     generate_braided_channels,
     pass_water_variants,
-    register_water_variants_pass,
 )
 from blender_addon.handlers.terrain_vegetation_depth import (
-    Clearing,
     DisturbancePatch,
     VegetationLayer,
     VegetationLayers,
@@ -50,7 +46,6 @@ from blender_addon.handlers.terrain_vegetation_depth import (
     pass_vegetation_depth,
     place_clearings,
     place_fallen_logs,
-    register_vegetation_depth_pass,
 )
 from blender_addon.handlers.terrain_bundle_o import register_bundle_o_passes
 
@@ -219,7 +214,7 @@ def test_perched_lake_detection_finds_basin():
     # far below the basin — so it qualifies.
     lakes = detect_perched_lakes(stack)
     assert any(
-        l.elevation_m > 40.0 for l in lakes
+        l.elevation_m > 40.0 for l in lakes  # noqa: E741
     ), "expected a perched lake on the elevated plateau"
 
 

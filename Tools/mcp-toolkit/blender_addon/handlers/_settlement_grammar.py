@@ -520,9 +520,9 @@ def subdivide_block_to_lots(
             j = (i + 1) % len(lot_poly)
             dx = lot_poly[j][0] - lot_poly[i][0]
             dy = lot_poly[j][1] - lot_poly[i][1]
-            l = math.sqrt(dx * dx + dy * dy)
-            if l > longest_len:
-                longest_len = l
+            _dist = math.sqrt(dx * dx + dy * dy)
+            if _dist > longest_len:
+                longest_len = _dist
                 longest_edge = i
         lots.append({
             "polygon": lot_poly,

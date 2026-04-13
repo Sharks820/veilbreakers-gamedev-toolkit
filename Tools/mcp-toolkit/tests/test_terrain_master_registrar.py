@@ -83,7 +83,10 @@ def test_handle_run_terrain_pass_registers_non_default_passes_for_direct_callers
     finally:
         TerrainPassController.clear_registry()
 
-    assert len(result["results"]) == 5
+    assert len(result["results"]) == 8
+    assert result["results"][-5]["pass_name"] == "materials_v2"
+    assert result["results"][-4]["pass_name"] == "navmesh"
+    assert result["results"][-3]["pass_name"] == "prepare_terrain_normals"
     assert result["results"][-2]["pass_name"] == "prepare_heightmap_raw_u16"
     assert result["results"][-1]["pass_name"] == "validation_full"
 
@@ -168,6 +171,8 @@ def test_handle_run_terrain_pass_injects_heightmap_prepare_before_validation_ful
         "macro_world",
         "structural_masks",
         "navmesh",
+        "materials_v2",
+        "prepare_terrain_normals",
         "prepare_heightmap_raw_u16",
         "validation_full",
     ]

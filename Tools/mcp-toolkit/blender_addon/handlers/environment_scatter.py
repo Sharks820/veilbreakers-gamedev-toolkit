@@ -1450,7 +1450,6 @@ def handle_scatter_vegetation(params: dict) -> dict:
         # Resize to match heightmap if needed
         if moisture_np.shape != heightmap.shape:
             # Simple nearest-neighbor resize
-            from numpy import round as np_round
             y_idx = np.round(np.linspace(0, moisture_np.shape[0] - 1, rows)).astype(int)
             x_idx = np.round(np.linspace(0, moisture_np.shape[1] - 1, cols)).astype(int)
             moisture_np = moisture_np[np.ix_(y_idx, x_idx)]

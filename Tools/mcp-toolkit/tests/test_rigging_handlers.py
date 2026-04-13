@@ -1143,7 +1143,7 @@ class TestCorruptionMorph:
 
 class TestBoneLOD:
     def test_lod0_returns_all(self):
-        from blender_addon.handlers.rigging import _get_bones_for_lod, BONE_LOD_TIERS
+        from blender_addon.handlers.rigging import _get_bones_for_lod
         bones = {"spine": {}, "upper_arm.L": {}, "thumb.01.L": {}, "upper_arm_twist.L": {}}
         result = _get_bones_for_lod(bones, "LOD0_full")
         assert len(result) == 4

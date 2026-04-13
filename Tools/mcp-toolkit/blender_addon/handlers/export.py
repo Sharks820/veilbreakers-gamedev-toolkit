@@ -170,7 +170,7 @@ def _ensure_uv2_lightmap_layer(objects: list | None = None) -> list[str]:
             continue
 
         # If lightmap is already at index 1, nothing to do
-        layer_names = [l.name for l in uv_layers]
+        layer_names = [L.name for L in uv_layers]
         current_idx = layer_names.index(lightmap_layer.name)
         if current_idx == 1:
             continue

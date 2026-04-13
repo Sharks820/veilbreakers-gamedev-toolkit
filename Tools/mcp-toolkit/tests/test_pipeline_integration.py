@@ -21,7 +21,7 @@ _TMP_NORMAL = str(_TMPDIR / "textures" / "normal.png")
 _TMP_ALBEDO_FLAT = str(_TMPDIR / "albedo.png")
 _TMP_ORM_FLAT = str(_TMPDIR / "orm.png")
 
-from veilbreakers_mcp.shared.pipeline_runner import PipelineRunner
+from veilbreakers_mcp.shared.pipeline_runner import PipelineRunner  # noqa: E402
 
 
 # ---------------------------------------------------------------------------

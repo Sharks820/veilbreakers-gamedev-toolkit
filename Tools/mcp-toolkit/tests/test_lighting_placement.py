@@ -227,7 +227,7 @@ class TestTorchDoorwayPlacement:
             grammar, room_type="guard_post", width=6.0, depth=5.0,
             furniture=[], doors=doors, seed=0,
         )
-        torch_lights = [l for l in lights if l["type"] == "torch_sconce"]
+        torch_lights = [l for l in lights if l["type"] == "torch_sconce"]  # noqa: E741
         # Expect at least 2 torches from the doorway
         assert len(torch_lights) >= 2
 
@@ -237,7 +237,7 @@ class TestTorchDoorwayPlacement:
             grammar, room_type="tavern", width=6.0, depth=5.0,
             furniture=[], doors=doors, seed=0,
         )
-        torch_lights = [l for l in lights if l["type"] == "torch_sconce"]
+        torch_lights = [l for l in lights if l["type"] == "torch_sconce"]  # noqa: E741
         assert len(torch_lights) >= 4
 
     def test_torch_height_at_1_6m(self, grammar):
@@ -249,7 +249,7 @@ class TestTorchDoorwayPlacement:
         )
         # Find lights that came from the door position (near x=3, y=0)
         door_torches = [
-            l for l in lights
+            l for l in lights  # noqa: E741
             if l["type"] == "torch_sconce" and abs(l["position"][1]) < 0.3
         ]
         assert door_torches, "No door torches found near the door position"
@@ -282,7 +282,7 @@ class TestCandlesOnTables:
         lights = _run_layout(
             grammar, room_type="tavern", furniture=furniture, doors=[], seed=0,
         )
-        candles = [l for l in lights if l["type"] == "candle"]
+        candles = [l for l in lights if l["type"] == "candle"]  # noqa: E741
         assert candles, "Expected at least one candle on a table surface"
 
     def test_candle_position_matches_table_position(self, grammar):
@@ -292,7 +292,7 @@ class TestCandlesOnTables:
             grammar, room_type="storage", width=6.0, depth=6.0,
             furniture=furniture, doors=[], seed=0,
         )
-        candles = [l for l in lights if l["type"] == "candle"]
+        candles = [l for l in lights if l["type"] == "candle"]  # noqa: E741
         assert candles
         # At least one candle should be near the table's x,y
         table_candle = next(
@@ -315,8 +315,8 @@ class TestCandlesOnTables:
         lights_with_table = _run_layout(
             grammar, room_type="storage", furniture=furniture_with_table, doors=[], seed=0,
         )
-        candles_no_table = [l for l in lights_no_tables if l["type"] == "candle"]
-        candles_with_table = [l for l in lights_with_table if l["type"] == "candle"]
+        candles_no_table = [l for l in lights_no_tables if l["type"] == "candle"]  # noqa: E741
+        candles_with_table = [l for l in lights_with_table if l["type"] == "candle"]  # noqa: E741
         # Having a table should result in at least one more candle
         assert len(candles_with_table) >= len(candles_no_table)
 
@@ -326,7 +326,7 @@ class TestCandlesOnTables:
             grammar, room_type="dining_hall", width=10.0, depth=8.0,
             furniture=furniture, doors=[], seed=0,
         )
-        candles = [l for l in lights if l["type"] == "candle"]
+        candles = [l for l in lights if l["type"] == "candle"]  # noqa: E741
         assert len(candles) >= 3, (
             f"Expected >= 3 candles for 3 tables, got {len(candles)}"
         )
@@ -344,7 +344,7 @@ class TestChandelierInLargeRooms:
             grammar, room_type="great_hall", width=10.0, depth=6.0, height=5.0,
             furniture=[], doors=[], seed=0,
         )
-        chandeliers = [l for l in lights if l["type"] == "chandelier_light"]
+        chandeliers = [l for l in lights if l["type"] == "chandelier_light"]  # noqa: E741
         assert chandeliers, "Expected chandelier in room with width > 8m"
 
     def test_chandelier_in_deep_room(self, grammar):
@@ -352,7 +352,7 @@ class TestChandelierInLargeRooms:
             grammar, room_type="dining_hall", width=6.0, depth=9.0, height=4.0,
             furniture=[], doors=[], seed=0,
         )
-        chandeliers = [l for l in lights if l["type"] == "chandelier_light"]
+        chandeliers = [l for l in lights if l["type"] == "chandelier_light"]  # noqa: E741
         assert chandeliers, "Expected chandelier in room with depth > 8m"
 
     def test_no_geometric_chandelier_in_small_room(self, grammar):
@@ -370,7 +370,7 @@ class TestChandelierInLargeRooms:
             + [c for c in schema["conditional"] if c["type"] == "chandelier_light"]
         )
         if not schema_chandeliers:
-            chandeliers = [l for l in lights if l["type"] == "chandelier_light"]
+            chandeliers = [l for l in lights if l["type"] == "chandelier_light"]  # noqa: E741
             assert not chandeliers, (
                 "Small dungeon_cell (4x3) should not have a geometry-triggered chandelier"
             )
@@ -383,7 +383,7 @@ class TestChandelierInLargeRooms:
             width=width, depth=depth, height=height,
             furniture=[], doors=[], seed=0,
         )
-        chandeliers = [l for l in lights if l["type"] == "chandelier_light"]
+        chandeliers = [l for l in lights if l["type"] == "chandelier_light"]  # noqa: E741
         assert chandeliers
         ch = chandeliers[0]
         assert abs(ch["position"][0] - width / 2) < 0.5, "Chandelier x not near center"
@@ -497,7 +497,7 @@ class TestReturnFormat:
     def test_returns_list_of_dicts(self, grammar):
         lights = _run_layout(grammar)
         assert isinstance(lights, list)
-        assert all(isinstance(l, dict) for l in lights)
+        assert all(isinstance(l, dict) for l in lights)  # noqa: E741
 
     def test_each_light_has_required_keys(self, grammar):
         required_keys = {"type", "position", "color_temperature", "radius", "intensity"}
@@ -536,7 +536,7 @@ class TestFireplacePlacement:
         lights = _run_layout(
             grammar, room_type="tavern", furniture=furniture, doors=[], seed=0,
         )
-        fp_lights = [l for l in lights if l["type"] == "fireplace_light"]
+        fp_lights = [l for l in lights if l["type"] == "fireplace_light"]  # noqa: E741
         assert fp_lights, "Expected fireplace_light when fireplace furniture present"
 
     def test_cooking_fire_triggers_fireplace_light(self, grammar):
@@ -544,7 +544,7 @@ class TestFireplacePlacement:
         lights = _run_layout(
             grammar, room_type="kitchen", furniture=furniture, doors=[], seed=0,
         )
-        fp_lights = [l for l in lights if l["type"] == "fireplace_light"]
+        fp_lights = [l for l in lights if l["type"] == "fireplace_light"]  # noqa: E741
         assert fp_lights, "Expected fireplace_light when cooking_fire furniture present"
 
     def test_fireplace_position_near_furniture(self, grammar):
@@ -553,7 +553,7 @@ class TestFireplacePlacement:
             grammar, room_type="bedroom", width=6.0, depth=5.0,
             furniture=furniture, doors=[], seed=0,
         )
-        fp_lights = [l for l in lights if l["type"] == "fireplace_light"]
+        fp_lights = [l for l in lights if l["type"] == "fireplace_light"]  # noqa: E741
         assert fp_lights
         fp = fp_lights[0]
         # fireplace light should be placed at or near the furniture x,y

@@ -5,7 +5,8 @@ from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, logger,
-    _write_to_unity, STANDARD_NEXT_STEPS,
+    _write_generated_editor_response,
+    _write_to_unity,
 )
 
 from veilbreakers_mcp.shared.unity_templates.pipeline_templates import (
@@ -24,6 +25,28 @@ from veilbreakers_mcp.shared.unity_templates._cs_sanitize import sanitize_cs_ide
 # ---------------------------------------------------------------------------
 # Compound tool: unity_pipeline (BUILD-06, TWO-03, PIPE-08, IMP-03)
 # ---------------------------------------------------------------------------
+
+
+async def _write_pipeline_response(
+    action_name: str,
+    script_content: str,
+    rel_path: str,
+    *,
+    menu_path: str = "",
+    next_steps: list[str] | None = None,
+    result_file: str | None = "Temp/vb_result.json",
+    response_fields: dict | None = None,
+) -> str:
+    """Write a Unity pipeline editor script and auto-execute it when possible."""
+    return await _write_generated_editor_response(
+        action_name=action_name,
+        script_content=script_content,
+        rel_path=rel_path,
+        menu_path=menu_path,
+        next_steps=next_steps,
+        result_file=result_file,
+        response_fields=response_fields,
+    )
 
 
 @mcp.tool()
@@ -91,14 +114,13 @@ async def unity_pipeline(
                 include_in_build=include_in_build,
             )
             rel_path = f"Assets/Editor/Generated/Pipeline/Create_{safe_name}_Atlas.cs"
-            abs_path = _write_to_unity(script, rel_path)
-            return json.dumps({
-                "status": "success",
-                "action": action,
-                "script_path": abs_path,
-                "atlas_name": safe_name,
-                "next_steps": STANDARD_NEXT_STEPS,
-            })
+            return await _write_pipeline_response(
+                action_name=action,
+                script_content=script,
+                rel_path=rel_path,
+                menu_path=f"VeilBreakers/Assets/Create {safe_name} Atlas",
+                response_fields={"atlas_name": safe_name},
+            )
 
         elif action == "create_sprite_animation":
             if not clip_name:
@@ -114,14 +136,13 @@ async def unity_pipeline(
                 output_path=output_path or f"Assets/Animations/{safe_clip}.anim",
             )
             rel_path = f"Assets/Editor/Generated/Pipeline/Create_{safe_clip}_Animation.cs"
-            abs_path = _write_to_unity(script, rel_path)
-            return json.dumps({
-                "status": "success",
-                "action": action,
-                "script_path": abs_path,
-                "clip_name": safe_clip,
-                "next_steps": STANDARD_NEXT_STEPS,
-            })
+            return await _write_pipeline_response(
+                action_name=action,
+                script_content=script,
+                rel_path=rel_path,
+                menu_path=f"VeilBreakers/Assets/Create {safe_clip} Animation",
+                response_fields={"clip_name": safe_clip},
+            )
 
         elif action == "configure_sprite_editor":
             if not sprite_path:
@@ -139,15 +160,17 @@ async def unity_pipeline(
                 sprite_mode=sprite_mode,
                 custom_physics_shape=custom_physics_shape,
             )
+            safe_class = sanitize_cs_identifier(
+                sprite_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+            ) or "Sprite"
             rel_path = "Assets/Editor/Generated/Pipeline/ConfigureSpriteEditor.cs"
-            abs_path = _write_to_unity(script, rel_path)
-            return json.dumps({
-                "status": "success",
-                "action": action,
-                "script_path": abs_path,
-                "sprite_path": sprite_path,
-                "next_steps": STANDARD_NEXT_STEPS,
-            })
+            return await _write_pipeline_response(
+                action_name=action,
+                script_content=script,
+                rel_path=rel_path,
+                menu_path=f"VeilBreakers/Assets/Configure Sprite {safe_class}",
+                response_fields={"sprite_path": sprite_path},
+            )
 
         elif action == "create_asset_postprocessor":
             if not processor_name:
@@ -164,14 +187,17 @@ async def unity_pipeline(
                 namespace=namespace,
             )
             rel_path = f"Assets/Editor/Generated/Pipeline/{safe_name}.cs"
-            abs_path = _write_to_unity(script, rel_path)
-            return json.dumps({
-                "status": "success",
-                "action": action,
-                "script_path": abs_path,
-                "processor_name": safe_name,
-                "next_steps": STANDARD_NEXT_STEPS,
-            })
+            return await _write_pipeline_response(
+                action_name=action,
+                script_content=script,
+                rel_path=rel_path,
+                next_steps=[
+                    "Recompile: unity_editor action=recompile",
+                    "Reimport matching assets to apply the generated AssetPostprocessor rules",
+                ],
+                result_file=None,
+                response_fields={"processor_name": safe_name},
+            )
 
         elif action == "configure_git_lfs":
             # Generate .gitattributes

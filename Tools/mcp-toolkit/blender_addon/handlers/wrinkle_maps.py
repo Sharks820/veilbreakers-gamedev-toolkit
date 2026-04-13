@@ -375,7 +375,7 @@ def generate_wrinkle_displacement_code(
         sk_name = f"wrinkle_{region_name}"
         lines.append(f"# --- {region_name}: {rdata.get('description', '')} ---")
         lines.append(f"sk = obj.shape_key_add(name='{sk_name}', from_mix=False)")
-        lines.append(f"sk.value = 0.0")
+        lines.append("sk.value = 0.0")
         lines.append("")
 
         # Set displacements
@@ -391,30 +391,30 @@ def generate_wrinkle_displacement_code(
         # Set up driver
         if driver_type == "shape_key":
             lines.append(f"# Driver: {sk_name} driven by {trigger}")
-            lines.append(f"fcurve = sk.driver_add('value')")
-            lines.append(f"drv = fcurve.driver")
-            lines.append(f"drv.type = 'AVERAGE'")
-            lines.append(f"var = drv.variables.new()")
-            lines.append(f"var.name = 'trigger'")
-            lines.append(f"var.type = 'SINGLE_PROP'")
-            lines.append(f"var.targets[0].id = obj")
+            lines.append("fcurve = sk.driver_add('value')")
+            lines.append("drv = fcurve.driver")
+            lines.append("drv.type = 'AVERAGE'")
+            lines.append("var = drv.variables.new()")
+            lines.append("var.name = 'trigger'")
+            lines.append("var.type = 'SINGLE_PROP'")
+            lines.append("var.targets[0].id = obj")
             lines.append(
                 f"var.targets[0].data_path = "
                 f"'data.shape_keys.key_blocks[\"{trigger}\"].value'"
             )
         else:  # bone driver
             lines.append(f"# Driver: {sk_name} driven by bone {trigger_bone}")
-            lines.append(f"fcurve = sk.driver_add('value')")
-            lines.append(f"drv = fcurve.driver")
-            lines.append(f"drv.type = 'SCRIPTED'")
-            lines.append(f"drv.expression = 'var'")
-            lines.append(f"var = drv.variables.new()")
-            lines.append(f"var.name = 'var'")
-            lines.append(f"var.type = 'TRANSFORMS'")
-            lines.append(f"var.targets[0].id = obj.parent")  # armature
+            lines.append("fcurve = sk.driver_add('value')")
+            lines.append("drv = fcurve.driver")
+            lines.append("drv.type = 'SCRIPTED'")
+            lines.append("drv.expression = 'var'")
+            lines.append("var = drv.variables.new()")
+            lines.append("var.name = 'var'")
+            lines.append("var.type = 'TRANSFORMS'")
+            lines.append("var.targets[0].id = obj.parent")  # armature
             lines.append(f"var.targets[0].bone_target = '{trigger_bone}'")
-            lines.append(f"var.targets[0].transform_type = 'LOC_Y'")
-            lines.append(f"var.targets[0].transform_space = 'LOCAL_SPACE'")
+            lines.append("var.targets[0].transform_type = 'LOC_Y'")
+            lines.append("var.targets[0].transform_space = 'LOCAL_SPACE'")
 
         lines.append("")
 
@@ -700,10 +700,10 @@ def _generate_layer_node_group_code(
     lines.append(f"grp_{group_index} = bpy.data.node_groups.new('{gn}', 'ShaderNodeTree')")
     lines.append(f"g = grp_{group_index}")
     # Outputs
-    lines.append(f"g_out = g.nodes.new('NodeGroupOutput')")
-    lines.append(f"g.interface.new_socket(name='Color', socket_type='NodeSocketColor', in_out='OUTPUT')")
-    lines.append(f"g.interface.new_socket(name='Roughness', socket_type='NodeSocketFloat', in_out='OUTPUT')")
-    lines.append(f"g.interface.new_socket(name='Metallic', socket_type='NodeSocketFloat', in_out='OUTPUT')")
+    lines.append("g_out = g.nodes.new('NodeGroupOutput')")
+    lines.append("g.interface.new_socket(name='Color', socket_type='NodeSocketColor', in_out='OUTPUT')")
+    lines.append("g.interface.new_socket(name='Roughness', socket_type='NodeSocketFloat', in_out='OUTPUT')")
+    lines.append("g.interface.new_socket(name='Metallic', socket_type='NodeSocketFloat', in_out='OUTPUT')")
     # Color node
     lines.append(f"rgb_{group_index} = g.nodes.new('ShaderNodeRGB')")
     lines.append(f"rgb_{group_index}.outputs[0].default_value = {list(bc)}")
@@ -737,7 +737,7 @@ def _generate_mask_code(
         lines.append(f"mask_{index}.inputs['Detail'].default_value = {detail}")
         socket_ref = f"mask_{index}.outputs['Fac']"
     elif mask_type == "curvature":
-        lines.append(f"# Curvature mask via Geometry node + Color Ramp")
+        lines.append("# Curvature mask via Geometry node + Color Ramp")
         lines.append(f"mask_geom_{index} = nodes.new('ShaderNodeNewGeometry')")
         lines.append(f"mask_{index} = nodes.new('ShaderNodeValToRGB')")
         lines.append(f"links.new(mask_geom_{index}.outputs['Pointiness'], "
@@ -844,8 +844,8 @@ def handle_material_layer_stack(params: dict[str, Any]) -> dict[str, Any]:
         lines.extend(layer_code)
 
         # Create group node in material
-        lines.append(f"layer_node = nodes.new('ShaderNodeGroup')")
-        lines.append(f"layer_node.node_tree = grp_0")
+        lines.append("layer_node = nodes.new('ShaderNodeGroup')")
+        lines.append("layer_node.node_tree = grp_0")
         lines.append(f"layer_node.name = 'Layer_{layer_name}'")
         lines.append(f"layer_node.label = '{layer_name}'")
         lines.append("")
@@ -857,8 +857,8 @@ def handle_material_layer_stack(params: dict[str, Any]) -> dict[str, Any]:
 
         # Create Mix nodes for color, roughness, metallic
         lines.append(f"# Blend: {blend_mode} at opacity {opacity}")
-        lines.append(f"mix_color = nodes.new('ShaderNodeMix')")
-        lines.append(f"mix_color.data_type = 'RGBA'")
+        lines.append("mix_color = nodes.new('ShaderNodeMix')")
+        lines.append("mix_color.data_type = 'RGBA'")
         lines.append(f"mix_color.blend_type = '{blend_mode}'")
         lines.append(f"mix_color.inputs['Fac'].default_value = {opacity}")
         lines.append(f"mix_color.label = '{layer_name}_color_blend'")
@@ -866,12 +866,12 @@ def handle_material_layer_stack(params: dict[str, Any]) -> dict[str, Any]:
 
         # Connect mask to factor if applicable
         if mask_type != "none":
-            lines.append(f"# Multiply opacity by mask")
-            lines.append(f"mask_mul = nodes.new('ShaderNodeMath')")
-            lines.append(f"mask_mul.operation = 'MULTIPLY'")
+            lines.append("# Multiply opacity by mask")
+            lines.append("mask_mul = nodes.new('ShaderNodeMath')")
+            lines.append("mask_mul.operation = 'MULTIPLY'")
             lines.append(f"mask_mul.inputs[0].default_value = {opacity}")
             lines.append(f"links.new({mask_socket}, mask_mul.inputs[1])")
-            lines.append(f"links.new(mask_mul.outputs[0], mix_color.inputs['Fac'])")
+            lines.append("links.new(mask_mul.outputs[0], mix_color.inputs['Fac'])")
 
         lines.append(f"print('Layer {layer_name} added with {preset_name} preset')")
 
@@ -941,7 +941,7 @@ def handle_material_layer_stack(params: dict[str, Any]) -> dict[str, Any]:
             "",
         ]
         mask_lines, mask_socket = _generate_mask_code(mask_type, mask_params, 0)
-        lines_list.extend(["    " + l for l in mask_lines])
+        lines_list.extend(["    " + L for L in mask_lines])
         lines_list.append(f"    print('Mask set for {layer_name}: {mask_type}')")
         return {"code": "\n".join(lines_list), "action": "set_mask",
                 "layer_name": layer_name, "mask_type": mask_type}

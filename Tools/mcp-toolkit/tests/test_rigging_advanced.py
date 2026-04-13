@@ -6,9 +6,7 @@ validation functions from rigging_advanced.py -- all pure-logic, no Blender requ
 Separate file from test_rigging_handlers.py to avoid conflicts with Plan 02.
 """
 
-import math
 
-import pytest
 
 
 # ---------------------------------------------------------------------------

@@ -9,7 +9,7 @@ the ``AssetContextRuleExt`` extension fields (``scale_variance_by_role``,
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Tuple
 
 from .terrain_semantics import ValidationIssue

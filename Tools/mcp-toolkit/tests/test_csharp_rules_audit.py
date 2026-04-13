@@ -11,7 +11,6 @@ import textwrap
 from collections import Counter
 from pathlib import Path
 
-import pytest
 
 from veilbreakers_mcp._rules_csharp import (
     RULES,
@@ -19,8 +18,6 @@ from veilbreakers_mcp._rules_csharp import (
     CSharpLineClassifier,
     LineContext,
     Severity,
-    body_length,
-    _find_method_bounds,
 )
 from veilbreakers_mcp import vb_code_reviewer as reviewer
 
@@ -646,7 +643,7 @@ class TestCSharpLineClassifier:
             "    }",
             "}",
         ]
-        ctx = CSharpLineClassifier.classify(lines)
+        CSharpLineClassifier.classify(lines)
         # Due to the inverted _is_match_in_string logic, string-literal method
         # names ARE incorrectly added to the call graph (false positive for propagation).
         # This is a known bug but propagation of real calls works correctly.

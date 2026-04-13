@@ -398,7 +398,6 @@ class TestComputeBiomeAssignments:
     def test_snow_at_high_altitude(self):
         """High altitude, low slope cells should be assigned 'highland_scrub' (rule 2)."""
         from blender_addon.handlers._terrain_noise import (
-            BIOME_RULES,
             compute_biome_assignments,
         )
 

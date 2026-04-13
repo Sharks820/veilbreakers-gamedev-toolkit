@@ -20,7 +20,6 @@ import pytest
 from blender_addon.handlers.building_quality import (
     BUILDING_QUALITY_GENERATORS,
     _arch_curve,
-    _merge,
     _molding_profile_extrude,
     _shingle_row,
     _stone_block_grid,

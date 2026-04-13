@@ -8,7 +8,6 @@ Tests cover:
 - C# brace balance verification
 """
 
-import pytest
 
 from veilbreakers_mcp.shared.unity_templates.quality_templates import (
     generate_aaa_validation_script,
@@ -192,6 +191,39 @@ class TestMasterMaterials:
         """Custom output folder is embedded in the script."""
         script = generate_master_material_script(output_folder="Assets/Art/Materials")
         assert "Assets/Art/Materials" in script
+
+    def test_master_materials_support_advanced_urp_fields(self):
+        """Custom master materials should scaffold emission/detail/clip/surface controls."""
+        script = generate_master_material_script(materials=[{
+            "name": "wet_cliff",
+            "color_hex": "445566",
+            "metallic": 0.0,
+            "roughness": 0.82,
+            "normal_strength": 1.4,
+            "detail_normal_strength": 0.65,
+            "detail_albedo_scale": 1.75,
+            "occlusion_strength": 0.9,
+            "height_scale": 0.04,
+            "emission_hex": "88CCFF",
+            "emission_intensity": 2.5,
+            "alpha_clip": True,
+            "cutoff": 0.42,
+            "surface_type": "transparent",
+            "double_sided": True,
+            "receive_shadows": False,
+            "queue_offset": 7,
+        }])
+        assert "_OcclusionStrength" in script
+        assert "_DetailAlbedoMapScale" in script
+        assert "_DetailNormalMapScale" in script
+        assert "_Parallax" in script
+        assert "_AlphaClip" in script
+        assert "_Cutoff" in script
+        assert "_Surface" in script
+        assert "_Cull" in script
+        assert "_QueueOffset" in script
+        assert '_EMISSION' in script
+        assert 'RenderType", "Transparent"' in script
 
 
 # ---------------------------------------------------------------------------

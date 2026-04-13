@@ -10,7 +10,6 @@ Validates:
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from blender_addon.handlers._terrain_noise import voronoi_biome_distribution
 

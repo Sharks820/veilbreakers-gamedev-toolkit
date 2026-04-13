@@ -1,10 +1,8 @@
 """Test that road generation uses mesh roads, not curves -- Addendum 2 D.18."""
 from __future__ import annotations
 
-import ast
 import inspect
 
-import pytest
 
 
 class TestWorldbuildingNoCurveRoads:

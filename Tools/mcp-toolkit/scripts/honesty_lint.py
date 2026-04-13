@@ -13,7 +13,6 @@ Exit code 1 if any claimed function is missing or is a stub (<= 5 LOC).
 from __future__ import annotations
 
 import ast
-import os
 import re
 import sys
 from dataclasses import dataclass
@@ -244,7 +243,7 @@ def main() -> int:
     # Report
     failures = [r for r in results if r.status != "OK"]
 
-    print(f"\n=== L4 Honesty Lint ===")
+    print("\n=== L4 Honesty Lint ===")
     print(f"Plan:      {plan_path}")
     print(f"Sources:   {', '.join(source_dirs)}")
     print(f"Checkboxes: {checked} checked, {unchecked} unchecked", end="")

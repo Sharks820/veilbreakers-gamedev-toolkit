@@ -1130,7 +1130,6 @@ class TestCSharpTemplateSyntax:
         # Patterns that should end with ; in C#
         # - Lines containing '=' that are not control flow, not comments, not class decl
         # - Lines with method calls ending in ')'
-        issues = []
         for i, line in enumerate(lines, 1):
             stripped = line.strip()
             if not stripped or stripped.startswith("//") or stripped.startswith("/*"):
@@ -1175,10 +1174,10 @@ class TestCSharpTemplateSyntax:
 # ===================================================================
 
 UXML_ONLY_GENERATORS: list[tuple[str, callable, str]] = [
-    (n, g, l) for n, g, l in NON_CS_GENERATORS if l == "uxml"
+    (n, g, l) for n, g, l in NON_CS_GENERATORS if l == "uxml"  # noqa: E741
 ]
 USS_ONLY_GENERATORS: list[tuple[str, callable, str]] = [
-    (n, g, l) for n, g, l in NON_CS_GENERATORS if l == "uss"
+    (n, g, l) for n, g, l in NON_CS_GENERATORS if l == "uss"  # noqa: E741
 ]
 
 

@@ -6,7 +6,6 @@ Tests pure-logic helpers that do NOT require bpy/Blender:
   - Terrain sculpt brush math and falloff curves    [GAP-09]
 """
 
-import math
 
 import pytest
 

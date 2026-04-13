@@ -5,7 +5,6 @@ and apply_thermal_erosion.
 """
 
 import numpy as np
-import pytest
 
 
 # ---------------------------------------------------------------------------

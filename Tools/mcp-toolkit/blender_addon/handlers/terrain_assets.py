@@ -37,7 +37,7 @@ from __future__ import annotations
 import enum
 import math
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -844,8 +844,10 @@ def pass_scatter_intelligent(
     detail = _build_detail_density(placements, rules, stack)
 
     stack.set("tree_instance_points", tree_points, "scatter_intelligent")
-    # detail_density is a dict channel; set directly
-    stack.detail_density = detail
+    # detail_density is a dict channel; preserve existing vegetation layers.
+    existing_detail = dict(stack.detail_density or {})
+    existing_detail.update(detail)
+    stack.detail_density = existing_detail
     stack.populated_by_pass["detail_density"] = "scatter_intelligent"
 
     # Expose full placement dict as a side-effect for downstream bundles.

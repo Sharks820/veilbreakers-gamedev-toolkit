@@ -7,7 +7,6 @@ parameter validation -- no Blender/bpy required.
 
 import math
 import tempfile
-import time
 import types
 from pathlib import Path
 

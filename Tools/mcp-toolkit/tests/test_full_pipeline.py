@@ -11,7 +11,6 @@ import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from PIL import Image, ImageDraw
 
 from veilbreakers_mcp.shared.pipeline_runner import (
@@ -34,6 +33,9 @@ def _make_visual_gate_images() -> list[str]:
         ((48, 42, 34), (156, 112, 72), (220, 196, 160)),
         ((28, 36, 52), (88, 124, 172), (192, 214, 238)),
         ((36, 24, 48), (132, 84, 180), (232, 200, 250)),
+        ((42, 48, 36), (112, 156, 72), (196, 220, 160)),
+        ((36, 42, 48), (72, 112, 156), (160, 196, 220)),
+        ((48, 36, 42), (156, 72, 112), (220, 160, 196)),
     ]
     for idx, (bg, fill, accent) in enumerate(palettes):
         path = out_dir / f"contact_{idx}.png"

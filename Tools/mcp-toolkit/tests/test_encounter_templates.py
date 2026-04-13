@@ -9,7 +9,6 @@ Runtime generators must NEVER contain 'using UnityEditor;'.
 Editor generators (encounter simulator) MUST contain it.
 """
 
-import pytest
 
 from veilbreakers_mcp.shared.unity_templates.encounter_templates import (
     generate_encounter_system_script,

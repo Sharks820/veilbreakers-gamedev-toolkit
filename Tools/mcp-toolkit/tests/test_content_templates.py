@@ -8,7 +8,6 @@ Runtime generators must NEVER contain 'using UnityEditor;'.
 Editor generators (DPS calc, encounter sim, stat curve) MUST contain it.
 """
 
-import pytest
 
 from veilbreakers_mcp.shared.unity_templates.content_templates import (
     generate_inventory_system_script,

@@ -3,7 +3,6 @@
 Tests the pure-logic validators from handlers/mesh.py -- no Blender/bpy required.
 """
 
-import pytest
 
 
 # ---------------------------------------------------------------------------

@@ -6,15 +6,12 @@ calculations, biome assignment, and edge cases.  Pure logic -- no bpy required.
 
 from __future__ import annotations
 
-import math
 import random
 
-import pytest
 
 from blender_addon.handlers.map_composer import (
     POI_PLACEMENT_RULES,
     VB_BIOMES,
-    _MAX_PLACEMENT_ATTEMPTS,
     _SETTLEMENT_TYPES,
     _calculate_slope,
     _distance,

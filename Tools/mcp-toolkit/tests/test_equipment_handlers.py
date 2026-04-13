@@ -16,7 +16,6 @@ All pure-logic -- no Blender required for validation tests.
 Mesh generator tests use the real bmesh module stub from conftest.
 """
 
-import math
 import tempfile
 from pathlib import Path
 
@@ -25,8 +24,8 @@ import pytest
 _TMP_ICON = str(Path(tempfile.gettempdir()) / "icon.png")
 _TMP_X = str(Path(tempfile.gettempdir()) / "x.png")
 
-from blender_addon.handlers import equipment as equipment_module
-from blender_addon.handlers.equipment import (
+from blender_addon.handlers import equipment as equipment_module  # noqa: E402
+from blender_addon.handlers.equipment import (  # noqa: E402
     DEFAULT_BODY_PARTS,
     DEFAULT_BODY_TYPES,
     VALID_WEAPON_TYPES,

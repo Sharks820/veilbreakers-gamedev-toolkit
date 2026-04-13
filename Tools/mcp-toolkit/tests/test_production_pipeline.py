@@ -19,7 +19,6 @@ Requirements covered:
     PROD-05: Build smoke tests (generate_build_smoke_test_script, validate_cs_syntax)
 """
 
-import pytest
 
 from veilbreakers_mcp.shared.unity_templates.production_templates import (
     generate_compile_recovery_script,

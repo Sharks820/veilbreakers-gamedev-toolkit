@@ -13,12 +13,10 @@ Coverage:
 from __future__ import annotations
 
 import ast
-import importlib
 import inspect
 import sys
 from pathlib import Path
 
-import pytest
 
 # ---------------------------------------------------------------------------
 # Path setup
@@ -301,10 +299,6 @@ class TestPipelineReadiness:
             _map_point_to_terrain_cell,
             _normalize_map_point,
             _normalize_vegetation_rules,
-            _plan_map_location_anchors,
-            _resolve_map_generation_budget,
-            _build_location_generation_params,
-            _lighting_preset_for_biome,
         )
         # All imported successfully
         assert callable(_map_point_to_terrain_cell)
@@ -316,9 +310,6 @@ class TestPipelineReadiness:
         from blender_addon.handlers.pipeline_state import (
             save_pipeline_checkpoint,
             load_pipeline_checkpoint,
-            delete_pipeline_checkpoint,
-            validate_checkpoint_compatibility,
-            get_remaining_steps,
         )
         assert callable(save_pipeline_checkpoint)
         assert callable(load_pipeline_checkpoint)
