@@ -508,6 +508,70 @@ class TestWaterMaterialProperties(unittest.TestCase):
         })
         self.assertIsNotNone(result)
 
+    def test_level_water_uses_terrain_mask_surface_when_terrain_is_supplied(self):
+        bpy_stub, bmesh_stub = _build_full_bpy_stubs()
+        orig_bpy = _environment_mod.bpy
+        orig_bmesh = _environment_mod.bmesh
+
+        def _vec(x, y, z):
+            return types.SimpleNamespace(x=float(x), y=float(y), z=float(z))
+
+        grid = (-6.0, -2.0, 2.0, 6.0)
+        verts = []
+        for y in grid:
+            for x in grid:
+                z = -1.0 if abs(x) <= 2.0 and abs(y) <= 2.0 else 1.2
+                verts.append(types.SimpleNamespace(co=_vec(x, y, z)))
+
+        terrain_mesh = types.SimpleNamespace(vertices=verts, materials=[], polygons=[], update=lambda: None)
+        terrain_obj = types.SimpleNamespace(
+            name="TerrainMaskSource",
+            data=terrain_mesh,
+            location=_vec(0.0, 0.0, 0.0),
+            dimensions=types.SimpleNamespace(x=12.0, y=12.0, z=2.2),
+        )
+
+        created_objects = {}
+        linked_objects = []
+        orig_objects = bpy_stub.data.objects
+
+        def _new_object(name, mesh):
+            obj = orig_objects.new(name, mesh)
+            created_objects[name] = obj
+            return obj
+
+        def _get_object(name):
+            if name == terrain_obj.name:
+                return terrain_obj
+            return created_objects.get(name)
+
+        bpy_stub.data.objects = types.SimpleNamespace(
+            new=_new_object,
+            get=_get_object,
+            remove=lambda obj, **kwargs: created_objects.pop(obj.name, None),
+        )
+        bpy_stub.context.collection.objects = types.SimpleNamespace(
+            link=lambda obj: linked_objects.append(obj),
+            unlink=lambda obj: None,
+        )
+
+        _environment_mod.bpy = bpy_stub
+        _environment_mod.bmesh = bmesh_stub
+        try:
+            result = handle_create_water({
+                "name": "MaskedWater",
+                "terrain_name": terrain_obj.name,
+                "water_level": 0.0,
+            })
+            self.assertEqual(result.get("surface_mode"), "terrain_mask")
+            self.assertGreater(result.get("shoreline_face_count", 0), 0)
+            self.assertGreater(result.get("vertex_count", 0), 0)
+            self.assertLess(result.get("area", 999.0), terrain_obj.dimensions.x * terrain_obj.dimensions.y)
+            self.assertTrue(linked_objects, "Masked water surface should be linked into the collection")
+        finally:
+            _environment_mod.bpy = orig_bpy
+            _environment_mod.bmesh = orig_bmesh
+
 
 # ===========================================================================
 # Tests: Terrain auto-splatting

@@ -49,7 +49,7 @@ class TestValidateTerrainParams:
         from blender_addon.handlers.environment import _validate_terrain_params
 
         with pytest.raises(ValueError, match="terrain_type"):
-            _validate_terrain_params({"terrain_type": "swamp"})
+            _validate_terrain_params({"terrain_type": "bogus_terrain"})
 
     def test_raises_unknown_erosion_mode(self):
         """Unknown erosion mode raises ValueError."""
@@ -73,10 +73,21 @@ class TestValidateTerrainParams:
         assert result["erosion_iterations"] == 5000
 
     def test_all_terrain_types_valid(self):
-        """All 8 terrain types pass validation."""
+        """All supported terrain types pass validation."""
         from blender_addon.handlers.environment import _validate_terrain_params
 
-        for ttype in ["mountains", "hills", "plains", "volcanic", "canyon", "cliffs", "flat", "chaotic"]:
+        for ttype in [
+            "mountains",
+            "hills",
+            "plains",
+            "volcanic",
+            "canyon",
+            "cliffs",
+            "flat",
+            "coastal",
+            "swamp",
+            "chaotic",
+        ]:
             result = _validate_terrain_params({"terrain_type": ttype})
             assert result["terrain_type"] == ttype
 
@@ -101,6 +112,13 @@ class TestValidateTerrainParams:
 
         result = _validate_terrain_params({"scale": 200.0})
         assert result["scale"] == 200.0
+
+    def test_custom_noise_scale_preserved(self):
+        """Custom noise_scale parameter is preserved."""
+        from blender_addon.handlers.environment import _validate_terrain_params
+
+        result = _validate_terrain_params({"noise_scale": 48.0})
+        assert result["noise_scale"] == 48.0
 
     def test_custom_height_scale_preserved(self):
         """Custom height_scale parameter is preserved."""
@@ -196,6 +214,76 @@ class TestAltitudeRuleNormalization:
 
         assert _normalize_altitude_for_rule_range(-50.0, range_min=-40.0, range_max=20.0) == 0.0
         assert _normalize_altitude_for_rule_range(30.0, range_min=-40.0, range_max=20.0) == 1.0
+
+
+class TestNoiseSamplingScale:
+    """Terrain footprint and noise sampling scale should be decoupled."""
+
+    def test_derives_smaller_scale_from_terrain_size(self):
+        from blender_addon.handlers.environment import _resolve_noise_sampling_scale
+
+        derived = _resolve_noise_sampling_scale(terrain_size=180.0, terrain_type="mountains")
+        assert derived < 180.0
+        assert derived >= 24.0
+
+    def test_explicit_noise_scale_wins(self):
+        from blender_addon.handlers.environment import _resolve_noise_sampling_scale
+
+        assert _resolve_noise_sampling_scale(
+            terrain_size=180.0,
+            terrain_type="mountains",
+            explicit_noise_scale=60.0,
+        ) == pytest.approx(60.0)
+
+    def test_invalid_explicit_noise_scale_raises(self):
+        from blender_addon.handlers.environment import _resolve_noise_sampling_scale
+
+        with pytest.raises(ValueError, match="noise_scale"):
+            _resolve_noise_sampling_scale(
+                terrain_size=180.0,
+                terrain_type="mountains",
+                explicit_noise_scale=0.0,
+            )
+
+
+class TestHeightmapReliefEnhancement:
+    """Terrain relief enhancement should expand weak heightmaps without shifting sea level."""
+
+    def test_mountain_relief_is_boosted_when_span_is_too_small(self):
+        from blender_addon.handlers.environment import _enhance_heightmap_relief
+
+        hmap = np.array(
+            [
+                [-0.18, -0.12, -0.05],
+                [0.00, 0.06, 0.10],
+                [0.14, 0.18, 0.22],
+            ],
+            dtype=np.float64,
+        )
+        boosted = _enhance_heightmap_relief(hmap, terrain_type="mountains")
+        original_span = float(np.percentile(hmap, 95.0) - np.percentile(hmap, 5.0))
+        boosted_span = float(np.percentile(boosted, 95.0) - np.percentile(boosted, 5.0))
+
+        assert boosted_span > original_span
+        assert float(boosted.min()) < float(hmap.min())
+        assert float(boosted.max()) > float(hmap.max())
+
+    def test_signed_heightmap_keeps_zero_centered_for_coastal_relief(self):
+        from blender_addon.handlers.environment import _enhance_heightmap_relief
+
+        hmap = np.array(
+            [
+                [-0.12, -0.08, -0.04],
+                [0.00, 0.03, 0.06],
+                [0.10, 0.13, 0.16],
+            ],
+            dtype=np.float64,
+        )
+        boosted = _enhance_heightmap_relief(hmap, terrain_type="coastal")
+
+        assert float(boosted[1, 0]) == pytest.approx(0.0, abs=1e-9)
+        assert float(boosted.max()) > float(hmap.max())
+        assert float(boosted.min()) < float(hmap.min())
 
 
 class TestRoadTerrainProfiling:
