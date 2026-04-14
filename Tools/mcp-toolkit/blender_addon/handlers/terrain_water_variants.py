@@ -22,11 +22,14 @@ call if the prior state is needed.
 from __future__ import annotations
 
 import enum
+import logging
 import time
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 from .terrain_pipeline import TerrainPassController, derive_pass_seed
 from .terrain_semantics import (
@@ -646,6 +649,75 @@ def pass_water_variants(
     stack.set("water_surface", water_surface, "water_variants")
     stack.set("wetness", wetness, "water_variants")
 
+    # -----------------------------------------------------------------------
+    # FIX pipeline-break #3: wire detect_* functions into the pass.
+    # Each detector is guarded so a failure does not break the whole pass.
+    # -----------------------------------------------------------------------
+    perched_count = 0
+    wetland_count = 0
+    braided_count = 0
+
+    # --- Perched lakes: mark elevated basins as water_surface ---
+    try:
+        perched = detect_perched_lakes(stack)
+        perched_count = len(perched)
+        for lake in perched:
+            lx, ly, _lz = lake.basin_pos
+            lc = int(np.floor((lx - stack.world_origin_x) / stack.cell_size))
+            lr = int(np.floor((ly - stack.world_origin_y) / stack.cell_size))
+            if 0 <= lr < rows and 0 <= lc < cols and not protected[lr, lc]:
+                water_surface[lr, lc] = max(water_surface[lr, lc], 0.9)
+                wetness[lr, lc] = max(wetness[lr, lc], 0.8)
+    except Exception as exc:
+        logger.debug("detect_perched_lakes failed (non-fatal): %s", exc)
+
+    # --- Wetlands: boost wetness in low-slope/high-wetness regions ---
+    try:
+        wetland_list = detect_wetlands(stack)
+        wetland_count = len(wetland_list)
+        for wl in wetland_list:
+            b = wl.bounds
+            wc0 = max(0, int(np.floor((b.min_x - stack.world_origin_x) / stack.cell_size)))
+            wr0 = max(0, int(np.floor((b.min_y - stack.world_origin_y) / stack.cell_size)))
+            wc1 = min(cols, int(np.ceil((b.max_x - stack.world_origin_x) / stack.cell_size)))
+            wr1 = min(rows, int(np.ceil((b.max_y - stack.world_origin_y) / stack.cell_size)))
+            for wr in range(wr0, wr1):
+                for wc in range(wc0, wc1):
+                    if not protected[wr, wc]:
+                        wetness[wr, wc] = max(wetness[wr, wc], 0.7)
+    except Exception as exc:
+        logger.debug("detect_wetlands failed (non-fatal): %s", exc)
+
+    # --- Braided channels: stamp sub-channels onto water_surface ---
+    # Only run if there is an existing river-like linear feature in water_surface
+    try:
+        ws_arr = np.asarray(water_surface)
+        river_cells = np.argwhere(ws_arr > 0.5)
+        if river_cells.shape[0] >= 4:
+            # Build a coarse polyline from the river cells (sort by row)
+            sorted_rc = river_cells[river_cells[:, 0].argsort()]
+            stride = max(1, sorted_rc.shape[0] // 8)
+            sample = sorted_rc[::stride]
+            path_xy = np.stack([
+                stack.world_origin_x + (sample[:, 1] + 0.5) * stack.cell_size,
+                stack.world_origin_y + (sample[:, 0] + 0.5) * stack.cell_size,
+            ], axis=1).astype(np.float32)
+            if path_xy.shape[0] >= 2:
+                braids = generate_braided_channels(stack, path_xy, count=3, seed=seed)
+                braided_count = len(braids.channel_paths)
+                for sub in braids.channel_paths:
+                    for pt in sub:
+                        bc = int(np.floor((float(pt[0]) - stack.world_origin_x) / stack.cell_size))
+                        br = int(np.floor((float(pt[1]) - stack.world_origin_y) / stack.cell_size))
+                        if 0 <= br < rows and 0 <= bc < cols and not protected[br, bc]:
+                            water_surface[br, bc] = max(water_surface[br, bc], 0.6)
+    except Exception as exc:
+        logger.debug("generate_braided_channels failed (non-fatal): %s", exc)
+
+    # Write back any detector-augmented channels
+    stack.set("water_surface", water_surface, "water_variants")
+    stack.set("wetness", wetness, "water_variants")
+
     return PassResult(
         pass_name="water_variants",
         status="ok",
@@ -657,6 +729,9 @@ def pass_water_variants(
             "surface_cells": int(np.count_nonzero(water_surface > 0.5)),
             "rows": rows,
             "cols": cols,
+            "perched_lakes_detected": perched_count,
+            "wetlands_detected": wetland_count,
+            "braided_channels": braided_count,
         },
         issues=issues,
         seed_used=seed,

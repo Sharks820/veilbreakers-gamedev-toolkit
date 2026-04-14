@@ -291,6 +291,59 @@ def _derive_terrain_validation_profiles(
     return profiles
 
 
+_TERRAIN_ONLY_SCOPE_TOKENS = frozenset({
+    "terrain",
+    "terrain_only",
+    "terrain-only",
+    "wilderness",
+    "wilderness_only",
+    "wilderness-only",
+})
+_TERRAIN_ONLY_ALLOWED_LOCATION_TYPES = frozenset({"cave"})
+
+
+def _map_spec_requests_terrain_only(map_spec: dict | None) -> bool:
+    """Return True when compose_map should stay on terrain-only content."""
+    if not isinstance(map_spec, dict):
+        return False
+    if bool(map_spec.get("terrain_only")) or bool(map_spec.get("wilderness_only")):
+        return True
+
+    for key in ("content_scope", "generation_scope", "mode"):
+        token = str(map_spec.get(key, "")).strip().lower()
+        if token in _TERRAIN_ONLY_SCOPE_TOKENS:
+            return True
+
+    for tag in map_spec.get("tags", []) or []:
+        if str(tag).strip().lower() in _TERRAIN_ONLY_SCOPE_TOKENS:
+            return True
+    return False
+
+
+def _filter_map_spec_for_terrain_only(map_spec: dict | None) -> dict:
+    """Preserve only terrain-shaping content when terrain-only mode is requested."""
+    if not isinstance(map_spec, dict):
+        return {}
+
+    filtered_spec = dict(map_spec)
+    filtered_locations: list[dict] = []
+    for location in map_spec.get("locations", []) or []:
+        if not isinstance(location, dict):
+            continue
+        loc_type = str(location.get("type", "")).strip().lower()
+        if loc_type not in _TERRAIN_ONLY_ALLOWED_LOCATION_TYPES:
+            continue
+        kept_location = dict(location)
+        kept_location.pop("interiors", None)
+        filtered_locations.append(kept_location)
+
+    filtered_spec["terrain_only"] = True
+    filtered_spec["wilderness_only"] = True
+    filtered_spec["locations"] = filtered_locations
+    filtered_spec["props"] = False
+    return filtered_spec
+
+
 def _blend_path_points_to_terminal_water_level(
     path_points: list[list[float]] | list[tuple[float, float, float]],
     terminal_water_level: float | None,
@@ -983,6 +1036,96 @@ def _distance_point_to_segment_2d(
     qx = ax + abx * t
     qy = ay + aby * t
     return math.hypot(px - qx, py - qy), t, (qx, qy)
+
+
+def _river_requests_waterfall(river: dict[str, Any]) -> bool:
+    """Return True when a river spec explicitly asks for waterfall authoring."""
+    if not isinstance(river, dict):
+        return False
+    if river.get("waterfall") or river.get("has_waterfall"):
+        return True
+    return str(river.get("type", "")).strip().lower() in {"waterfall", "cascade"}
+
+
+def _build_water_system_spec_payload(
+    water_cfg: dict[str, Any] | None,
+    *,
+    map_seed: int,
+) -> dict[str, Any] | None:
+    """Translate compose_map water config into TerrainIntent water-system payload."""
+    if not isinstance(water_cfg, dict) or not water_cfg:
+        return None
+    waterfalls = water_cfg.get("waterfalls", []) or []
+    hero_waterfalls = tuple(
+        str(entry.get("name")).strip()
+        for entry in waterfalls
+        if isinstance(entry, dict) and str(entry.get("name", "")).strip()
+    )
+    return {
+        "network_seed": int(water_cfg.get("network_seed", map_seed)),
+        "min_drainage_area": float(water_cfg.get("min_drainage_area", 500.0)),
+        "river_threshold": float(water_cfg.get("river_threshold", 2000.0)),
+        "lake_min_area": float(water_cfg.get("lake_min_area", 100.0)),
+        "meander_amplitude": float(water_cfg.get("meander_amplitude", 0.0)),
+        "bank_asymmetry": float(water_cfg.get("bank_asymmetry", 0.0)),
+        "tidal_range": float(water_cfg.get("tidal_range", 0.0)),
+        "hero_waterfalls": hero_waterfalls,
+        "braided_channels": bool(water_cfg.get("braided_channels", False)),
+        "estuaries": bool(water_cfg.get("estuaries", False)),
+        "karst_springs": bool(water_cfg.get("karst_springs", False)),
+        "perched_lakes": bool(water_cfg.get("perched_lakes", False)),
+        "hot_springs": bool(water_cfg.get("hot_springs", False)),
+        "wetlands": bool(water_cfg.get("wetlands", False)),
+        "seasonal_state": str(water_cfg.get("seasonal_state", "normal")),
+    }
+
+
+def _derive_waterfall_placement_from_path(
+    path_points: list[list[float]] | tuple[tuple[float, float, float], ...] | None,
+) -> dict[str, Any] | None:
+    """Pick the strongest drop along a carved river path for waterfall placement."""
+    if not path_points:
+        return None
+    normalized: list[list[float]] = []
+    for point in path_points:
+        if not isinstance(point, (list, tuple)) or len(point) < 3:
+            continue
+        normalized.append([float(point[0]), float(point[1]), float(point[2])])
+    if len(normalized) < 2:
+        return None
+
+    best_idx = 0
+    best_drop = float("-inf")
+    for idx in range(len(normalized) - 1):
+        drop = float(normalized[idx][2]) - float(normalized[idx + 1][2])
+        if drop > best_drop:
+            best_drop = drop
+            best_idx = idx
+
+    if best_drop <= 0.05:
+        top = normalized[0]
+        bottom = normalized[-1]
+        best_drop = float(top[2]) - float(bottom[2])
+        if best_drop <= 0.05:
+            return None
+    else:
+        top = normalized[best_idx]
+        bottom = normalized[best_idx + 1]
+
+    dx = float(bottom[0]) - float(top[0])
+    dy = float(bottom[1]) - float(top[1])
+    direction_len = math.hypot(dx, dy)
+    if direction_len <= 1e-6:
+        facing_direction = [0.0, -1.0]
+    else:
+        facing_direction = [dx / direction_len, dy / direction_len]
+
+    return {
+        "top_point": top,
+        "bottom_point": bottom,
+        "height": float(best_drop),
+        "facing_direction": facing_direction,
+    }
 
 
 def _move_point_outside_radius(
@@ -2415,15 +2558,20 @@ else:
         print(0.0)
 """.strip()
 
-    try:
-        result = await blender.send_command("execute_code", {"code": code})
+    def _extract_execute_code_output(result: Any) -> str:
         output = ""
         if isinstance(result, dict):
             if result.get("output") is not None:
                 output = str(result.get("output", ""))
             elif isinstance(result.get("result"), dict):
                 output = str(result.get("result", {}).get("output", ""))
-        output = output.strip()
+        elif result is not None:
+            output = str(result)
+        return output
+
+    try:
+        result = await blender.send_command("execute_code", {"code": code})
+        output = _extract_execute_code_output(result).strip()
         return float(output.splitlines()[-1]) if output else 0.0
     except (
         AttributeError,
@@ -2441,6 +2589,164 @@ else:
             exc_info=True,
         )
         return 0.0
+
+
+async def _capture_current_terrain_heightmap_context(
+    blender: BlenderConnection,
+    terrain_name: str,
+) -> dict[str, Any]:
+    """Read the evaluated terrain mesh back into heightmap context."""
+    if not re.match(r'^[A-Za-z0-9_\-. ]+$', terrain_name):
+        raise ValueError(f"Invalid terrain_name rejected: {terrain_name}")
+
+    code = f"""
+import bpy
+import json
+import math
+
+obj = bpy.data.objects.get({terrain_name!r})
+if obj is None:
+    print(json.dumps({{"error": "terrain object not found", "terrain_name": {terrain_name!r}}}))
+else:
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    eval_obj = obj.evaluated_get(depsgraph)
+    mesh = None
+    try:
+        try:
+            mesh = eval_obj.to_mesh(preserve_all_data_layers=False, depsgraph=depsgraph)
+        except TypeError:
+            mesh = eval_obj.to_mesh()
+
+        verts = list(getattr(mesh, "vertices", []) or [])
+        if len(verts) < 4:
+            print(json.dumps({{"error": "terrain mesh has insufficient vertices", "vertex_count": len(verts)}}))
+        else:
+            matrix_world = getattr(eval_obj, "matrix_world", None)
+            points = []
+            xs = []
+            ys = []
+            zs = []
+            for vert in verts:
+                point = vert.co
+                if matrix_world is not None:
+                    point = matrix_world @ point
+                x = float(point.x)
+                y = float(point.y)
+                z = float(point.z)
+                xs.append(x)
+                ys.append(y)
+                zs.append(z)
+                points.append((x, y, z))
+
+            rounded_xs = [round(x, 5) for x in xs]
+            rounded_ys = [round(y, 5) for y in ys]
+            unique_xs = sorted(set(rounded_xs))
+            unique_ys = sorted(set(rounded_ys))
+            cols = len(unique_xs)
+            rows = len(unique_ys)
+
+            heightmap = None
+            if rows >= 2 and cols >= 2 and rows * cols == len(points):
+                col_lookup = {{value: idx for idx, value in enumerate(unique_xs)}}
+                row_lookup = {{value: idx for idx, value in enumerate(unique_ys)}}
+                heightmap = [[0.0 for _ in range(cols)] for _ in range(rows)]
+                for x, y, z in points:
+                    row_idx = row_lookup[round(y, 5)]
+                    col_idx = col_lookup[round(x, 5)]
+                    heightmap[row_idx][col_idx] = z
+            else:
+                side = max(2, int(round(math.sqrt(len(points)))))
+                if side * side != len(points):
+                    print(json.dumps({{
+                        "error": "terrain mesh is not a regular grid",
+                        "vertex_count": len(points),
+                        "rows": rows,
+                        "cols": cols,
+                    }}))
+                    raise SystemExit(0)
+                rows = side
+                cols = side
+                heightmap = []
+                for row_idx in range(rows):
+                    start = row_idx * cols
+                    heightmap.append([
+                        float(points[start + col_idx][2])
+                        for col_idx in range(cols)
+                    ])
+
+            min_x = min(xs)
+            max_x = max(xs)
+            min_y = min(ys)
+            max_y = max(ys)
+            cell_size_x = (max_x - min_x) / max(cols - 1, 1)
+            cell_size_y = (max_y - min_y) / max(rows - 1, 1)
+            cell_size = max(cell_size_x, cell_size_y, 1e-6)
+
+            print(json.dumps({{
+                "heightmap": heightmap,
+                "rows": rows,
+                "cols": cols,
+                "tile_size": max(rows - 1, cols - 1, 1),
+                "cell_size": cell_size,
+                "world_origin_x": min_x,
+                "world_origin_y": min_y,
+                "height_min": min(zs),
+                "height_max": max(zs),
+            }}))
+    finally:
+        if mesh is not None:
+            try:
+                eval_obj.to_mesh_clear()
+            except Exception:
+                pass
+""".strip()
+
+    raw = await blender.send_command("execute_code", {"code": code})
+    output = ""
+    if isinstance(raw, dict):
+        if raw.get("output") is not None:
+            output = str(raw.get("output", ""))
+        elif isinstance(raw.get("result"), dict):
+            output = str(raw.get("result", {}).get("output", ""))
+    elif raw is not None:
+        output = str(raw)
+    output = output.strip()
+    if not output:
+        raise RuntimeError(
+            f"Failed to read current terrain heightmap context for '{terrain_name}': empty execute_code output"
+        )
+
+    parsed: dict[str, Any] | None = None
+    for candidate in reversed([line.strip() for line in output.splitlines() if line.strip()]):
+        try:
+            loaded = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(loaded, dict):
+            parsed = loaded
+            break
+    if parsed is None:
+        raise RuntimeError(
+            f"Failed to parse current terrain heightmap context for '{terrain_name}': {output[:240]}"
+        )
+    if parsed.get("error"):
+        raise RuntimeError(str(parsed.get("error")))
+
+    heightmap = parsed.get("heightmap")
+    if not isinstance(heightmap, list) or not heightmap:
+        raise RuntimeError(
+            f"Current terrain heightmap context for '{terrain_name}' did not include a usable heightmap"
+        )
+
+    return {
+        "heightmap": heightmap,
+        "tile_size": int(parsed.get("tile_size", max(len(heightmap) - 1, 1))),
+        "cell_size": float(parsed.get("cell_size", 1.0)),
+        "world_origin_x": float(parsed.get("world_origin_x", 0.0)),
+        "world_origin_y": float(parsed.get("world_origin_y", 0.0)),
+        "rows": int(parsed.get("rows", len(heightmap))),
+        "cols": int(parsed.get("cols", len(heightmap[0]) if isinstance(heightmap[0], list) else len(heightmap))),
+    }
 
 
 async def _sample_terrain_relief_profile(
@@ -2501,6 +2807,92 @@ async def _sample_terrain_relief_profile(
         "uphill_vector": [float(uphill_x), float(uphill_y)],
         "downhill_vector": [float(-uphill_x), float(-uphill_y)],
         "samples": samples,
+    }
+
+
+async def _compute_natural_water_level(
+    blender: BlenderConnection,
+    terrain_name: str,
+    basin_center_x: float,
+    basin_center_y: float,
+    basin_radius: float,
+    *,
+    terrain_size: float = 200.0,
+    ring_sample_count: int = 16,
+) -> dict[str, float]:
+    """Sample terrain to compute a physically plausible water level.
+
+    Returns a dict with:
+      - basin_floor: lowest Z in the basin area
+      - spill_height: lowest rim Z (water would overflow here)
+      - natural_level: recommended water level between floor and spill
+      - rim_min: minimum rim sample height
+      - rim_max: maximum rim sample height
+    """
+    basin_center_x = float(basin_center_x)
+    basin_center_y = float(basin_center_y)
+    basin_radius = max(float(basin_radius), 4.0)
+    ring_sample_count = max(int(ring_sample_count), 8)
+
+    # --- Sample basin interior (radial grid) ---
+    interior_heights: list[float] = []
+    # Center point
+    center_z = await _sample_terrain_height(blender, terrain_name, basin_center_x, basin_center_y)
+    interior_heights.append(center_z)
+    # Concentric rings at 33% and 66% of radius
+    for fraction in (0.33, 0.66):
+        ring_r = basin_radius * fraction
+        for i in range(8):
+            angle = (math.tau * i) / 8.0
+            sx = basin_center_x + math.cos(angle) * ring_r
+            sy = basin_center_y + math.sin(angle) * ring_r
+            h = await _sample_terrain_height(blender, terrain_name, sx, sy)
+            interior_heights.append(h)
+
+    basin_floor = min(interior_heights) if interior_heights else center_z
+
+    # --- Sample rim (ring at ~1.1x radius to find the spill point) ---
+    rim_heights: list[float] = []
+    rim_r = basin_radius * 1.15
+    half_terrain = terrain_size * 0.5
+    for i in range(ring_sample_count):
+        angle = (math.tau * i) / float(ring_sample_count)
+        rx = basin_center_x + math.cos(angle) * rim_r
+        ry = basin_center_y + math.sin(angle) * rim_r
+        # Clamp to terrain bounds
+        rx = max(-half_terrain + 2.0, min(half_terrain - 2.0, rx))
+        ry = max(-half_terrain + 2.0, min(half_terrain - 2.0, ry))
+        h = await _sample_terrain_height(blender, terrain_name, rx, ry)
+        rim_heights.append(h)
+
+    if not rim_heights:
+        # Fallback: use center_z as both floor and rim
+        return {
+            "basin_floor": basin_floor,
+            "spill_height": center_z,
+            "natural_level": center_z,
+            "rim_min": center_z,
+            "rim_max": center_z,
+        }
+
+    rim_min = min(rim_heights)
+    rim_max = max(rim_heights)
+    spill_height = rim_min  # Water spills at the lowest rim point
+
+    # Natural water level: 70% between floor and spill height
+    # (water fills most of the depression but doesn't overflow)
+    if spill_height > basin_floor:
+        natural_level = basin_floor + (spill_height - basin_floor) * 0.70
+    else:
+        # Rim is at or below basin floor -- flat terrain, use floor + small offset
+        natural_level = basin_floor + 0.3
+
+    return {
+        "basin_floor": float(basin_floor),
+        "spill_height": float(spill_height),
+        "natural_level": float(natural_level),
+        "rim_min": float(rim_min),
+        "rim_max": float(rim_max),
     }
 
 
@@ -4402,6 +4794,7 @@ async def asset_pipeline(
             "erosion_iterations": cfg["erosion_drops"],
             "seed": terrain_seed,
             "size": terrain_size,
+            "use_controller": True,
         })
         if isinstance(result, dict):
             result["preset"] = preset
@@ -4440,6 +4833,11 @@ async def asset_pipeline(
             }, indent=2)
 
         spec = map_spec
+        terrain_only_requested = _map_spec_requests_terrain_only(spec)
+        original_locations = list(spec.get("locations", [])) if isinstance(spec, dict) else []
+        original_props_enabled = bool(spec.get("props", True)) if isinstance(spec, dict) else False
+        if terrain_only_requested:
+            spec = _filter_map_spec_for_terrain_only(spec)
         map_name = spec.get("name", "Map")
         map_seed = spec.get("seed", 42)
         budget = _resolve_map_generation_budget(spec)
@@ -4456,15 +4854,34 @@ async def asset_pipeline(
         steps_completed: list[str] = []
         steps_failed: list[dict] = []
         pipeline_warnings: list[str] = []
+        pipeline_degradations: list[str] = []
         created_objects: list[str] = []
         location_results: list[dict] = []
         interior_results: list[dict] = []
+        terrain_runtime_diagnostics: dict[str, Any] = {}
+        waterfall_runtime_diagnostics: list[dict[str, Any]] = []
+        if terrain_only_requested:
+            stripped_location_count = max(0, len(original_locations) - len(spec.get("locations", [])))
+            if stripped_location_count:
+                pipeline_warnings.append(
+                    f"terrain_only mode skipped {stripped_location_count} non-terrain locations"
+                )
+            if original_props_enabled:
+                pipeline_warnings.append("terrain_only mode disabled contextual prop scatter")
         hero_cliff_shaped_caves: set[str] = set()
         hero_cave_anchor_overrides: dict[str, dict[str, float]] = {}
         deferred_river_surfaces: list[dict[str, Any]] = []
+        deferred_waterfalls: list[dict[str, Any]] = []
         deferred_water_body: dict[str, Any] | None = None
         terrain_visual_verification: dict[str, Any] | None = None
         terrain_cfg = spec.get("terrain", {})
+        water_cfg = spec.get("water", {})
+        if not isinstance(water_cfg, dict):
+            water_cfg = {}
+        water_system_spec_payload = _build_water_system_spec_payload(
+            water_cfg,
+            map_seed=map_seed,
+        )
         terrain_result_payload: dict[str, Any] | None = None
         terrain_size = float(terrain_cfg.get("size", 200.0))
         terrain_location = tuple(terrain_cfg.get("location", (0.0, 0.0)))[:2]
@@ -4511,6 +4928,7 @@ async def asset_pipeline(
                     location_results = ckpt.get("location_results", [])
                     interior_results = ckpt.get("interior_results", [])
                     deferred_river_surfaces = list(ckpt.get("deferred_river_surfaces", []) or [])
+                    deferred_waterfalls = list(ckpt.get("deferred_waterfalls", []) or [])
                     deferred_water_body = ckpt.get("deferred_water_body")
                     _CHKPT_LOADED = True
 
@@ -4534,6 +4952,7 @@ async def asset_pipeline(
                 "location_results": location_results,
                 "interior_results": interior_results,
                 "deferred_river_surfaces": deferred_river_surfaces,
+                "deferred_waterfalls": deferred_waterfalls,
                 "deferred_water_body": deferred_water_body,
                 "params_snapshot": {"terrain_size": terrain_size, "seed": map_seed},
             })
@@ -4543,6 +4962,12 @@ async def asset_pipeline(
             message = f"{step}{target}: {error}"
             logger.warning("compose_map warning: %s", message)
             pipeline_warnings.append(message)
+
+        def _record_pipeline_degradation(code: str, message: str) -> None:
+            if code not in pipeline_degradations:
+                pipeline_degradations.append(code)
+            if message not in pipeline_warnings:
+                pipeline_warnings.append(message)
 
         async def _verify_basin_depth(
             *,
@@ -4698,8 +5123,10 @@ async def asset_pipeline(
             for index in range(count):
                 sx, sy, sz = cleaned_surface[index]
                 bx, by, bz = cleaned_bed[index]
+                sample_succeeded = False
                 try:
                     sampled_bed_z = float(await _sample_terrain_height(blender, terrain_name, bx, by))
+                    sample_succeeded = True
                 except Exception as sample_exc:
                     logger.debug(
                         "Deferred river reprojection falling back to stored bed height for %s: %s",
@@ -4708,10 +5135,16 @@ async def asset_pipeline(
                         exc_info=True,
                     )
                     sampled_bed_z = float(bz)
-                if abs(sampled_bed_z) <= 1e-6 and abs(float(bz)) > 1e-6:
+                # Only reject a zero sample when the raycast likely missed entirely:
+                # the stored bed Z is far from zero AND the sample returned exactly 0.
+                if (
+                    not sample_succeeded
+                    or (abs(sampled_bed_z) <= 1e-6 and abs(float(bz)) > 2.0)
+                ):
                     sampled_bed_z = float(bz)
-                water_column = max(float(sz) - float(bz), water_depth_floor)
-                surface_z = sampled_bed_z + water_column
+                # Place river surface at a fixed offset above the SAMPLED terrain,
+                # ensuring it follows the actual carved riverbed geometry.
+                surface_z = sampled_bed_z + water_depth_floor
                 if previous_surface_z is not None:
                     surface_z = min(surface_z, previous_surface_z - 0.015)
                 conformed_bed.append([bx, by, sampled_bed_z])
@@ -4727,7 +5160,26 @@ async def asset_pipeline(
 
         async def _emit_deferred_water_surfaces() -> None:
             """Create visible water only after all terrain mutations are complete."""
-            nonlocal deferred_river_surfaces, deferred_water_body
+            nonlocal deferred_river_surfaces, deferred_waterfalls, deferred_water_body
+
+            waterfall_heightmap_context: dict[str, Any] | None = None
+            if deferred_waterfalls:
+                if not terrain_name:
+                    raise RuntimeError(
+                        "compose_map waterfall emission requires a terrain object name"
+                    )
+                waterfall_heightmap_context = await _capture_current_terrain_heightmap_context(
+                    blender,
+                    terrain_name,
+                )
+                if isinstance(terrain_result_payload, dict):
+                    terrain_result_payload.update({
+                        "heightmap": waterfall_heightmap_context["heightmap"],
+                        "tile_size": waterfall_heightmap_context["tile_size"],
+                        "cell_size": waterfall_heightmap_context["cell_size"],
+                        "world_origin_x": waterfall_heightmap_context["world_origin_x"],
+                        "world_origin_y": waterfall_heightmap_context["world_origin_y"],
+                    })
 
             for pending in deferred_river_surfaces:
                 try:
@@ -4752,7 +5204,7 @@ async def asset_pipeline(
                             "path_points": path_points,
                             "water_level": float(pending["water_level"]),
                             "width": float(pending["width"]),
-                            "cross_sections": int(pending.get("cross_sections", 18)),
+                            "cross_sections": int(pending.get("cross_sections", 16)),
                             "preview_fast": False,
                             "preserve_path_shape": True,
                             "surface_only": True,
@@ -4789,6 +5241,71 @@ async def asset_pipeline(
                         created_objects.append(deferred_water_body["name"])
                 except Exception as water_emit_exc:
                     steps_failed.append({"step": "water_plane", "error": str(water_emit_exc)})
+
+            for pending in deferred_waterfalls:
+                waterfall_step = str(pending.get("step_key", pending.get("name", "waterfall")))
+                if waterfall_step in steps_completed:
+                    continue
+                try:
+                    if waterfall_heightmap_context is None:
+                        raise RuntimeError(
+                            "compose_map waterfall emission requires controller terrain heightmap context"
+                        )
+                    waterfall_result = await blender.send_command(
+                        "env_generate_waterfall",
+                        {
+                            "name": pending["name"],
+                            "height": float(pending["height"]),
+                            "width": float(pending["width"]),
+                            "pool_radius": float(pending["pool_radius"]),
+                            "num_steps": int(pending.get("num_steps", 3)),
+                            "has_cave_behind": bool(pending.get("has_cave_behind", False)),
+                            "seed": int(pending.get("seed", map_seed)),
+                            "facing_direction": list(pending.get("facing_direction", [0.0, -1.0])),
+                            "location": list(pending["location"]),
+                            "materialize_object": True,
+                            "preview_fast": False,
+                            "require_heightmap_context": True,
+                            **waterfall_heightmap_context,
+                        },
+                    )
+                    steps_completed.append(waterfall_step)
+                    waterfall_name = pending["name"]
+                    if isinstance(waterfall_result, dict):
+                        waterfall_name = str(
+                            waterfall_result.get("name")
+                            or waterfall_result.get("object_name")
+                            or waterfall_name
+                        )
+                        waterfall_diag = {
+                            "name": waterfall_name,
+                            "step": waterfall_step,
+                            "authoring_path": str(
+                                waterfall_result.get("authoring_path", "unknown")
+                            ),
+                        }
+                        functional_object_names = waterfall_result.get("functional_object_names")
+                        if isinstance(functional_object_names, (list, tuple)):
+                            waterfall_diag["functional_object_names"] = [
+                                str(name)
+                                for name in functional_object_names
+                                if str(name).strip()
+                            ]
+                            waterfall_diag["functional_objects_materialized"] = bool(
+                                waterfall_result.get("functional_objects_materialized", False)
+                            )
+                        if waterfall_result.get("warning"):
+                            waterfall_diag["warning"] = str(waterfall_result["warning"])
+                            warning_message = (
+                                f"{waterfall_name}: {waterfall_result['warning']}"
+                            )
+                            if warning_message not in pipeline_warnings:
+                                pipeline_warnings.append(warning_message)
+                        waterfall_runtime_diagnostics.append(waterfall_diag)
+                    if waterfall_name not in created_objects:
+                        created_objects.append(waterfall_name)
+                except Exception as waterfall_emit_exc:
+                    steps_failed.append({"step": waterfall_step, "error": str(waterfall_emit_exc)})
 
         async def _generate_roads_after_terrain_mutations() -> None:
             """Generate roads only after caves/locations finish editing terrain."""
@@ -4899,12 +5416,15 @@ async def asset_pipeline(
                     ),
                     "use_controller": True,
                     "object_location": list(_terrain_loc_3d),
+                    "water_system_spec": water_system_spec_payload,
                     "scene_read": {
                         "timestamp": 0.0,
                         "reviewer": "compose_map",
                         "cave_candidates": [list(c) for c in planned_cave_candidates],
                     } if planned_cave_candidates else None,
                 }
+                if isinstance(terrain_cfg.get("flatten_zones"), list) and terrain_cfg.get("flatten_zones"):
+                    terrain_params["flatten_zones"] = list(terrain_cfg.get("flatten_zones") or [])
                 try:
                     _terrain_result = await blender.send_command(
                         "env_generate_terrain",
@@ -4927,6 +5447,20 @@ async def asset_pipeline(
                     and terrain_result_payload.get("controller_used") is False
                 ):
                     terrain_result_payload["controller_fallback_used"] = True
+                if isinstance(terrain_result_payload, dict):
+                    terrain_runtime_diagnostics = {
+                        "controller_used": bool(terrain_result_payload.get("controller_used", False)),
+                        "water_network_present": bool(
+                            terrain_result_payload.get("water_network_present", False)
+                        ),
+                    }
+                    if water_cfg and not terrain_runtime_diagnostics["water_network_present"]:
+                        message = (
+                            "controller terrain reported water_network_present=False; "
+                            "terrain-aware waterfall and river placement will be degraded"
+                        )
+                        if message not in pipeline_warnings:
+                            pipeline_warnings.append(message)
                 steps_completed.append("terrain_generated")
                 created_objects.append(terrain_name)
                 try:
@@ -5079,7 +5613,6 @@ async def asset_pipeline(
             )
 
         # --- Step 3: Water bodies ---
-        water_cfg = spec.get("water", {})
         if water_cfg:
             terminal_water_plane_level: float | None = None
             terminal_river_point: list[float] | None = None
@@ -5088,6 +5621,11 @@ async def asset_pipeline(
             terminal_basin_radius: float | None = None
             terminal_basin_aspect_y = 1.35
             pending_river_surfaces: list[dict[str, Any]] = []
+            queued_waterfall_step_keys = {
+                str(entry.get("step_key"))
+                for entry in deferred_waterfalls
+                if isinstance(entry, dict) and entry.get("step_key")
+            }
             # Rivers
             for i, river in enumerate(water_cfg.get("rivers", [])):
                 if f"river_{i}" in steps_completed:
@@ -5174,12 +5712,107 @@ async def asset_pipeline(
                             "bed_points": river_bed_points,
                             "water_level": float(river_water_level),
                             "width": max(river_width_m * 1.18, 3.0),
-                            "cross_sections": 18,
+                            "cross_sections": 16,
                             "min_water_depth": min_water_depth,
                             "terminal_water_level": None,
                         })
+                        waterfall_requested = _river_requests_waterfall(river)
+                        waterfall_cfg = river.get("waterfall") if isinstance(river.get("waterfall"), dict) else {}
+                        if not waterfall_cfg:
+                            global_waterfalls = water_cfg.get("waterfalls", []) or []
+                            if i < len(global_waterfalls) and isinstance(global_waterfalls[i], dict):
+                                waterfall_cfg = global_waterfalls[i]
+                        if waterfall_requested or waterfall_cfg:
+                            placement = _derive_waterfall_placement_from_path(river_path_points)
+                            if placement is not None:
+                                waterfall_name = str(
+                                    waterfall_cfg.get("name", f"{map_name}_Waterfall_{i}")
+                                )
+                                waterfall_step = f"waterfall_{i}"
+                                if (
+                                    waterfall_step not in steps_completed
+                                    and waterfall_step not in queued_waterfall_step_keys
+                                ):
+                                    waterfall_height = max(
+                                        float(waterfall_cfg.get("height", placement["height"])),
+                                        3.0,
+                                    )
+                                    waterfall_width = max(
+                                        float(waterfall_cfg.get("width", river_width_m * 1.12)),
+                                        2.5,
+                                    )
+                                    deferred_waterfalls.append({
+                                        "step_key": waterfall_step,
+                                        "name": waterfall_name,
+                                        "height": waterfall_height,
+                                        "width": waterfall_width,
+                                        "pool_radius": max(
+                                            float(waterfall_cfg.get("pool_radius", waterfall_width * 1.55)),
+                                            waterfall_width * 0.9,
+                                        ),
+                                        "num_steps": int(
+                                            waterfall_cfg.get(
+                                                "num_steps",
+                                                max(1, min(5, int(round(waterfall_height / 3.0)))),
+                                            )
+                                        ),
+                                        "has_cave_behind": bool(waterfall_cfg.get("has_cave_behind", False)),
+                                        "seed": int(waterfall_cfg.get("seed", map_seed + 700 + i)),
+                                        "facing_direction": list(
+                                            waterfall_cfg.get(
+                                                "facing_direction",
+                                                placement["facing_direction"],
+                                            )
+                                        ),
+                                        "location": list(
+                                            waterfall_cfg.get(
+                                                "location",
+                                                [
+                                                    float(placement["top_point"][0]),
+                                                    float(placement["top_point"][1]),
+                                                    float(placement["bottom_point"][2]),
+                                                ],
+                                            )
+                                        ),
+                                    })
+                                    queued_waterfall_step_keys.add(waterfall_step)
+                            else:
+                                _record_pipeline_degradation(
+                                    "waterfall_skipped_low_drop",
+                                    f"waterfall_{i} skipped: river drop was too small for placement",
+                                )
                 except Exception as e:
                     steps_failed.append({"step": f"river_{i}", "error": str(e)})
+
+            for waterfall_index, waterfall_cfg in enumerate(water_cfg.get("waterfalls", []) or []):
+                if not isinstance(waterfall_cfg, dict):
+                    continue
+                waterfall_step = str(
+                    waterfall_cfg.get("step_key", f"waterfall_explicit_{waterfall_index}")
+                )
+                if waterfall_step in steps_completed or waterfall_step in queued_waterfall_step_keys:
+                    continue
+                location_raw = waterfall_cfg.get("location")
+                if not (isinstance(location_raw, (list, tuple)) and len(location_raw) >= 3):
+                    continue
+                facing_direction = waterfall_cfg.get("facing_direction", (0.0, -1.0))
+                deferred_waterfalls.append({
+                    "step_key": waterfall_step,
+                    "name": str(waterfall_cfg.get("name", f"{map_name}_Waterfall_Explicit_{waterfall_index}")),
+                    "height": max(float(waterfall_cfg.get("height", 6.0)), 3.0),
+                    "width": max(float(waterfall_cfg.get("width", 4.0)), 2.5),
+                    "pool_radius": max(float(waterfall_cfg.get("pool_radius", 6.0)), 2.5),
+                    "num_steps": int(waterfall_cfg.get("num_steps", 3)),
+                    "has_cave_behind": bool(waterfall_cfg.get("has_cave_behind", False)),
+                    "seed": int(waterfall_cfg.get("seed", map_seed + 900 + waterfall_index)),
+                    "facing_direction": list(facing_direction),
+                    "location": [
+                        float(location_raw[0]),
+                        float(location_raw[1]),
+                        float(location_raw[2]),
+                    ],
+                })
+                queued_waterfall_step_keys.add(waterfall_step)
 
             # Water level (lakes/ocean)
             if "water_level" in water_cfg and "water_plane" not in steps_completed:
@@ -5192,6 +5825,66 @@ async def asset_pipeline(
                     )
                     if resolved_water_level is None:
                         resolved_water_level = float(water_cfg["water_level"])
+
+                    # --- Terrain-aware water level validation ---
+                    # Use the actual terrain mesh to verify the configured water_level
+                    # makes physical sense (not floating above terrain or buried underground).
+                    _water_validation_center_x = 0.0
+                    _water_validation_center_y = 0.0
+                    _water_validation_radius = max(terrain_size * 0.062, 12.0)
+                    if terminal_river_point is not None:
+                        _water_validation_center_x = float(terminal_river_point[0])
+                        _water_validation_center_y = float(terminal_river_point[1])
+                    elif isinstance(water_cfg.get("basin_center"), (list, tuple)) and len(water_cfg["basin_center"]) >= 2:
+                        _water_validation_center_x = float(water_cfg["basin_center"][0])
+                        _water_validation_center_y = float(water_cfg["basin_center"][1])
+                    if isinstance(water_cfg.get("basin_radius"), (int, float)):
+                        _water_validation_radius = max(float(water_cfg["basin_radius"]), _water_validation_radius)
+                    try:
+                        _natural = await _compute_natural_water_level(
+                            blender,
+                            terrain_name,
+                            _water_validation_center_x,
+                            _water_validation_center_y,
+                            _water_validation_radius,
+                            terrain_size=terrain_size,
+                        )
+                        _terrain_z_at_center = await _sample_terrain_height(
+                            blender, terrain_name,
+                            _water_validation_center_x,
+                            _water_validation_center_y,
+                        )
+                        # Reject water level that floats >3m above local terrain
+                        # or sits >5m below the basin floor (underground).
+                        _above_terrain = resolved_water_level - _terrain_z_at_center
+                        _below_floor = _natural["basin_floor"] - resolved_water_level
+                        if _above_terrain > 3.0 or _below_floor > 5.0:
+                            _old_wl = resolved_water_level
+                            resolved_water_level = _natural["natural_level"]
+                            logger.warning(
+                                "compose_map: overriding water_level %.2f -> %.2f "
+                                "(was %.1fm %s terrain at basin center; "
+                                "basin_floor=%.2f, spill=%.2f, rim_min=%.2f)",
+                                _old_wl,
+                                resolved_water_level,
+                                abs(_above_terrain) if _above_terrain > 3.0 else abs(_below_floor),
+                                "above" if _above_terrain > 3.0 else "below",
+                                _natural["basin_floor"],
+                                _natural["spill_height"],
+                                _natural["rim_min"],
+                            )
+                            _record_pipeline_degradation(
+                                "water_level_overridden",
+                                f"water_level overridden: {_old_wl:.2f} -> "
+                                f"{resolved_water_level:.2f} (terrain mismatch)",
+                            )
+                    except Exception as _wl_validation_exc:
+                        logger.debug(
+                            "compose_map: water level terrain validation skipped: %s",
+                            _wl_validation_exc,
+                            exc_info=True,
+                        )
+
                     if (
                         terminal_river_point is not None
                         and terminal_prev_point is not None
@@ -6080,7 +6773,7 @@ async def asset_pipeline(
                 _record_pipeline_warning("hero_final_cleanup", final_cleanup_exc, object_name=terrain_name)
 
         # --- Step 6.5: Emit visible water only after terrain is frozen ---
-        if deferred_river_surfaces or deferred_water_body:
+        if deferred_river_surfaces or deferred_water_body or deferred_waterfalls:
             await _emit_deferred_water_surfaces()
             _save_chkpt()
 
@@ -6141,6 +6834,9 @@ async def asset_pipeline(
                     "checkpoint_dir": checkpoint_dir,
                     "terrain_visual_profiles": terrain_visual_profiles,
                     "terrain_visual_verification": terrain_base_verification,
+                    "pipeline_degradations": pipeline_degradations,
+                    "terrain_runtime_diagnostics": terrain_runtime_diagnostics,
+                    "waterfall_runtime_diagnostics": waterfall_runtime_diagnostics,
                     "approved_for_unity_export": False,
                     "unity_export_status": "blocked_by_base_visual_verification",
                     "next_steps": [
@@ -6293,6 +6989,9 @@ async def asset_pipeline(
                     "checkpoint_dir": checkpoint_dir,
                     "terrain_visual_profiles": terrain_visual_profiles,
                     "terrain_visual_verification": terrain_visual_verification,
+                    "pipeline_degradations": pipeline_degradations,
+                    "terrain_runtime_diagnostics": terrain_runtime_diagnostics,
+                    "waterfall_runtime_diagnostics": waterfall_runtime_diagnostics,
                     "approved_for_unity_export": False,
                     "unity_export_status": "blocked_by_visual_verification",
                     "next_steps": [
@@ -6328,6 +7027,9 @@ async def asset_pipeline(
                 "checkpoint_dir": checkpoint_dir,
                 "terrain_visual_profiles": terrain_visual_profiles,
                 "terrain_visual_verification": terrain_visual_verification,
+                "pipeline_degradations": pipeline_degradations,
+                "terrain_runtime_diagnostics": terrain_runtime_diagnostics,
+                "waterfall_runtime_diagnostics": waterfall_runtime_diagnostics,
                 "approved_for_unity_export": False,
                 "unity_export_status": "awaiting_user_approval",
                 "export_ready": True,
@@ -6378,6 +7080,10 @@ async def asset_pipeline(
                                 "object": _obj_name,
                                 "issues": _gc.get("summary", "Unknown"),
                             })
+                            _record_pipeline_degradation(
+                                "game_check_failed",
+                                f"game_check failed for {_obj_name}: {_gc.get('summary', 'Unknown')}",
+                            )
                     except Exception as exc:
                         _record_pipeline_warning(
                             "game_check_skipped",
@@ -6405,6 +7111,10 @@ async def asset_pipeline(
                             exc,
                             object_name=_obj_name,
                         )
+                        _record_pipeline_degradation(
+                            "texture_bake_failed",
+                            f"texture_bake_failed for {_obj_name}: {exc}",
+                        )
                 steps_completed.append("textures_baked")
                 _save_chkpt()
             except Exception as e:
@@ -6424,6 +7134,10 @@ async def asset_pipeline(
                             "lod_generation_failed",
                             exc,
                             object_name=_obj_name,
+                        )
+                        _record_pipeline_degradation(
+                            "lod_generation_failed",
+                            f"lod_generation_failed for {_obj_name}: {exc}",
                         )
                 steps_completed.append("lods_generated")
                 _save_chkpt()
@@ -6460,6 +7174,10 @@ async def asset_pipeline(
                         })
                     except Exception as exc:
                         _record_pipeline_warning("vegetation_export_failed", exc)
+                        _record_pipeline_degradation(
+                            "vegetation_export_failed",
+                            f"vegetation_export_failed: {exc}",
+                        )
 
                 if terrain_name:
                     try:
@@ -6508,6 +7226,10 @@ async def asset_pipeline(
                             exc,
                             object_name=_grp["group_name"],
                         )
+                        _record_pipeline_degradation(
+                            "fbx_export_failed",
+                            f"fbx_export_failed for {_grp['group_name']}: {exc}",
+                        )
                 steps_completed.append("fbx_exported")
                 _save_chkpt()
             except Exception as e:
@@ -6521,7 +7243,9 @@ async def asset_pipeline(
         )
 
         result = {
-            "status": "success" if not steps_failed and not quality_report["failures"] else "partial",
+            "status": "success"
+            if not steps_failed and not quality_report["failures"] and not pipeline_degradations
+            else "partial",
             "map_name": map_name,
             "steps_completed": steps_completed,
             "steps_failed": steps_failed,
@@ -6538,6 +7262,9 @@ async def asset_pipeline(
             "checkpoint_dir": checkpoint_dir,
             "terrain_visual_profiles": terrain_visual_profiles,
             "terrain_visual_verification": terrain_visual_verification,
+            "pipeline_degradations": pipeline_degradations,
+            "terrain_runtime_diagnostics": terrain_runtime_diagnostics,
+            "waterfall_runtime_diagnostics": waterfall_runtime_diagnostics,
             "approved_for_unity_export": auto_export_unity,
             "unity_export_status": "export_completed" if auto_export_unity else "awaiting_user_approval",
             "next_steps": [
@@ -8184,6 +8911,7 @@ async def blender_environment(
             params["persistence"] = persistence
         if lacunarity is not None:
             params["lacunarity"] = lacunarity
+        params["use_controller"] = True
         result = await blender.send_command("env_generate_terrain", params)
         return await _with_screenshot(blender, result, capture_viewport)
 

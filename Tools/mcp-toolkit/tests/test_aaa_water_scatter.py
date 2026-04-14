@@ -584,6 +584,15 @@ class TestWaterMaterialProperties(unittest.TestCase):
         self.assertIsNotNone(result)
         self.assertIn("name", result)
 
+    def test_surface_only_path_defaults_terminal_taper(self):
+        path = [[0.0, -20.0, 0.0], [0.0, -8.0, -0.4], [0.0, 8.0, -0.8], [0.0, 20.0, -1.2]]
+        result = handle_create_water({
+            "name": "TaperedRiver",
+            "path_points": path,
+            "surface_only": True,
+        })
+        self.assertGreater(result.get("terminal_taper_rings", 0), 0)
+
 
 # ===========================================================================
 # Tests: Terrain auto-splatting

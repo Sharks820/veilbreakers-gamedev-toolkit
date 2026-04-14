@@ -985,6 +985,9 @@ class TerrainPipelineState:
     checkpoints: List[TerrainCheckpoint] = field(default_factory=list)
     pass_history: List[PassResult] = field(default_factory=list)
     side_effects: List[str] = field(default_factory=list)
+    # FIX: Pipeline-break #1/#2 — water_network was never wired through state.
+    # Holds an optional WaterNetwork (or duck-typed equivalent with .nodes/.segments).
+    water_network: Optional[Any] = None
 
     @property
     def tile_x(self) -> int:

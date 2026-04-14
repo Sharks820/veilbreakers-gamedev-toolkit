@@ -695,10 +695,12 @@ def pass_waterfalls(
         lip_mask[r, c] = float(lc.confidence_score)
 
     # 3. Solve full chain per lip candidate (cap at 16 to bound work)
+    # FIX pipeline-break #1: wire water_network from state instead of None
+    _water_net = getattr(state, "water_network", None)
     chains: List[WaterfallChain] = []
     for lc in lips[:16]:
         try:
-            chain = solve_waterfall_from_river(stack, lc, river_network=None)
+            chain = solve_waterfall_from_river(stack, lc, river_network=_water_net)
         except Exception as exc:
             logger.debug("Waterfall solver failed for lip %s: %s", lc, exc)
             continue
@@ -718,7 +720,8 @@ def pass_waterfalls(
         mist = np.maximum(mist, generate_mist_zone(chain, stack))
 
     # 5. Wet-rock mask (uses existing water surfaces + pools)
-    wet_rock = compute_wet_rock_mask(stack, None, radius_m=3.0)
+    # FIX pipeline-break #2: wire water_network so wet-rock seeds from network nodes
+    wet_rock = compute_wet_rock_mask(stack, _water_net, radius_m=3.0)
     for chain in chains:
         # add pool contribution
         pool_foam_contribution = generate_foam_mask(chain, stack)
@@ -743,6 +746,13 @@ def pass_waterfalls(
         pool_delta = scoped
 
     stack.set("waterfall_pool_delta", pool_delta.astype(np.float32), "waterfalls")
+
+    # FIX pipeline-break #5: apply pool_delta to height (carve pools into terrain)
+    # Only carve where delta is negative (lowering terrain), within region scope.
+    carve_mask = pool_delta < 0.0
+    if np.any(carve_mask):
+        stack.height = np.where(carve_mask, stack.height + pool_delta, stack.height)
+
     stack.set("waterfall_lip_candidate", lip_mask, "waterfalls")
     stack.set("foam", foam, "waterfalls")
     stack.set("mist", mist, "waterfalls")
@@ -799,7 +809,7 @@ def register_bundle_c_passes() -> None:
             ),
             seed_namespace="waterfalls",
             requires_scene_read=True,
-            may_modify_geometry=False,
+            may_modify_geometry=True,  # FIX #5: pass now applies pool_delta to height
             description="Bundle C — waterfall hydrology chain + foam/mist/wet_rock masks",
         )
     )

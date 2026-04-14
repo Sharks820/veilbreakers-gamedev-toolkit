@@ -854,6 +854,46 @@ def _build_quality_object(
     return result
 
 
+def _make_fail_closed_terrain_runtime_handler(
+    command_name: str,
+    *,
+    replacement: str,
+    reason: str,
+) -> Callable[[dict[str, Any]], dict[str, Any]]:
+    """Return a runtime handler that quarantines stale terrain commands."""
+
+    def _handler(_params: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "status": "error",
+            "error": "deprecated_terrain_runtime_command",
+            "fail_closed": True,
+            "command": command_name,
+            "replacement": replacement,
+            "reason": reason,
+            "message": (
+                f"{command_name} is quarantined from the public terrain runtime. "
+                f"Use {replacement} instead."
+            ),
+        }
+
+    return _handler
+
+
+_TERRAIN_RUNTIME_COMPAT_HANDLER = _make_fail_closed_terrain_runtime_handler(
+    "env_generate_world_terrain",
+    replacement="env_generate_terrain_tile + env_stitch_terrain_edges",
+    reason="Legacy world-terrain wrapper bypasses the tile-first terrain runtime contract.",
+)
+
+_QUARANTINED_TERRAIN_FEATURE_REPLACEMENT = (
+    "env_generate_terrain(use_controller=True) / env_run_terrain_pass pipeline"
+)
+_QUARANTINED_TERRAIN_FEATURE_REASON = (
+    "Low-level terrain feature generators are not part of the supported AAA terrain runtime; "
+    "compose them through the controller-based terrain pipeline instead."
+)
+
+
 COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "ping": lambda params: {"status": "success", "result": "pong"},
     # Scene
@@ -998,7 +1038,7 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     # Environment operations
     "env_generate_terrain": handle_generate_terrain,
     "env_generate_terrain_tile": handle_generate_terrain_tile,
-    "env_generate_world_terrain": handle_generate_world_terrain,  # DEPRECATED: use env_generate_terrain_tile per-tile workflow instead
+    "env_generate_world_terrain": _TERRAIN_RUNTIME_COMPAT_HANDLER,
     "env_run_terrain_pass": handle_run_terrain_pass,
     "env_stitch_terrain_edges": handle_stitch_terrain_edges,
     "env_paint_terrain": handle_paint_terrain,
@@ -1138,67 +1178,47 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         seed=params.get("seed", 42),
     ),
     # Terrain features (pure logic -- return mesh specs)
-    "env_generate_canyon": lambda params: generate_canyon(
-        width=params.get("width", 5.0),
-        length=params.get("length", 50.0),
-        depth=params.get("depth", 15.0),
-        wall_roughness=params.get("wall_roughness", 0.5),
-        num_side_caves=params.get("num_side_caves", 3),
-        seed=params.get("seed", 42),
+    "env_generate_canyon": _make_fail_closed_terrain_runtime_handler(
+        "env_generate_canyon",
+        replacement=_QUARANTINED_TERRAIN_FEATURE_REPLACEMENT,
+        reason=_QUARANTINED_TERRAIN_FEATURE_REASON,
     ),
     "env_generate_waterfall": handle_generate_waterfall,
-    "env_generate_cliff_face": lambda params: generate_cliff_face(
-        width=params.get("width", 20.0),
-        height=params.get("height", 15.0),
-        overhang=params.get("overhang", 3.0),
-        num_cave_entrances=params.get("num_cave_entrances", 2),
-        has_ledge_path=params.get("has_ledge_path", True),
-        seed=params.get("seed", 42),
+    "env_generate_cliff_face": _make_fail_closed_terrain_runtime_handler(
+        "env_generate_cliff_face",
+        replacement=_QUARANTINED_TERRAIN_FEATURE_REPLACEMENT,
+        reason=_QUARANTINED_TERRAIN_FEATURE_REASON,
     ),
-    "env_generate_swamp_terrain": lambda params: generate_swamp_terrain(
-        size=params.get("size", 50.0),
-        water_level=params.get("water_level", 0.3),
-        hummock_count=params.get("hummock_count", 12),
-        island_count=params.get("island_count", 4),
-        seed=params.get("seed", 42),
+    "env_generate_swamp_terrain": _make_fail_closed_terrain_runtime_handler(
+        "env_generate_swamp_terrain",
+        replacement=_QUARANTINED_TERRAIN_FEATURE_REPLACEMENT,
+        reason=_QUARANTINED_TERRAIN_FEATURE_REASON,
     ),
     # Terrain features v2 -- 6 additional generators (dead-code wiring)
-    "env_generate_natural_arch": lambda params: generate_natural_arch(
-        span_width=params.get("span_width", 8.0),
-        arch_height=params.get("arch_height", 6.0),
-        thickness=params.get("thickness", 2.0),
-        roughness=params.get("roughness", 0.3),
-        seed=params.get("seed", 42),
+    "env_generate_natural_arch": _make_fail_closed_terrain_runtime_handler(
+        "env_generate_natural_arch",
+        replacement=_QUARANTINED_TERRAIN_FEATURE_REPLACEMENT,
+        reason=_QUARANTINED_TERRAIN_FEATURE_REASON,
     ),
-    "env_generate_geyser": lambda params: generate_geyser(
-        pool_radius=params.get("pool_radius", 3.0),
-        pool_depth=params.get("pool_depth", 0.5),
-        vent_height=params.get("vent_height", 1.0),
-        mineral_rim_width=params.get("mineral_rim_width", 0.8),
-        seed=params.get("seed", 42),
+    "env_generate_geyser": _make_fail_closed_terrain_runtime_handler(
+        "env_generate_geyser",
+        replacement=_QUARANTINED_TERRAIN_FEATURE_REPLACEMENT,
+        reason=_QUARANTINED_TERRAIN_FEATURE_REASON,
     ),
-    "env_generate_sinkhole": lambda params: generate_sinkhole(
-        radius=params.get("radius", 5.0),
-        depth=params.get("depth", 8.0),
-        wall_roughness=params.get("wall_roughness", 0.5),
-        has_bottom_cave=params.get("has_bottom_cave", True),
-        rubble_density=params.get("rubble_density", 0.3),
-        seed=params.get("seed", 42),
+    "env_generate_sinkhole": _make_fail_closed_terrain_runtime_handler(
+        "env_generate_sinkhole",
+        replacement=_QUARANTINED_TERRAIN_FEATURE_REPLACEMENT,
+        reason=_QUARANTINED_TERRAIN_FEATURE_REASON,
     ),
-    "env_generate_floating_rocks": lambda params: generate_floating_rocks(
-        count=params.get("count", 5),
-        base_height=params.get("base_height", 4.0),
-        max_size=params.get("max_size", 3.0),
-        chain_links=params.get("chain_links", 2),
-        seed=params.get("seed", 42),
+    "env_generate_floating_rocks": _make_fail_closed_terrain_runtime_handler(
+        "env_generate_floating_rocks",
+        replacement=_QUARANTINED_TERRAIN_FEATURE_REPLACEMENT,
+        reason=_QUARANTINED_TERRAIN_FEATURE_REASON,
     ),
-    "env_generate_ice_formation": lambda params: generate_ice_formation(
-        width=params.get("width", 6.0),
-        height=params.get("height", 4.0),
-        depth=params.get("depth", 3.0),
-        stalactite_count=params.get("stalactite_count", 8),
-        ice_wall=params.get("ice_wall", True),
-        seed=params.get("seed", 42),
+    "env_generate_ice_formation": _make_fail_closed_terrain_runtime_handler(
+        "env_generate_ice_formation",
+        replacement=_QUARANTINED_TERRAIN_FEATURE_REPLACEMENT,
+        reason=_QUARANTINED_TERRAIN_FEATURE_REASON,
     ),
     "env_generate_cave_entrance": lambda params: generate_cave_entrance_mesh(
         width=params.get("width", 4.0),
@@ -1209,12 +1229,10 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         style=params.get("style", "natural"),
         seed=params.get("seed", 0),
     ),
-    "env_generate_lava_flow": lambda params: generate_lava_flow(
-        length=params.get("length", 30.0),
-        width=params.get("width", 4.0),
-        edge_crust_width=params.get("edge_crust_width", 1.0),
-        flow_segments=params.get("flow_segments", 20),
-        seed=params.get("seed", 42),
+    "env_generate_lava_flow": _make_fail_closed_terrain_runtime_handler(
+        "env_generate_lava_flow",
+        replacement=_QUARANTINED_TERRAIN_FEATURE_REPLACEMENT,
+        reason=_QUARANTINED_TERRAIN_FEATURE_REASON,
     ),
     # World map generation (pure logic -- returns world map spec)
     "world_generate_world_map": lambda params: world_map_to_dict(

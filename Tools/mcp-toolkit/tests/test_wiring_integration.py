@@ -122,7 +122,7 @@ class TestTerrainFeaturesAll10Importable:
 
 
 class TestTerrainFeaturesAllDispatched:
-    """COMMAND_HANDLERS contains entries for all 10 terrain feature commands."""
+    """COMMAND_HANDLERS keeps old terrain feature keys but quarantines stale runtime paths."""
 
     DISPATCH_KEYS = [
         "env_generate_canyon",
@@ -148,11 +148,14 @@ class TestTerrainFeaturesAllDispatched:
         handler = COMMAND_HANDLERS[key]
         assert callable(handler), f"COMMAND_HANDLERS['{key}'] is not callable"
 
-    def test_dispatch_returns_dict(self):
-        """Verify a terrain dispatch entry returns a dict when called."""
+    def test_quarantined_feature_generators_fail_closed(self):
+        """Legacy terrain feature generators should fail closed instead of silently running."""
         from blender_addon.handlers import COMMAND_HANDLERS
         result = COMMAND_HANDLERS["env_generate_natural_arch"]({})
         assert isinstance(result, dict), "Dispatch entry should return a dict"
+        assert result["status"] == "error"
+        assert result["fail_closed"] is True
+        assert result["error"] == "deprecated_terrain_runtime_command"
 
 
 class TestModularBuildingKitNotDirectlyDispatched:

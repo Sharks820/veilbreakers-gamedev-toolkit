@@ -533,6 +533,254 @@ async def test_compose_map_creates_river_water_mesh_from_carve_result(monkeypatc
     assert create_water_calls[0]["preserve_path_shape"] is True
 
 
+def test_deprecated_world_terrain_runtime_command_fails_closed():
+    from blender_addon.handlers import COMMAND_HANDLERS
+
+    result = COMMAND_HANDLERS["env_generate_world_terrain"]({"name": "LegacyWorld"})
+
+    assert result["status"] == "error"
+    assert result["fail_closed"] is True
+    assert result["command"] == "env_generate_world_terrain"
+    assert "env_generate_terrain_tile" in result["replacement"]
+
+
+@pytest.mark.asyncio
+async def test_compose_map_emits_waterfall_when_river_requests_one(monkeypatch):
+    commands: list[tuple[str, dict]] = []
+
+    async def _handler(command, params):
+        commands.append((command, dict(params)))
+        if command == "clear_scene":
+            return {"status": "success"}
+        if command == "env_generate_terrain":
+            return {
+                "status": "success",
+                "name": "FallsMap_Terrain",
+                "cliff_overlays": 1,
+                "hero_cliff_overlays": 0,
+                "heightmap": [
+                    [12.0, 11.0, 10.0],
+                    [9.0, 7.0, 5.0],
+                    [6.0, 4.0, 3.0],
+                ],
+                "tile_size": 2,
+                "cell_size": 1.5,
+                "world_origin_x": -6.0,
+                "world_origin_y": -8.0,
+            }
+        if command == "execute_code":
+            return {
+                "output": json.dumps(
+                    {
+                        "heightmap": [
+                            [22.0, 21.0, 20.0],
+                            [19.0, 42.0, 15.0],
+                            [16.0, 14.0, 13.0],
+                        ],
+                        "rows": 3,
+                        "cols": 3,
+                        "tile_size": 2,
+                        "cell_size": 2.0,
+                        "world_origin_x": -5.5,
+                        "world_origin_y": -7.5,
+                    }
+                )
+            }
+        if command == "env_carve_river":
+            return {
+                "status": "success",
+                "name": "FallsMap_Terrain",
+                "path_length": 3,
+                "path_points": [
+                    [0.0, 0.0, 12.0],
+                    [0.0, -2.0, 5.0],
+                    [0.0, -12.0, 4.0],
+                ],
+            }
+        if command == "env_create_water":
+            return {"status": "success", "name": params["name"]}
+        if command == "env_generate_waterfall":
+            return {"status": "success", "name": params["name"], "object_created": True}
+        if command == "auto_frame_camera":
+            return {"status": "success"}
+        raise AssertionError(f"unexpected command: {command}")
+
+    async def _fake_gate(*args, **kwargs):
+        return {
+            "status": "success",
+            "passed": True,
+            "required_profiles": ["terrain_readability", "terrain_river", "terrain_waterfall"],
+            "failed_profiles": [],
+            "issues": [],
+            "capture_errors": [],
+            "screenshots": ["front.png"],
+            "angle_labels": ["front"],
+            "profile_results": [],
+        }
+
+    monkeypatch.setattr(
+        blender_server,
+        "get_blender_connection",
+        lambda: _DummyBlender(_handler),
+    )
+    monkeypatch.setattr(blender_server, "_run_terrain_visual_gate", _fake_gate, raising=False)
+
+    raw = await blender_server.asset_pipeline(
+        action="compose_map",
+        map_spec={
+            "name": "FallsMap",
+            "seed": 21,
+            "terrain": {
+                "preset": "canyon",
+                "size": 160.0,
+                "resolution": 64,
+                "height_scale": 18.0,
+            },
+            "water": {
+                "rivers": [
+                    {
+                        "source": [10, 10],
+                        "destination": [150, 140],
+                        "width": 6,
+                        "has_waterfall": True,
+                    }
+                ],
+            },
+            "roads": [],
+            "locations": [],
+            "props": False,
+        },
+        capture_viewport=False,
+    )
+    parsed = json.loads(raw[0])
+
+    waterfall_calls = [params for command, params in commands if command == "env_generate_waterfall"]
+    assert parsed["status"] == "review_required"
+    assert any(step == "waterfall_0" for step in parsed["steps_completed"])
+    assert waterfall_calls
+    assert waterfall_calls[0]["name"] == "FallsMap_Waterfall_0"
+    assert waterfall_calls[0]["facing_direction"] == [0.0, -1.0]
+    assert waterfall_calls[0]["location"] == [0.0, 0.0, 5.0]
+    assert waterfall_calls[0]["materialize_object"] is True
+    assert waterfall_calls[0]["require_heightmap_context"] is True
+    assert waterfall_calls[0]["heightmap"][1][1] == 42.0
+    assert waterfall_calls[0]["tile_size"] == 2
+    assert waterfall_calls[0]["cell_size"] == pytest.approx(2.0)
+    assert waterfall_calls[0]["world_origin_x"] == pytest.approx(-5.5)
+    assert waterfall_calls[0]["world_origin_y"] == pytest.approx(-7.5)
+    assert parsed["terrain_runtime_diagnostics"]["water_network_present"] is False
+    assert parsed["waterfall_runtime_diagnostics"][0]["authoring_path"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_compose_map_emits_explicit_waterfall_without_other_water_surfaces(monkeypatch):
+    commands: list[tuple[str, dict]] = []
+
+    async def _handler(command, params):
+        commands.append((command, dict(params)))
+        if command == "clear_scene":
+            return {"status": "success"}
+        if command == "env_generate_terrain":
+            return {
+                "status": "success",
+                "name": "OnlyFalls_Terrain",
+                "cliff_overlays": 0,
+                "hero_cliff_overlays": 0,
+                "heightmap": [
+                    [8.0, 7.0, 6.0],
+                    [5.0, 4.0, 2.0],
+                    [4.0, 1.0, 0.0],
+                ],
+                "tile_size": 2,
+                "cell_size": 1.0,
+                "world_origin_x": -2.0,
+                "world_origin_y": -2.0,
+                "water_network_present": True,
+            }
+        if command == "execute_code":
+            return {
+                "output": json.dumps(
+                    {
+                        "heightmap": [
+                            [9.0, 7.0, 6.0],
+                            [5.0, 4.5, 2.0],
+                            [4.0, 1.0, 0.0],
+                        ],
+                        "rows": 3,
+                        "cols": 3,
+                        "tile_size": 2,
+                        "cell_size": 1.0,
+                        "world_origin_x": -2.0,
+                        "world_origin_y": -2.0,
+                    }
+                )
+            }
+        if command == "env_generate_waterfall":
+            return {
+                "status": "success",
+                "name": params["name"],
+                "authoring_path": "water_network_derived",
+            }
+        if command == "auto_frame_camera":
+            return {"status": "success"}
+        raise AssertionError(f"unexpected command: {command}")
+
+    async def _fake_gate(*args, **kwargs):
+        return {
+            "status": "success",
+            "passed": True,
+            "required_profiles": ["terrain_readability", "terrain_waterfall"],
+            "failed_profiles": [],
+            "issues": [],
+            "capture_errors": [],
+            "screenshots": ["front.png"],
+            "angle_labels": ["front"],
+            "profile_results": [],
+        }
+
+    monkeypatch.setattr(
+        blender_server,
+        "get_blender_connection",
+        lambda: _DummyBlender(_handler),
+    )
+    monkeypatch.setattr(blender_server, "_run_terrain_visual_gate", _fake_gate, raising=False)
+
+    raw = await blender_server.asset_pipeline(
+        action="compose_map",
+        map_spec={
+            "name": "OnlyFalls",
+            "seed": 31,
+            "terrain": {
+                "preset": "canyon",
+                "size": 120.0,
+                "resolution": 64,
+                "height_scale": 16.0,
+            },
+            "water": {
+                "waterfalls": [
+                    {
+                        "name": "OnlyFalls_Waterfall_Explicit_0",
+                        "location": [0.0, 0.0, 2.0],
+                        "height": 6.0,
+                        "width": 4.0,
+                    }
+                ]
+            },
+            "roads": [],
+            "locations": [],
+            "props": False,
+        },
+        capture_viewport=False,
+    )
+    parsed = json.loads(raw[0])
+
+    waterfall_calls = [params for command, params in commands if command == "env_generate_waterfall"]
+    assert parsed["status"] == "review_required"
+    assert waterfall_calls
+    assert waterfall_calls[0]["require_heightmap_context"] is True
+    assert parsed["waterfall_runtime_diagnostics"][0]["authoring_path"] == "water_network_derived"
+
+
 
 @pytest.mark.asyncio
 async def test_compose_map_threads_cave_candidates_into_terrain_and_returns_terrain_carved_entrance(monkeypatch):
@@ -627,6 +875,102 @@ async def test_compose_map_threads_cave_candidates_into_terrain_and_returns_terr
     assert cave_results
     assert cave_results[0]["result"]["entrance"]["surface_mode"] == "terrain_carved"
     assert cave_results[0]["supporting_objects"] == ["TreasureCave_Chamber"]
+
+
+@pytest.mark.asyncio
+async def test_compose_map_terrain_only_skips_non_cave_locations_and_props(monkeypatch):
+    commands: list[tuple[str, dict]] = []
+
+    async def _handler(command, params):
+        commands.append((command, dict(params)))
+        if command in {
+            "clear_scene",
+            "terrain_spline_deform",
+            "terrain_flatten_zone",
+            "material_create_procedural",
+            "modify_object",
+            "auto_frame_camera",
+        }:
+            return {"status": "success"}
+        if command == "env_generate_terrain":
+            return {
+                "status": "success",
+                "name": "TerrainOnlyMap_Terrain",
+                "cliff_overlays": 1,
+                "hero_cliff_overlays": 0,
+            }
+        if command == "world_generate_cave":
+            return {"status": "success", "name": params["name"]}
+        if command in {"world_generate_settlement", "world_generate_ruins", "env_scatter_props"}:
+            raise AssertionError(f"terrain_only mode should not call {command}")
+        raise AssertionError(f"unexpected command: {command}")
+
+    async def _fake_gate(*args, **kwargs):
+        return {
+            "status": "success",
+            "passed": True,
+            "required_profiles": ["terrain_readability", "terrain_cliff", "terrain_cave"],
+            "failed_profiles": [],
+            "issues": [],
+            "capture_errors": [],
+            "screenshots": ["front.png"],
+            "angle_labels": ["front"],
+            "profile_results": [],
+        }
+
+    async def _fake_position(*args, **kwargs):
+        return None
+
+    async def _fake_sample_height(_blender, _terrain_name, x, y):
+        return 5.5 + 0.08 * float(x)
+
+    monkeypatch.setattr(
+        blender_server,
+        "get_blender_connection",
+        lambda: _DummyBlender(_handler),
+    )
+    monkeypatch.setattr(blender_server, "_run_terrain_visual_gate", _fake_gate, raising=False)
+    monkeypatch.setattr(blender_server, "_position_generated_object", _fake_position, raising=False)
+    monkeypatch.setattr(blender_server, "_sample_terrain_height", _fake_sample_height, raising=False)
+
+    raw = await blender_server.asset_pipeline(
+        action="compose_map",
+        map_spec={
+            "name": "TerrainOnlyMap",
+            "seed": 23,
+            "terrain_only": True,
+            "terrain": {
+                "preset": "mountains",
+                "size": 180.0,
+                "resolution": 64,
+                "height_scale": 20.0,
+            },
+            "locations": [
+                {"type": "settlement", "name": "ShouldNotSpawn"},
+                {"type": "ruins", "name": "AlsoSkip"},
+                {"type": "cave", "name": "KeepCave", "grid_size": 26},
+            ],
+            "props": True,
+        },
+        capture_viewport=False,
+    )
+    parsed = json.loads(raw[0])
+
+    command_names = [command for command, _ in commands]
+    assert parsed["status"] == "review_required"
+    assert "world_generate_settlement" not in command_names
+    assert "world_generate_ruins" not in command_names
+    assert "env_scatter_props" not in command_names
+    assert "world_generate_cave" in command_names
+    assert [loc["name"] for loc in parsed["locations"]] == ["KeepCave"]
+    assert any(
+        "terrain_only mode skipped 2 non-terrain locations" in warning
+        for warning in parsed["warnings"]
+    )
+    assert any(
+        "terrain_only mode disabled contextual prop scatter" in warning
+        for warning in parsed["warnings"]
+    )
 
 
 @pytest.mark.asyncio

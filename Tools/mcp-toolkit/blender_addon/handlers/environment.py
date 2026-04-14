@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import math
+import re
 import zlib
 from collections import deque
 from pathlib import Path
@@ -44,6 +45,10 @@ from ._terrain_world import (  # noqa: E402
 # They remain available in _terrain_world for direct import if needed.
 from .terrain_materials import compute_world_splatmap_weights  # noqa: E402
 from .terrain_features import generate_waterfall  # noqa: E402
+from .terrain_waterfalls_volumetric import (  # noqa: E402
+    build_waterfall_functional_object_names,
+    enforce_functional_object_naming,
+)
 from ._water_network import WaterNetwork  # noqa: E402
 from .terrain_semantics import WorldHeightTransform  # noqa: E402
 
@@ -1481,6 +1486,12 @@ def handle_generate_terrain(params: dict) -> dict:
             "controller_used": True,
             "controller_ok": not failed_passes,
             "controller_passes": [r.pass_name for r in controller_results],
+            "heightmap": heightmap.tolist(),
+            "tile_size": max(resolution - 1, 1),
+            "cell_size": float(scale) / max(resolution - 1, 1),
+            "world_origin_x": float(object_location[0]) - float(scale) * 0.5,
+            "world_origin_y": float(object_location[1]) - float(scale) * 0.5,
+            "water_network_present": getattr(controller_state, "water_network", None) is not None,
         }
         if cave_candidates:
             result["cave_candidates"] = [list(c) for c in cave_candidates]
@@ -1832,6 +1843,7 @@ def _execute_terrain_pipeline(params: dict) -> dict[str, Any]:
         TerrainMaskStack,
         TerrainPipelineState,
         TerrainSceneRead,
+        WaterSystemSpec,
     )
 
     requested_pipeline = params.get("pipeline")
@@ -1969,17 +1981,62 @@ def _execute_terrain_pipeline(params: dict) -> dict[str, Any]:
         height=height,
     )
 
+    water_system_raw = params.get("water_system_spec")
+    if not isinstance(water_system_raw, dict):
+        water_system_raw = {}
+    hero_waterfalls_raw = water_system_raw.get("hero_waterfalls", params.get("hero_waterfalls", ()))
+    if isinstance(hero_waterfalls_raw, str):
+        hero_waterfalls = (hero_waterfalls_raw,)
+    else:
+        hero_waterfalls = tuple(str(entry) for entry in (hero_waterfalls_raw or ()) if str(entry))
+    water_system_spec = WaterSystemSpec(
+        network_seed=int(water_system_raw.get("network_seed", seed)),
+        min_drainage_area=float(water_system_raw.get("min_drainage_area", params.get("min_drainage_area", 500.0))),
+        river_threshold=float(water_system_raw.get("river_threshold", params.get("river_threshold", 2000.0))),
+        lake_min_area=float(water_system_raw.get("lake_min_area", params.get("lake_min_area", 100.0))),
+        meander_amplitude=float(water_system_raw.get("meander_amplitude", params.get("meander_amplitude", 0.0))),
+        bank_asymmetry=float(water_system_raw.get("bank_asymmetry", params.get("bank_asymmetry", 0.0))),
+        tidal_range=float(water_system_raw.get("tidal_range", params.get("tidal_range", 0.0))),
+        hero_waterfalls=hero_waterfalls,
+        braided_channels=bool(water_system_raw.get("braided_channels", params.get("braided_channels", False))),
+        estuaries=bool(water_system_raw.get("estuaries", params.get("estuaries", False))),
+        karst_springs=bool(water_system_raw.get("karst_springs", params.get("karst_springs", False))),
+        perched_lakes=bool(water_system_raw.get("perched_lakes", params.get("perched_lakes", False))),
+        hot_springs=bool(water_system_raw.get("hot_springs", params.get("hot_springs", False))),
+        wetlands=bool(water_system_raw.get("wetlands", params.get("wetlands", False))),
+        seasonal_state=str(water_system_raw.get("seasonal_state", params.get("seasonal_state", "normal"))),
+    )
+
     intent = TerrainIntentState(
         seed=seed,
         region_bounds=region_bounds,
         tile_size=tile_size,
         cell_size=cell_size,
         protected_zones=tuple(protected_zones),
+        water_system_spec=water_system_spec,
         erosion_profile=str(params.get("erosion_profile", "temperate")),
         scene_read=scene_read,
     )
 
     state = TerrainPipelineState(intent=intent, mask_stack=mask_stack)
+    try:
+        state.water_network = WaterNetwork.from_heightmap(
+            height,
+            cell_size=cell_size,
+            world_origin_x=world_origin_x,
+            world_origin_y=world_origin_y,
+            tile_size=tile_size,
+            min_drainage_area=water_system_spec.min_drainage_area,
+            river_threshold=water_system_spec.river_threshold,
+            lake_min_area=water_system_spec.lake_min_area,
+            seed=water_system_spec.network_seed,
+        )
+    except Exception as water_network_exc:
+        logger.debug(
+            "Terrain pipeline water network generation skipped: %s",
+            water_network_exc,
+            exc_info=True,
+        )
 
     # --- Protocol enforcement (Bundle R, Addendum 1.A.2) -------------------
     # Every production mutation handler MUST route through ProtocolGate.
@@ -2145,11 +2202,29 @@ def handle_run_terrain_pass(params: dict) -> dict:
 def handle_generate_waterfall(params: dict) -> dict:
     """Generate a waterfall from water-network context when available.
 
-    The legacy terrain-feature mesh generator remains as a compatibility
-    fallback, but public terrain-water authoring should supply a heightmap so
-    the waterfall is derived from hydrologic context.
+    The legacy terrain-feature mesh generator remains available only via an
+    explicit opt-in fallback flag; public terrain-water authoring should
+    supply a heightmap so the waterfall is derived from hydrologic context.
     """
+    def _coerce_facing_direction(raw_value: Any) -> tuple[float, float]:
+        if isinstance(raw_value, (list, tuple)) and len(raw_value) >= 2:
+            dx = float(raw_value[0])
+            dy = float(raw_value[1])
+            if abs(dx) > 1e-6 or abs(dy) > 1e-6:
+                return dx, dy
+        return 0.0, -1.0
+
+    facing_direction: tuple[float, float] = _coerce_facing_direction(
+        params.get("facing_direction")
+    )
+    require_heightmap_context = bool(params.get("require_heightmap_context", False))
+    allow_legacy_geometry_fallback = bool(params.get("allow_legacy_geometry_fallback", False))
     heightmap_raw = params.get("heightmap")
+    if heightmap_raw is None and (require_heightmap_context or not allow_legacy_geometry_fallback):
+        raise ValueError(
+            "env_generate_waterfall requires heightmap/water-network context; "
+            "pass allow_legacy_geometry_fallback=True to opt into the deprecated geometry fallback"
+        )
     if heightmap_raw is not None:
         heightmap = np.asarray(heightmap_raw, dtype=np.float64)
         if heightmap.ndim != 2:
@@ -2181,6 +2256,38 @@ def handle_generate_waterfall(params: dict) -> dict:
             raise ValueError("No waterfall candidates were detected in the supplied tile")
 
         chosen = waterfalls[0]
+        requested_location = params.get("location")
+        if (
+            len(waterfalls) > 1
+            and isinstance(requested_location, (list, tuple))
+            and len(requested_location) >= 3
+        ):
+            target_x = float(requested_location[0])
+            target_y = float(requested_location[1])
+            target_z = float(requested_location[2])
+
+            def _candidate_score(candidate: dict[str, Any]) -> float:
+                best = float("inf")
+                for anchor_key in ("top", "bottom"):
+                    anchor = candidate.get(anchor_key)
+                    if not isinstance(anchor, (list, tuple)) or len(anchor) < 3:
+                        continue
+                    dx = float(anchor[0]) - target_x
+                    dy = float(anchor[1]) - target_y
+                    dz = float(anchor[2]) - target_z
+                    best = min(best, dx * dx + dy * dy + dz * dz)
+                return best
+
+            chosen = min(waterfalls, key=_candidate_score)
+        top = chosen.get("top")
+        bottom = chosen.get("bottom")
+        if params.get("facing_direction") is None and isinstance(top, (list, tuple)) and isinstance(bottom, (list, tuple)):
+            facing_direction = _coerce_facing_direction(
+                (
+                    float(bottom[0]) - float(top[0]),
+                    float(bottom[1]) - float(top[1]),
+                )
+            )
         fallback = generate_waterfall(
             height=max(float(chosen["drop"]), 1.0),
             width=max(float(chosen["width"]), 1.0),
@@ -2188,26 +2295,133 @@ def handle_generate_waterfall(params: dict) -> dict:
             num_steps=int(params.get("num_steps", 3)),
             has_cave_behind=bool(params.get("has_cave_behind", True)),
             seed=int(params.get("seed", 42)),
+            facing_direction=facing_direction,
         )
         fallback["authoring_path"] = "water_network_derived"
         fallback["waterfall_feature"] = chosen
         fallback["waterfall_candidates"] = len(waterfalls)
-        return fallback
+        result = fallback
+    else:
+        legacy = generate_waterfall(
+            height=params.get("height", 10.0),
+            width=params.get("width", 3.0),
+            pool_radius=params.get("pool_radius", 4.0),
+            num_steps=params.get("num_steps", 3),
+            has_cave_behind=params.get("has_cave_behind", True),
+            seed=params.get("seed", 42),
+            facing_direction=facing_direction,
+        )
+        legacy["authoring_path"] = "legacy_geometry_fallback"
+        legacy["warning"] = (
+            "env_generate_waterfall used deprecated geometry fallback; "
+            "supply heightmap/water-network context instead."
+        )
+        result = legacy
 
-    legacy = generate_waterfall(
-        height=params.get("height", 10.0),
-        width=params.get("width", 3.0),
-        pool_radius=params.get("pool_radius", 4.0),
-        num_steps=params.get("num_steps", 3),
-        has_cave_behind=params.get("has_cave_behind", True),
-        seed=params.get("seed", 42),
+    mesh_payload = result.get("mesh", {}) if isinstance(result, dict) else {}
+    object_name_raw = params.get("name") or params.get("object_name")
+    mesh_spec = {
+        "vertices": list(mesh_payload.get("vertices", []) or []),
+        "faces": list(mesh_payload.get("faces", []) or []),
+        "material_ids": list(result.get("material_indices", []) or []),
+        "metadata": {
+            "name": str(object_name_raw or "Waterfall"),
+            "category": "terrain_feature",
+            "feature_kind": "waterfall",
+        },
+    }
+    if not mesh_spec["vertices"] or not mesh_spec["faces"]:
+        return result
+
+    location_raw = params.get("location", (0.0, 0.0, 0.0))
+    location = (
+        float(location_raw[0]) if len(location_raw) >= 1 else 0.0,
+        float(location_raw[1]) if len(location_raw) >= 2 else 0.0,
+        float(location_raw[2]) if len(location_raw) >= 3 else 0.0,
     )
-    legacy["authoring_path"] = "legacy_geometry_fallback"
-    legacy["warning"] = (
-        "env_generate_waterfall should be driven from heightmap/water-network "
-        "context; this call used legacy geometry fallback."
+    chain_id = _resolve_waterfall_chain_id(
+        result,
+        object_name=object_name_raw,
+        fallback_location=location,
     )
-    return legacy
+    functional_objects = build_waterfall_functional_object_names(chain_id)
+    authored_names_raw = params.get("functional_object_names")
+    authored_names = [
+        str(name)
+        for name in authored_names_raw
+        if str(name).strip()
+    ] if isinstance(authored_names_raw, (list, tuple)) else functional_objects.as_list()
+    result["functional_object_chain_id"] = chain_id
+    result["functional_objects"] = {
+        "river_surface": functional_objects.river_surface,
+        "sheet_volume": functional_objects.sheet_volume,
+        "impact_pool": functional_objects.impact_pool,
+        "foam_layer": functional_objects.foam_layer,
+        "mist_volume": functional_objects.mist_volume,
+        "splash_particles": functional_objects.splash_particles,
+        "wet_rock_material_zone": functional_objects.wet_rock_material_zone,
+    }
+    result["functional_object_names"] = functional_objects.as_list()
+    result["functional_object_positions"] = _infer_waterfall_functional_positions(
+        result,
+        origin=location,
+    )
+    result["functional_object_contract_issues"] = _serialize_validation_issues(
+        enforce_functional_object_naming(authored_names, chain_id)
+    )
+    result["functional_objects_materialized"] = False
+    result["functional_objects_created"] = []
+
+    if not object_name_raw and not bool(params.get("materialize_object", False)):
+        return result
+
+    rotation_raw = params.get("rotation", (0.0, 0.0, 0.0))
+    rotation = (
+        float(rotation_raw[0]) if len(rotation_raw) >= 1 else 0.0,
+        float(rotation_raw[1]) if len(rotation_raw) >= 2 else 0.0,
+        float(rotation_raw[2]) if len(rotation_raw) >= 3 else float(params.get("rotation_z", 0.0)),
+    )
+    parent_name = params.get("parent_name")
+    parent_obj = bpy.data.objects.get(str(parent_name)) if parent_name else None
+
+    obj = _create_mesh_object_from_spec(
+        mesh_spec,
+        object_name=str(object_name_raw or "Waterfall"),
+        location=location,
+        rotation=rotation,
+        parent=parent_obj,
+    )
+    if obj is not None and not isinstance(obj, dict):
+        try:
+            mat = _ensure_water_material(
+                f"{obj.name}_Water",
+                preview_fast=bool(params.get("preview_fast", False)),
+                surface_only=True,
+            )
+            if mat is not None and hasattr(obj.data, "materials"):
+                obj.data.materials.clear()
+                obj.data.materials.append(mat)
+        except Exception:
+            logger.debug("Failed to assign waterfall material to %s", getattr(obj, "name", object_name_raw), exc_info=True)
+        try:
+            created_names = _publish_waterfall_functional_objects(
+                result["functional_objects"],
+                positions=result["functional_object_positions"],
+                parent=obj,
+                render_object_name=getattr(obj, "name", str(object_name_raw or "Waterfall")),
+            )
+            result["functional_objects_materialized"] = bool(created_names)
+            result["functional_objects_created"] = created_names
+        except Exception:
+            logger.debug(
+                "Failed to publish waterfall functional objects for %s",
+                getattr(obj, "name", object_name_raw),
+                exc_info=True,
+            )
+
+    result["name"] = getattr(obj, "name", str(object_name_raw or "Waterfall"))
+    result["object_created"] = obj is not None
+    return result
 
 
 def handle_stitch_terrain_edges(params: dict) -> dict:
@@ -3180,6 +3394,190 @@ def _create_mesh_object_from_spec(
     return obj
 
 
+def _sanitize_waterfall_chain_id(raw_value: Any) -> str:
+    """Return a stable lowercase chain id suitable for WF_<chain>_<suffix> names."""
+    cleaned = re.sub(r"[^a-z0-9]+", "_", str(raw_value or "").strip().lower()).strip("_")
+    return cleaned or "waterfall"
+
+
+def _serialize_validation_issues(issues: list[Any]) -> list[dict[str, Any]]:
+    """Convert ValidationIssue-like objects into plain dicts for handler results."""
+    serialized: list[dict[str, Any]] = []
+    for issue in issues:
+        serialized.append(
+            {
+                "code": str(getattr(issue, "code", "")),
+                "severity": str(getattr(issue, "severity", "")),
+                "location": list(getattr(issue, "location", ()) or ()),
+                "affected_feature": getattr(issue, "affected_feature", None),
+                "message": str(getattr(issue, "message", "")),
+                "remediation": getattr(issue, "remediation", None),
+            }
+        )
+    return serialized
+
+
+def _coerce_point3(raw_value: Any, fallback: tuple[float, float, float]) -> tuple[float, float, float]:
+    """Coerce a point-like value into XYZ floats, falling back when invalid."""
+    if isinstance(raw_value, (list, tuple)) and len(raw_value) >= 3:
+        try:
+            return (
+                float(raw_value[0]),
+                float(raw_value[1]),
+                float(raw_value[2]),
+            )
+        except (TypeError, ValueError):
+            pass
+    return fallback
+
+
+def _offset_point3(
+    point: tuple[float, float, float],
+    offset: tuple[float, float, float],
+) -> tuple[float, float, float]:
+    """Translate a local XYZ point by a world-space offset."""
+    return (
+        float(point[0]) + float(offset[0]),
+        float(point[1]) + float(offset[1]),
+        float(point[2]) + float(offset[2]),
+    )
+
+
+def _resolve_waterfall_chain_id(
+    result: dict[str, Any],
+    *,
+    object_name: Any,
+    fallback_location: tuple[float, float, float],
+) -> str:
+    """Derive a deterministic chain id from runtime waterfall data."""
+    feature = result.get("waterfall_feature")
+    if isinstance(feature, dict):
+        explicit_chain = feature.get("chain_id")
+        if explicit_chain:
+            return _sanitize_waterfall_chain_id(explicit_chain)
+        top = feature.get("top")
+        if isinstance(top, (list, tuple)) and len(top) >= 2:
+            return _sanitize_waterfall_chain_id(
+                f"{int(float(top[0]) * 100)}_{int(float(top[1]) * 100)}"
+            )
+    if object_name:
+        return _sanitize_waterfall_chain_id(object_name)
+    return _sanitize_waterfall_chain_id(
+        f"{int(float(fallback_location[0]) * 100)}_"
+        f"{int(float(fallback_location[1]) * 100)}_"
+        f"{int(float(fallback_location[2]) * 100)}"
+    )
+
+
+def _infer_waterfall_functional_positions(
+    result: dict[str, Any],
+    *,
+    origin: tuple[float, float, float],
+) -> dict[str, list[float]]:
+    """Infer stable world-space anchors for the 7 functional waterfall objects."""
+    dims = result.get("dimensions", {}) if isinstance(result, dict) else {}
+    height = max(float(dims.get("height", 1.0)), 1.0)
+
+    feature = result.get("waterfall_feature")
+    feature_top = feature.get("top") if isinstance(feature, dict) else None
+    feature_bottom = feature.get("bottom") if isinstance(feature, dict) else None
+    top = _coerce_point3(feature_top, (origin[0], origin[1], origin[2] + height))
+    bottom = _coerce_point3(feature_bottom, origin)
+
+    pool_info = result.get("pool", {}) if isinstance(result, dict) else {}
+    pool_center = _offset_point3(
+        _coerce_point3(pool_info.get("center"), (0.0, 0.0, 0.0)),
+        origin,
+    )
+    splash_zone = result.get("splash_zone", {}) if isinstance(result, dict) else {}
+    splash_center = _offset_point3(
+        _coerce_point3(splash_zone.get("center"), pool_center),
+        origin,
+    )
+
+    if feature_bottom is not None:
+        pool_center = bottom
+        splash_center = bottom
+
+    mid_point = (
+        (top[0] + bottom[0]) * 0.5,
+        (top[1] + bottom[1]) * 0.5,
+        (top[2] + bottom[2]) * 0.5,
+    )
+    wet_rock_center = (
+        (mid_point[0] + pool_center[0]) * 0.5,
+        (mid_point[1] + pool_center[1]) * 0.5,
+        (mid_point[2] + pool_center[2]) * 0.5,
+    )
+
+    return {
+        "river_surface": [float(top[0]), float(top[1]), float(top[2])],
+        "sheet_volume": [float(mid_point[0]), float(mid_point[1]), float(mid_point[2])],
+        "impact_pool": [float(pool_center[0]), float(pool_center[1]), float(pool_center[2])],
+        "foam_layer": [float(splash_center[0]), float(splash_center[1]), float(splash_center[2])],
+        "mist_volume": [
+            float(splash_center[0]),
+            float(splash_center[1]),
+            float(splash_center[2] + max(height * 0.08, 0.75)),
+        ],
+        "splash_particles": [
+            float(pool_center[0]),
+            float(pool_center[1]),
+            float(pool_center[2] + max(height * 0.04, 0.35)),
+        ],
+        "wet_rock_material_zone": [
+            float(wet_rock_center[0]),
+            float(wet_rock_center[1]),
+            float(wet_rock_center[2]),
+        ],
+    }
+
+
+def _publish_waterfall_functional_objects(
+    object_names: dict[str, str],
+    *,
+    positions: dict[str, list[float]],
+    parent: Any | None,
+    render_object_name: str | None,
+) -> list[str]:
+    """Materialize named waterfall anchors as empties for downstream lookup."""
+    if bpy is None:
+        return []
+
+    created: list[str] = []
+    collection = bpy.context.collection
+    if parent is not None:
+        user_collections = getattr(parent, "users_collection", None)
+        if user_collections:
+            collection = user_collections[0]
+
+    for role, object_name in object_names.items():
+        anchor = bpy.data.objects.get(object_name)
+        if anchor is None:
+            anchor = bpy.data.objects.new(object_name, None)
+            collection.objects.link(anchor)
+        if hasattr(anchor, "empty_display_type"):
+            anchor.empty_display_type = "PLAIN_AXES"
+        if hasattr(anchor, "empty_display_size"):
+            anchor.empty_display_size = 0.45 if role == "sheet_volume" else 0.30
+        anchor.location = tuple(float(v) for v in positions.get(role, (0.0, 0.0, 0.0)))
+        if parent is not None:
+            anchor.parent = parent
+            matrix_parent_inverse = getattr(anchor, "matrix_parent_inverse", None)
+            if matrix_parent_inverse is not None and hasattr(parent, "matrix_world"):
+                try:
+                    anchor.matrix_parent_inverse = parent.matrix_world.inverted()
+                except Exception:
+                    if hasattr(matrix_parent_inverse, "identity"):
+                        matrix_parent_inverse.identity()
+        anchor["vb_waterfall_role"] = role
+        if render_object_name:
+            anchor["vb_render_object"] = str(render_object_name)
+        created.append(anchor.name)
+
+    return created
+
+
 def handle_create_cave_entrance(params: dict) -> dict:
     """Create a terrain-facing cave entrance mesh object from the pure generator."""
     from ._terrain_depth import generate_cave_entrance_mesh
@@ -3741,6 +4139,151 @@ def _apply_water_object_settings(obj: Any, *, surface_only: bool) -> None:
             pass
 
 
+def _build_terrain_world_height_sampler(terrain_obj: Any) -> Callable[[float, float], float] | None:
+    """Return a bilinear world-space height sampler for regular-grid terrain meshes."""
+    terrain_mesh = getattr(terrain_obj, "data", None)
+    terrain_vertices = list(getattr(terrain_mesh, "vertices", []) or [])
+    if len(terrain_vertices) < 4:
+        return None
+
+    rows, cols = _detect_grid_dims_from_vertices(terrain_vertices)
+    if rows < 2 or cols < 2 or rows * cols != len(terrain_vertices):
+        return None
+
+    world_points = [
+        _object_world_xyz(terrain_obj, getattr(vert, "co", vert))
+        for vert in terrain_vertices
+    ]
+    xs = [point[0] for point in world_points]
+    ys = [point[1] for point in world_points]
+    min_x = min(xs)
+    max_x = max(xs)
+    min_y = min(ys)
+    max_y = max(ys)
+    span_x = max(max_x - min_x, 1e-9)
+    span_y = max(max_y - min_y, 1e-9)
+    heights = np.asarray([point[2] for point in world_points], dtype=np.float64).reshape(rows, cols)
+
+    def _sample(world_x: float, world_y: float) -> float:
+        col_f = ((float(world_x) - min_x) / span_x) * max(cols - 1, 1)
+        row_f = ((float(world_y) - min_y) / span_y) * max(rows - 1, 1)
+        col_f = max(0.0, min(float(cols - 1), col_f))
+        row_f = max(0.0, min(float(rows - 1), row_f))
+
+        c0 = min(int(math.floor(col_f)), cols - 1)
+        r0 = min(int(math.floor(row_f)), rows - 1)
+        c1 = min(c0 + 1, cols - 1)
+        r1 = min(r0 + 1, rows - 1)
+        cf = col_f - c0
+        rf = row_f - r0
+
+        h00 = float(heights[r0, c0])
+        h10 = float(heights[r0, c1])
+        h01 = float(heights[r1, c0])
+        h11 = float(heights[r1, c1])
+        return (
+            h00 * (1.0 - cf) * (1.0 - rf)
+            + h10 * cf * (1.0 - rf)
+            + h01 * (1.0 - cf) * rf
+            + h11 * cf * rf
+        )
+
+    return _sample
+
+
+def _resolve_river_bank_contact(
+    *,
+    terrain_height_sampler: Callable[[float, float], float] | None,
+    center_x: float,
+    center_y: float,
+    surface_z: float,
+    normal_x: float,
+    normal_y: float,
+    default_half_width: float,
+    side_sign: float,
+) -> tuple[float, float]:
+    """Solve a cross-section bank edge against the terrain height field."""
+    if terrain_height_sampler is None:
+        return float(default_half_width), float(surface_z)
+
+    target_clearance = 0.035
+    max_dist = max(float(default_half_width) * 1.55, 1.25)
+    steps = 16
+
+    prev_dist = 0.0
+    prev_height = float(
+        terrain_height_sampler(
+            center_x + normal_x * side_sign * prev_dist,
+            center_y + normal_y * side_sign * prev_dist,
+        )
+    )
+    prev_delta = prev_height - float(surface_z)
+    best_dist = prev_dist
+    best_height = prev_height
+    best_score = abs(prev_delta - target_clearance)
+
+    for step in range(1, steps + 1):
+        dist = max_dist * (step / steps)
+        sample_x = center_x + normal_x * side_sign * dist
+        sample_y = center_y + normal_y * side_sign * dist
+        terrain_z = float(terrain_height_sampler(sample_x, sample_y))
+        delta = terrain_z - float(surface_z)
+        score = abs(delta - target_clearance)
+        if score < best_score:
+            best_score = score
+            best_dist = dist
+            best_height = terrain_z
+
+        if delta >= target_clearance:
+            if prev_delta < target_clearance and abs(delta - prev_delta) > 1e-6:
+                blend = max(
+                    0.0,
+                    min(1.0, (target_clearance - prev_delta) / (delta - prev_delta)),
+                )
+                resolved_dist = prev_dist + (dist - prev_dist) * blend
+                resolved_height = prev_height + (terrain_z - prev_height) * blend
+                return float(resolved_dist), float(resolved_height)
+            return float(dist), float(terrain_z)
+
+        prev_dist = dist
+        prev_height = terrain_z
+        prev_delta = delta
+
+    return max(0.08, float(best_dist)), float(best_height)
+
+
+def _resolve_river_terminal_width_scale(
+    ring_index: int,
+    ring_count: int,
+    *,
+    taper_rings: int,
+    min_scale: float = 0.12,
+) -> float:
+    """Return a width multiplier that narrows exposed river terminals."""
+    if ring_count <= 2 or taper_rings <= 0:
+        return 1.0
+
+    usable_taper = min(
+        max(int(taper_rings), 0),
+        max((int(ring_count) - 1) // 2, 0),
+    )
+    if usable_taper <= 0:
+        return 1.0
+
+    taper_scale = 1.0
+    for distance_to_end in (int(ring_index), int(ring_count) - 1 - int(ring_index)):
+        if distance_to_end > usable_taper:
+            continue
+        if distance_to_end <= 0:
+            local_scale = float(min_scale)
+        else:
+            blend = _smootherstep(distance_to_end / max(float(usable_taper), 1.0))
+            local_scale = float(min_scale) + (1.0 - float(min_scale)) * blend
+        taper_scale = min(taper_scale, local_scale)
+
+    return max(float(min_scale), min(1.0, float(taper_scale)))
+
+
 def _boundary_edges_from_faces(faces: list[tuple[int, ...]]) -> list[tuple[int, int]]:
     """Return boundary edges for a manifold-ish quad/tri face list."""
     edge_counts: dict[tuple[int, int], int] = {}
@@ -4051,7 +4594,7 @@ def handle_create_water(params: dict) -> dict:
     """Create a water body -- spline-based surface mesh with AAA flow data.
 
     AAA upgrade (39-02): replaces flat disc placeholder with a spline-following
-    mesh that encodes flow speed, direction, and foam as vertex colors.  A simple
+    mesh that encodes bank proximity, flow direction, and foam as vertex colors. A simple
     grid fallback is used when no path_points are provided.
 
     Params:
@@ -4066,10 +4609,10 @@ def handle_create_water(params: dict) -> dict:
         cross_sections (int, default 12): Subdivisions perpendicular to flow.
 
     Vertex color layer "flow_vc" RGBA convention:
-        R = flow speed  (0=still, 1=fast; narrower channel = faster)
+        R = shallow/bank cue (0=deep center, 1=bank contact)
         G = flow dir X  (normalised, remapped to 0-1)
-        B = flow dir Z  (normalised, remapped to 0-1)
-        A = foam        (1.0 where depth<0.2m or speed>0.8, else 0.0)
+        B = flow dir Y  (normalised, remapped to 0-1)
+        A = foam        (shore proximity + speed; blended from shore_foam and speed_foam)
 
     Returns dict with: name, water_level, area, tri_count, vertex_count,
                        has_flow_vertex_colors, has_shore_alpha.
@@ -4083,11 +4626,21 @@ def handle_create_water(params: dict) -> dict:
     fallback_depth = float(params.get("depth", 100.0))
     material_name = params.get("material_name")
     path_points_raw = params.get("path_points")
-    cross_sections = max(10, min(18, int(params.get("cross_sections", 14))))
+    cross_sections = max(8, min(16, int(params.get("cross_sections", 12))))
     preview_fast = bool(params.get("preview_fast", True))
     surface_only = bool(params.get("surface_only", False))
     if not material_name:
         material_name = "Water_Surface_Material" if surface_only else "Water_Material"
+    terminal_taper_enabled = bool(params.get("taper_terminals", surface_only))
+    terminal_taper_rings = max(
+        0,
+        int(
+            params.get(
+                "terminal_taper_rings",
+                min(4, max(len(path_points_raw or []) // 3, 0)),
+            )
+        ),
+    )
     mask_center_raw = params.get("mask_center")
     mask_center = None
     if isinstance(mask_center_raw, (list, tuple)) and len(mask_center_raw) >= 2:
@@ -4099,11 +4652,14 @@ def handle_create_water(params: dict) -> dict:
     terrain_origin_x = 0.0
     terrain_origin_y = 0.0
     terrain_obj = None
+    terrain_height_sampler: Callable[[float, float], float] | None = None
     if terrain_name:
         terrain_obj = bpy.data.objects.get(terrain_name)
-        if terrain_obj is not None and path_points_raw is None:
+        if terrain_obj is not None:
             terrain_origin_x = terrain_obj.location.x
             terrain_origin_y = terrain_obj.location.y
+            terrain_height_sampler = _build_terrain_world_height_sampler(terrain_obj)
+        if terrain_obj is not None and path_points_raw is None:
             dims = terrain_obj.dimensions
             fallback_depth = max(dims.y, fallback_depth)
             if width_raw is None:
@@ -4240,31 +4796,74 @@ def handle_create_water(params: dict) -> dict:
 
         # Normalised flow direction components (remapped 0-1)
         flow_dir_x = (tx + 1.0) * 0.5
-        flow_dir_z = (ty + 1.0) * 0.5
+        flow_dir_y = (ty + 1.0) * 0.5
 
         flow_speed = flow_speeds[pi]
+        left_bank_dist, left_bank_height = _resolve_river_bank_contact(
+            terrain_height_sampler=terrain_height_sampler,
+            center_x=px,
+            center_y=py,
+            surface_z=pz,
+            normal_x=perp_x,
+            normal_y=perp_y,
+            default_half_width=half_w,
+            side_sign=-1.0,
+        )
+        right_bank_dist, right_bank_height = _resolve_river_bank_contact(
+            terrain_height_sampler=terrain_height_sampler,
+            center_x=px,
+            center_y=py,
+            surface_z=pz,
+            normal_x=perp_x,
+            normal_y=perp_y,
+            default_half_width=half_w,
+            side_sign=1.0,
+        )
 
         # v coordinate for this ring (along flow direction)
         ring_v = cumulative_length[pi] / UV_TILE
 
         ring_verts = []
+        terminal_width_scale = (
+            _resolve_river_terminal_width_scale(
+                pi,
+                len(path),
+                taper_rings=terminal_taper_rings,
+            )
+            if terminal_taper_enabled
+            else 1.0
+        )
         for ci in range(cross_sections + 1):
             t = ci / cross_sections  # 0 = left shore, 1 = right shore
             offset = (t - 0.5) * 2.0  # -1 to +1
-            vx = px + perp_x * offset * half_w
-            vy = py + perp_y * offset * half_w
+            if offset < 0.0:
+                signed_dist = -left_bank_dist * terminal_width_scale * (abs(offset) ** 0.94)
+                edge_bank_height = left_bank_height
+            else:
+                signed_dist = right_bank_dist * terminal_width_scale * (abs(offset) ** 0.94)
+                edge_bank_height = right_bank_height
+            vx = px + perp_x * signed_dist
+            vy = py + perp_y * signed_dist
             # Shore depth proxy: 0 at edges, 1 at center
             shore_t = 1.0 - abs(offset)  # 0.0 at shore, 1.0 at centre
-            bank_drop = (1.0 - shore_t) ** 1.55 * min(max(channel_depth * 0.065, 0.05), 0.24)
-            vz = pz - bank_drop
-            bottom_z = vz - max(channel_depth * (0.18 + shore_t * 0.82), 0.24)
+            if terrain_height_sampler is not None:
+                terrain_z_here = float(terrain_height_sampler(vx, vy))
+                edge_gap = max(edge_bank_height - pz, 0.0)
+                edge_sink = min(edge_gap * 0.18, 0.025) * (1.0 - shore_t)
+                vz = pz - edge_sink
+                bottom_target = terrain_z_here - max(0.18, (1.0 - shore_t) * 0.24)
+                bottom_z = min(vz - max(channel_depth * (0.16 + shore_t * 0.84), 0.24), bottom_target)
+            else:
+                bank_drop = (1.0 - shore_t) ** 1.55 * min(max(channel_depth * 0.065, 0.05), 0.24)
+                vz = pz - bank_drop
+                bottom_z = vz - max(channel_depth * (0.18 + shore_t * 0.82), 0.24)
 
             # u coordinate across cross-section [0..1]
             ring_u = t
 
             top_vert = bm.verts.new((vx, vy, vz))
             bottom_vert = None if surface_only else bm.verts.new((vx, vy, bottom_z))
-            ring_verts.append((top_vert, bottom_vert, shore_t, flow_speed, flow_dir_x, flow_dir_z, ring_u, ring_v))
+            ring_verts.append((top_vert, bottom_vert, shore_t, flow_speed, flow_dir_x, flow_dir_y, ring_u, ring_v))
         rings.append(ring_verts)
 
     # Connect rings into quads
@@ -4287,8 +4886,10 @@ def handle_create_water(params: dict) -> dict:
                 ]
                 for loop, (sh, sp, fdx, fdz, uv_u, uv_v) in zip(face.loops, loop_data):
                     shallow_fac = 1.0 - sh
-                    turbulence = max(0.0, sp - 0.97) * 0.35
-                    foam = max(0.0, min(1.0, (shallow_fac - 0.36) * 1.95 + turbulence))
+                    # Foam from shore proximity + high flow speed
+                    shore_foam = max(0.0, (shallow_fac - 0.4) * 2.0)
+                    speed_foam = max(0.0, (sp - 0.7) * 1.5)
+                    foam = min(1.0, shore_foam + speed_foam)
                     loop[flow_layer] = (shallow_fac, fdx, fdz, foam)
                     loop[uv_layer].uv = (uv_u, uv_v)
             except ValueError:
@@ -4410,6 +5011,7 @@ def handle_create_water(params: dict) -> dict:
         "path_point_count": len(path),
         "preview_fast": preview_fast,
         "surface_mode": "spline",
+        "terminal_taper_rings": terminal_taper_rings if terminal_taper_enabled else 0,
         "water_depth": channel_depth,
         "has_volume_geometry": not surface_only,
     }
@@ -4730,6 +5332,7 @@ def handle_generate_multi_biome_world(params: dict) -> dict:
         "erosion": params.get("erosion", "hydraulic"),
         "erosion_iterations": params.get("erosion_iterations", 5000),
         "flatten_zones": spec.flatten_zones,
+        "use_controller": True,
     }
     terrain_result = handle_generate_terrain(terrain_params)
 

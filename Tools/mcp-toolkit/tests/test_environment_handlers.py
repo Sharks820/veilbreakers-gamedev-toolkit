@@ -661,6 +661,12 @@ class TestControllerTerrainPath:
         assert result["controller_used"] is True
         assert result["controller_ok"] is True
         assert result["hero_cliff_overlays"] == 1
+        assert result["heightmap"] == height.tolist()
+        assert result["tile_size"] == 2
+        assert result["cell_size"] == pytest.approx(16.0)
+        assert result["world_origin_x"] == pytest.approx(-16.0)
+        assert result["world_origin_y"] == pytest.approx(-16.0)
+        assert result["water_network_present"] is False
 
     def test_controller_path_threads_cave_candidates_but_defers_cave_pipeline_by_default(self):
         from blender_addon.handlers import environment as env_mod
@@ -819,6 +825,150 @@ class TestWorldTerrainGeneration:
             (0, 0), (1, 0), (0, 1), (1, 1),
         }
 
+
+def test_execute_terrain_pipeline_wires_water_network_and_spec():
+    from blender_addon.handlers import environment as env_mod
+
+    height = np.linspace(16.0, 0.0, 9 * 9, dtype=np.float64).reshape(9, 9)
+    execution = env_mod._execute_terrain_pipeline(
+        {
+            "tile_size": 8,
+            "cell_size": 2.0,
+            "seed": 19,
+            "terrain_type": "hills",
+            "height": height,
+            "pipeline": ["macro_world"],
+            "min_drainage_area": 123.0,
+            "river_threshold": 456.0,
+            "lake_min_area": 12.0,
+            "braided_channels": True,
+            "seasonal_state": "flood",
+        }
+    )
+
+    state = execution["state"]
+    assert state.water_network is not None
+    assert state.intent.water_system_spec is not None
+    assert state.intent.water_system_spec.min_drainage_area == pytest.approx(123.0)
+    assert state.intent.water_system_spec.river_threshold == pytest.approx(456.0)
+    assert state.intent.water_system_spec.lake_min_area == pytest.approx(12.0)
+    assert state.intent.water_system_spec.braided_channels is True
+    assert state.intent.water_system_spec.seasonal_state == "flood"
+
+
+def test_handle_generate_waterfall_materializes_object_and_threads_direction():
+    from blender_addon.handlers import environment as env_mod
+
+    captured: dict[str, object] = {}
+
+    class _DummyMaterials(list):
+        def clear(self):
+            del self[:]
+
+    dummy_obj = SimpleNamespace(
+        name="HeroFalls",
+        data=SimpleNamespace(materials=_DummyMaterials()),
+    )
+
+    def _fake_generate_waterfall(**kwargs):
+        captured["facing_direction"] = kwargs["facing_direction"]
+        return {
+            "mesh": {
+                "vertices": [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+                "faces": [(0, 1, 2)],
+            },
+            "material_indices": [0],
+            "dimensions": {"height": kwargs["height"], "width": kwargs["width"]},
+            "vertex_count": 3,
+            "face_count": 1,
+        }
+
+    def _fake_create_mesh(spec, **kwargs):
+        captured["mesh_spec"] = spec
+        captured["location"] = kwargs["location"]
+        return dummy_obj
+
+    with patch.object(env_mod, "generate_waterfall", side_effect=_fake_generate_waterfall), \
+         patch.object(env_mod, "_create_mesh_object_from_spec", side_effect=_fake_create_mesh), \
+         patch.object(env_mod, "_ensure_water_material", return_value=object()):
+        result = env_mod.handle_generate_waterfall(
+            {
+                "name": "HeroFalls",
+                "height": 12.0,
+                "width": 4.0,
+                "location": [1.0, 2.0, 3.0],
+                "facing_direction": [1.0, 0.0],
+                "materialize_object": True,
+                "allow_legacy_geometry_fallback": True,
+            }
+        )
+
+    assert captured["facing_direction"] == (1.0, 0.0)
+    assert captured["location"] == (1.0, 2.0, 3.0)
+    assert captured["mesh_spec"]["material_ids"] == [0]
+    assert result["name"] == "HeroFalls"
+    assert result["object_created"] is True
+    assert len(dummy_obj.data.materials) == 1
+
+
+def test_handle_generate_waterfall_can_require_heightmap_context():
+    from blender_addon.handlers import environment as env_mod
+
+    with pytest.raises(ValueError, match="requires heightmap/water-network context"):
+        env_mod.handle_generate_waterfall(
+            {
+                "name": "StrictFalls",
+                "height": 9.0,
+                "width": 3.0,
+            }
+        )
+
+    legacy = env_mod.handle_generate_waterfall(
+        {
+            "height": 9.0,
+            "width": 3.0,
+            "allow_legacy_geometry_fallback": True,
+        }
+    )
+    assert legacy["authoring_path"] == "legacy_geometry_fallback"
+
+
+def test_handle_generate_waterfall_publishes_functional_contract():
+    from blender_addon.handlers import environment as env_mod
+
+    result = env_mod.handle_generate_waterfall(
+        {
+            "height": 11.0,
+            "width": 4.0,
+            "location": [3.0, 4.0, 5.0],
+            "allow_legacy_geometry_fallback": True,
+        }
+    )
+
+    assert result["functional_object_chain_id"] == "300_400_500"
+    assert len(result["functional_object_names"]) == 7
+    assert result["functional_objects"]["sheet_volume"] == "WF_300_400_500_sheet_volume"
+    assert result["functional_object_contract_issues"] == []
+    assert result["functional_object_positions"]["impact_pool"][0] == pytest.approx(3.0)
+
+
+def test_handle_generate_waterfall_validates_authored_functional_names():
+    from blender_addon.handlers import environment as env_mod
+
+    result = env_mod.handle_generate_waterfall(
+        {
+            "height": 11.0,
+            "width": 4.0,
+            "location": [1.0, 2.0, 3.0],
+            "allow_legacy_geometry_fallback": True,
+            "functional_object_names": ["BadName"],
+        }
+    )
+
+    issue_codes = {issue["code"] for issue in result["functional_object_contract_issues"]}
+    assert "WATERFALL_OBJECT_WRONG_CHAIN" in issue_codes
+    assert "WATERFALL_FUNCTIONAL_OBJECT_MISSING" in issue_codes
+
     def test_multi_biome_world_uses_mesh_backed_scatter_helper(self):
         from blender_addon.handlers import environment as env_mod
 
@@ -865,8 +1015,13 @@ class TestWorldTerrainGeneration:
 
         fake_obj = _Obj()
         scatter_calls = []
+        terrain_calls = []
 
-        with patch.object(env_mod, "handle_generate_terrain", return_value={"vertex_count": 4}), \
+        def _fake_generate_terrain(params):
+            terrain_calls.append(dict(params))
+            return {"vertex_count": 4}
+
+        with patch.object(env_mod, "handle_generate_terrain", side_effect=_fake_generate_terrain), \
              patch.object(env_mod, "_compute_vertex_colors_for_biome_map", return_value=[(1.0, 0.0, 0.0, 1.0)] * 4), \
              patch.object(env_mod.bpy.data.objects, "get", return_value=fake_obj), \
              patch("blender_addon.handlers._biome_grammar.generate_world_map_spec", return_value=_Spec()), \
@@ -885,6 +1040,7 @@ class TestWorldTerrainGeneration:
 
         assert result["name"] == "BiomeWorld"
         assert result["vegetation_count"] == 6
+        assert terrain_calls[0]["use_controller"] is True
         assert [call["biome_name"] for call in scatter_calls] == ["thornwood_forest", "corrupted_swamp"]
 
 
@@ -1148,6 +1304,49 @@ class TestRiverPathSmoothing:
             abs(x - round(x)) > 1e-6 or abs(y - round(y)) > 1e-6
             for x, y, _ in smoothed[1:-1]
         ), "Expected smoothed river control points to move off the stair-step grid"
+
+
+class TestRiverTerminalWidthTaper:
+    def test_terminal_width_scale_narrows_endpoints_but_not_midstream(self):
+        from blender_addon.handlers.environment import _resolve_river_terminal_width_scale
+
+        scales = [
+            _resolve_river_terminal_width_scale(i, 9, taper_rings=3)
+            for i in range(9)
+        ]
+
+        assert scales[0] < scales[1] < scales[2] < 1.0
+        assert scales[3] == pytest.approx(1.0)
+        assert scales[4] == pytest.approx(1.0)
+        assert scales[-1] == pytest.approx(scales[0])
+
+    def test_terminal_width_scale_disables_cleanly(self):
+        from blender_addon.handlers.environment import _resolve_river_terminal_width_scale
+
+        assert _resolve_river_terminal_width_scale(0, 6, taper_rings=0) == pytest.approx(1.0)
+        assert _resolve_river_terminal_width_scale(0, 2, taper_rings=3) == pytest.approx(1.0)
+
+
+class TestRiverBankContactSolver:
+    def test_solver_can_find_close_bank_contact_inside_default_half_width(self):
+        from blender_addon.handlers.environment import _resolve_river_bank_contact
+
+        def _sampler(x: float, y: float) -> float:
+            return -1.5 if abs(x) < 0.6 else 1.25
+
+        dist, terrain_z = _resolve_river_bank_contact(
+            terrain_height_sampler=_sampler,
+            center_x=0.0,
+            center_y=0.0,
+            surface_z=0.0,
+            normal_x=1.0,
+            normal_y=0.0,
+            default_half_width=4.0,
+            side_sign=1.0,
+        )
+
+        assert dist < 1.0
+        assert terrain_z > 0.0
 
 
 # ---------------------------------------------------------------------------

@@ -938,17 +938,27 @@ class TestHandlerInvocation:
             "depth": 12,
             "seed": 42,
         })
-        assert result["dimensions"]["width"] == 8
-        assert result["vertex_count"] > 0
+        assert result["status"] == "error"
+        assert result["fail_closed"] is True
+        assert result["command"] == "env_generate_canyon"
 
     def test_invoke_waterfall(self):
         from blender_addon.handlers import COMMAND_HANDLERS
+
+        with pytest.raises(ValueError, match="requires heightmap/water-network context"):
+            COMMAND_HANDLERS["env_generate_waterfall"]({
+                "height": 12,
+                "width": 4,
+                "pool_radius": 5,
+                "seed": 42,
+            })
 
         result = COMMAND_HANDLERS["env_generate_waterfall"]({
             "height": 12,
             "width": 4,
             "pool_radius": 5,
             "seed": 42,
+            "allow_legacy_geometry_fallback": True,
         })
         assert result["dimensions"]["height"] == 12
         assert result["vertex_count"] > 0
@@ -962,8 +972,9 @@ class TestHandlerInvocation:
             "overhang": 4,
             "seed": 42,
         })
-        assert result["dimensions"]["width"] == 25
-        assert result["vertex_count"] > 0
+        assert result["status"] == "error"
+        assert result["fail_closed"] is True
+        assert result["command"] == "env_generate_cliff_face"
 
     def test_invoke_swamp(self):
         from blender_addon.handlers import COMMAND_HANDLERS
@@ -973,5 +984,6 @@ class TestHandlerInvocation:
             "water_level": 0.4,
             "seed": 42,
         })
-        assert result["dimensions"]["size"] == 30
-        assert result["vertex_count"] > 0
+        assert result["status"] == "error"
+        assert result["fail_closed"] is True
+        assert result["command"] == "env_generate_swamp_terrain"
