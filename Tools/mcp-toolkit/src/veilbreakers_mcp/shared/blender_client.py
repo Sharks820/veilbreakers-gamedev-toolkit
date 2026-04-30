@@ -156,11 +156,10 @@ class BlenderConnection:
                 self.disconnect()
                 return False
 
-        probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        probe.settimeout(2)
         try:
-            probe.connect((self.host, self.port))
-            probe.close()
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+                probe.settimeout(2)
+                probe.connect((self.host, self.port))
             return True
         except (ConnectionRefusedError, TimeoutError, OSError):
             return False
